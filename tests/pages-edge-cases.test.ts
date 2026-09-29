@@ -1,0 +1,371 @@
+import assert from "node:assert/strict";
+import { after, describe, it } from "node:test";
+import { randomUUID } from "node:crypto";
+
+import prisma from "../app/db.server";
+import {
+  LOGO_INVALID_MESSAGE,
+  getBrandingInputForShop,
+  sanitizeLogoUrl,
+  saveBrandingForShop,
+} from "../app/models/branding.server";
+import {
+  HelpContactError,
+  buildContactEmailHtml,
+  buildContactEmailText,
+  getHelpPageLinks,
+  sendHelpContactEmail,
+} from "../app/models/help-support.server";
+
+const shops: string[] = [];
+
+function shopName() {
+  const shop = `edge-${randomUUID()}.myshopify.com`;
+  shops.push(shop);
+  return shop;
+}
+
+function dataUrl(type: string, targetBytes: number) {
+  const payloadLength = Math.ceil((targetBytes * 4) / 3);
+  return `data:image/${type};base64,${"A".repeat(payloadLength)}`;
+}
+
+after(async () => {
+  if (shops.length > 0) {
+    await prisma.shopBranding.deleteMany({ where: { shop: { in: shops } } });
+  }
+  await prisma.$disconnect();
+});
+
+describe("branding logo rules", () => {
+  it("keeps http and https urls and drops everything else", () => {
+    assert.equal(sanitizeLogoUrl(undefined), "");
+    assert.equal(sanitizeLogoUrl("   "), "");
+    assert.equal(
+      sanitizeLogoUrl("  https://cdn.example.com/logo.png  "),
+      "https://cdn.example.com/logo.png",
+    );
+    assert.equal(
+      sanitizeLogoUrl('https://cdn.example.com/a"b.png'),
+      "https://cdn.example.com/a%22b.png",
+    );
+    assert.equal(sanitizeLogoUrl("http://cdn.example.com/logo.png"), "http://cdn.example.com/logo.png");
+    assert.equal(sanitizeLogoUrl("javascript:alert(1)"), "");
+    assert.equal(sanitizeLogoUrl("ftp://cdn.example.com/logo.png"), "");
+    assert.equal(sanitizeLogoUrl("/files/logo.png"), "");
+    assert.equal(sanitizeLogoUrl("data:image/svg+xml;base64,AAAA"), "");
+    assert.equal(sanitizeLogoUrl("data:image/png;charset=utf-8;base64,AAAA"), "");
+    assert.equal(sanitizeLogoUrl("DATA:image/png;base64,AAAA"), "");
+  });
+
+  it("accepts png, jpeg, jpg, webp, and gif data urls under 500 KB", () => {
+    for (const type of ["png", "jpeg", "jpg", "webp", "gif"]) {
+      const url = dataUrl(type, 1000);
+      assert.equal(sanitizeLogoUrl(url), url);
+    }
+    const atLimit = `data:image/png;base64,${"A".repeat(666_666)}`;
+    const overLimit = `data:image/png;base64,${"A".repeat(666_667)}`;
+    assert.equal(sanitizeLogoUrl(atLimit), atLimit);
+    assert.equal(sanitizeLogoUrl(overLimit), "");
+  });
+});
+
+describe("branding save and reload", () => {
+  it("creates the default green branding on first visit", async () => {
+    const shop = shopName();
+    const branding = await getBrandingInputForShop(shop);
+    assert.deepEqual(branding, {
+      primaryColor: "#008060",
+      secondaryColor: "#6d7175",
+      accentColor: "#004c3f",
+      logoUrl: "",
+      footerText: "Thank you for your business",
+    });
+
+    const again = await getBrandingInputForShop(shop);
+    assert.deepEqual(again, branding);
+  });
+
+  it("survives two first visits at the same time", async () => {
+    const shop = shopName();
+    const [first, second] = await Promise.all([
+      getBrandingInputForShop(shop),
+      getBrandingInputForShop(shop),
+    ]);
+    assert.equal(first.primaryColor, "#008060");
+    assert.equal(second.footerText, "Thank you for your business");
+    const rows = await prisma.shopBranding.count({ where: { shop } });
+    assert.equal(rows, 1);
+  });
+
+  it("shows stored install colors as the green defaults", async () => {
+    const shop = shopName();
+    await prisma.shopBranding.create({
+      data: {
+        shop,
+        primaryColor: "#1a1a2e",
+        secondaryColor: "#16213e",
+        accentColor: "#0f3460",
+        logoUrl: "",
+        footerText: "Thank you for your business",
+      },
+    });
+    const branding = await getBrandingInputForShop(shop);
+    assert.equal(branding.primaryColor, "#008060");
+    assert.equal(branding.secondaryColor, "#6d7175");
+    assert.equal(branding.accentColor, "#004c3f");
+  });
+
+  it("keeps a public logo url after reload and does not share it with another shop", async () => {
+    const shop = shopName();
+    const other = shopName();
+    const saved = await saveBrandingForShop(shop, {
+      logoUrl: " https://cdn.example.com/logo.png ",
+      primaryColor: "#112233",
+      secondaryColor: "#445566",
+      accentColor: "#778899",
+      footerText: "See you soon",
+    });
+    assert.equal(saved.error, undefined);
+    assert.equal(saved.branding.logoUrl, "https://cdn.example.com/logo.png");
+
+    const reloaded = await getBrandingInputForShop(shop);
+    assert.equal(reloaded.logoUrl, "https://cdn.example.com/logo.png");
+    assert.equal(reloaded.footerText, "See you soon");
+
+    const isolated = await getBrandingInputForShop(other);
+    assert.equal(isolated.logoUrl, "");
+  });
+
+  it("falls back when a color is missing, short, or an install default", async () => {
+    const shop = shopName();
+    const saved = await saveBrandingForShop(shop, {
+      primaryColor: " #1A1A2E ",
+      secondaryColor: "#fff",
+      accentColor: " #0F3460 ",
+      footerText: "Kept",
+    });
+    assert.equal(saved.branding.primaryColor, "#008060");
+    assert.equal(saved.branding.secondaryColor, "#6d7175");
+    assert.equal(saved.branding.accentColor, "#004c3f");
+    assert.equal(saved.branding.footerText, "Kept");
+
+    const unrelatedInstallColor = await saveBrandingForShop(shop, {
+      accentColor: "#1A1A2E",
+    });
+    assert.equal(unrelatedInstallColor.branding.accentColor, "#1A1A2E");
+
+    const mixed = await saveBrandingForShop(shop, {
+      primaryColor: " #AaBbCc ",
+      secondaryColor: "",
+      accentColor: "#004c3f",
+    });
+    assert.equal(mixed.branding.primaryColor, "#AaBbCc");
+    assert.equal(mixed.branding.secondaryColor, "#6d7175");
+  });
+
+  it("uses the default footer when empty and cuts a long footer to 500", async () => {
+    const shop = shopName();
+    const empty = await saveBrandingForShop(shop, { footerText: "   \n  " });
+    assert.equal(empty.branding.footerText, "Thank you for your business");
+
+    const long = "x".repeat(501);
+    const cut = await saveBrandingForShop(shop, { footerText: `  ${long}` });
+    assert.equal(cut.branding.footerText.length, 500);
+    assert.equal(cut.branding.footerText, "x".repeat(500));
+
+    const exact = await saveBrandingForShop(shop, { footerText: "y".repeat(500) });
+    assert.equal(exact.branding.footerText, "y".repeat(500));
+  });
+
+  it("rejects an oversized or invalid upload, keeps the other fields, and clears the logo", async () => {
+    const shop = shopName();
+    await saveBrandingForShop(shop, {
+      logoUrl: "https://cdn.example.com/keep.png",
+      footerText: "Before",
+    });
+
+    const rejected = await saveBrandingForShop(
+      shop,
+      {
+        logoUrl: dataUrl("png", 500_001),
+        primaryColor: "#123456",
+        secondaryColor: "#654321",
+        accentColor: "#abcdef",
+        footerText: "After upload",
+      },
+      { logoUploadAttempted: true },
+    );
+    assert.equal(rejected.error, LOGO_INVALID_MESSAGE);
+    assert.equal(rejected.branding.logoUrl, "");
+    assert.equal(rejected.branding.primaryColor, "#123456");
+    assert.equal(rejected.branding.footerText, "After upload");
+
+    const stored = await getBrandingInputForShop(shop);
+    assert.equal(stored.logoUrl, "");
+    assert.equal(stored.footerText, "After upload");
+
+    const wrongType = await saveBrandingForShop(
+      shop,
+      { logoUrl: "data:image/svg+xml;base64,AAAA", footerText: "Still here" },
+      { logoUploadAttempted: true },
+    );
+    assert.equal(wrongType.error, LOGO_INVALID_MESSAGE);
+    assert.equal(wrongType.branding.footerText, "Still here");
+  });
+
+  it("drops a bad pasted logo without the upload error and lets a file win over a url", async () => {
+    const shop = shopName();
+    const pasted = await saveBrandingForShop(shop, {
+      logoUrl: "javascript:alert(1)",
+      footerText: "Pasted",
+    });
+    assert.equal(pasted.error, undefined);
+    assert.equal(pasted.branding.logoUrl, "");
+
+    const fileWins = await saveBrandingForShop(
+      shop,
+      {
+        logoUrl: dataUrl("gif", 100),
+        footerText: "File",
+      },
+      { logoUploadAttempted: true },
+    );
+    assert.equal(fileWins.error, undefined);
+    assert.match(fileWins.branding.logoUrl, /^data:image\/gif;base64,/);
+
+    const invalidFileIgnoresUrl = await saveBrandingForShop(
+      shop,
+      { logoUrl: "not-a-url" },
+      { logoUploadAttempted: true },
+    );
+    assert.equal(invalidFileIgnoresUrl.error, LOGO_INVALID_MESSAGE);
+    assert.equal(invalidFileIgnoresUrl.branding.logoUrl, "");
+  });
+});
+
+describe("help contact rules", () => {
+  const valid = {
+    name: "Jane Smith",
+    phone: "",
+    email: "jane@yourstore.com",
+    subject: "Invoice help",
+    message: "Line one\n\nLine two",
+    shopDomain: "demo.myshopify.com",
+  };
+
+  it("rejects missing fields and a bad email before checking SMTP", async () => {
+    await assert.rejects(
+      () => sendHelpContactEmail({ ...valid, name: "   \n  " }),
+      (error: unknown) =>
+        error instanceof HelpContactError &&
+        error.status === 400 &&
+        error.message === "All fields are required and email must be valid.",
+    );
+    await assert.rejects(
+      () => sendHelpContactEmail({ ...valid, email: "jane@store" }),
+      (error: unknown) =>
+        error instanceof HelpContactError &&
+        error.status === 400 &&
+        error.message === "Please enter a valid email address.",
+    );
+    await assert.rejects(
+      () => sendHelpContactEmail({ ...valid, subject: "   " }),
+      (error: unknown) => error instanceof HelpContactError && error.status === 400,
+    );
+    await assert.rejects(
+      () => sendHelpContactEmail({ ...valid, message: " \n " }),
+      (error: unknown) => error instanceof HelpContactError && error.status === 400,
+    );
+  });
+
+  it("accepts a valid message and reports missing SMTP", async () => {
+    const previous = {
+      email: process.env.SMTP_EMAIL,
+      pass: process.env.SMTP_PASS,
+    };
+    delete process.env.SMTP_EMAIL;
+    delete process.env.SMTP_PASS;
+    try {
+      await assert.rejects(
+        () =>
+          sendHelpContactEmail({
+            ...valid,
+            name: "Ann\r\nBcc: evil@example.com",
+            phone: " 555 \n 0100 ",
+          }),
+        (error: unknown) =>
+          error instanceof HelpContactError &&
+          error.status === 503 &&
+          error.message ===
+            "Email is not configured. Please set SMTP_EMAIL and SMTP_PASS, then try again.",
+      );
+    } finally {
+      if (previous.email === undefined) delete process.env.SMTP_EMAIL;
+      else process.env.SMTP_EMAIL = previous.email;
+      if (previous.pass === undefined) delete process.env.SMTP_PASS;
+      else process.env.SMTP_PASS = previous.pass;
+    }
+  });
+
+  it("escapes the contact email and omits an empty phone", () => {
+    const html = buildContactEmailHtml({
+      ...valid,
+      name: '<script>alert("x")</script>',
+      email: "jane@yourstore.com",
+    });
+    assert.equal(html.includes("<script>"), false);
+    assert.match(html, /&lt;script&gt;/);
+    assert.match(html, /Shop: demo\.myshopify\.com/);
+    assert.match(html, /<br \/>/);
+
+    const text = buildContactEmailText(valid);
+    assert.equal(text.includes("Phone:"), false);
+    assert.match(text, /Shop:\s+demo\.myshopify\.com/);
+    assert.match(text, /Line one\n\nLine two/);
+
+    const withPhone = buildContactEmailText({ ...valid, phone: "+971500000000" });
+    assert.match(withPhone, /Phone:\s+\+971500000000/);
+  });
+
+  it("uses the same help links when env values are missing or have a trailing slash", () => {
+    const previous = {
+      supportMail: process.env.SUPPORT_MAIL,
+      supportEmail: process.env.SUPPORT_EMAIL,
+      helpCenter: process.env.HELP_CENTER_URL,
+      schedule: process.env.HELP_SCHEDULE_URL,
+    };
+    delete process.env.SUPPORT_MAIL;
+    delete process.env.SUPPORT_EMAIL;
+    delete process.env.HELP_CENTER_URL;
+    delete process.env.HELP_SCHEDULE_URL;
+    try {
+      const links = getHelpPageLinks();
+      assert.equal(links.supportEmail, "sbhattti1212@gmail.com");
+      assert.equal(links.helpCenterUrl, "https://e-invoicing-cg-user-guide-4zcr.vercel.app");
+      assert.equal(links.appName, "PDF Invoice Generator CG");
+      assert.match(links.scheduleUrl, /^mailto:sbhattti1212@gmail.com\?subject=/);
+    } finally {
+      restoreEnv("SUPPORT_MAIL", previous.supportMail);
+      restoreEnv("SUPPORT_EMAIL", previous.supportEmail);
+      restoreEnv("HELP_CENTER_URL", previous.helpCenter);
+      restoreEnv("HELP_SCHEDULE_URL", previous.schedule);
+    }
+
+    process.env.HELP_CENTER_URL = "https://guide.example.com/";
+    process.env.SUPPORT_MAIL = "help@example.com";
+    try {
+      const links = getHelpPageLinks();
+      assert.equal(links.helpCenterUrl, "https://guide.example.com");
+      assert.equal(links.supportEmail, "help@example.com");
+    } finally {
+      restoreEnv("HELP_CENTER_URL", previous.helpCenter);
+      restoreEnv("SUPPORT_MAIL", previous.supportMail);
+    }
+  });
+});
+
+function restoreEnv(name: string, value: string | undefined) {
+  if (value === undefined) delete process.env[name];
+  else process.env[name] = value;
+}

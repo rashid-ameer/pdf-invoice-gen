@@ -1,0 +1,52 @@
+# Environment Configuration
+.env
+.env.*
+!.env.example
+
+# Shopify CLI & Local Development Artifacts
+.shopify/
+.shopify.lock
+config/tunnel.pid
+
+# Dependency Directories
+node_modules/
+/web/frontend/node_modules/
+
+# Build and Compilation Outputs
+dist/
+build/
+.next/
+extensions/*/build
+extensions/*/dist
+
+# Database / Storage (Prisma / SQLite)
+*.sqlite
+*.sqlite3
+/web/database.sqlite
+/web/storage/db.sqlite
+
+# Package Manager Lock Files
+# (Optional: Shopify templates ignore locks to prevent developer package-manager mismatches)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Logs and Debugging
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing & Coverage
+coverage/
+.phpunit.result.cache
+
+# IDEs and System Files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
