@@ -5,9 +5,12 @@ import { randomUUID } from "node:crypto";
 import prisma from "../app/db.server";
 import {
   LOGO_INVALID_MESSAGE,
+  getBrandingForShop,
   getBrandingInputForShop,
+  isBrandingConfigured,
   sanitizeLogoUrl,
   saveBrandingForShop,
+  saveSocialLinksForShop,
 } from "../app/models/branding.server";
 import {
   HelpContactError,
@@ -16,13 +19,34 @@ import {
   getHelpPageLinks,
   sendHelpContactEmail,
 } from "../app/models/help-support.server";
+import { encryptSecret } from "../app/utils/token-crypto";
 
 const shops: string[] = [];
+const storeCleanup: Array<{ merchantId: string; storeId: string; shop: string }> =
+  [];
 
 function shopName() {
   const shop = `edge-${randomUUID()}.myshopify.com`;
   shops.push(shop);
   return shop;
+}
+
+async function seedActiveStore(shop = shopName()) {
+  const merchant = await prisma.merchant.create({
+    data: { name: `merchant-${randomUUID()}`, billingStatus: "active" },
+  });
+  const store = await prisma.store.create({
+    data: {
+      merchantId: merchant.id,
+      shopifyDomain: shop,
+      accessToken: encryptSecret("test-token")!,
+      invoiceMode: "standard",
+      status: "active",
+      currency: "USD",
+    },
+  });
+  storeCleanup.push({ merchantId: merchant.id, storeId: store.id, shop });
+  return { merchant, store, shop };
 }
 
 function dataUrl(type: string, targetBytes: number) {
@@ -31,8 +55,13 @@ function dataUrl(type: string, targetBytes: number) {
 }
 
 after(async () => {
-  if (shops.length > 0) {
-    await prisma.shopBranding.deleteMany({ where: { shop: { in: shops } } });
+  for (const row of storeCleanup) {
+    await prisma.store.deleteMany({ where: { id: row.storeId } });
+    await prisma.merchant.deleteMany({ where: { id: row.merchantId } });
+  }
+  const allShops = [...new Set([...shops, ...storeCleanup.map((r) => r.shop)])];
+  if (allShops.length > 0) {
+    await prisma.shopBranding.deleteMany({ where: { shop: { in: allShops } } });
   }
   await prisma.$disconnect();
 });
@@ -241,6 +270,125 @@ describe("branding save and reload", () => {
     );
     assert.equal(invalidFileIgnoresUrl.error, LOGO_INVALID_MESSAGE);
     assert.equal(invalidFileIgnoresUrl.branding.logoUrl, "");
+  });
+});
+
+describe("isBrandingConfigured", () => {
+  it("returns false for null and untouched install defaults", () => {
+    assert.equal(isBrandingConfigured(null), false);
+    assert.equal(
+      isBrandingConfigured({
+        logoUrl: "",
+        footerText: "Thank you for your business",
+        primaryColor: "#1a1a2e",
+        secondaryColor: "#16213e",
+        accentColor: "#0f3460",
+      }),
+      false,
+    );
+    assert.equal(
+      isBrandingConfigured({
+        logoUrl: null,
+        footerText: "   ",
+        primaryColor: "#1a1a2e",
+        secondaryColor: "#16213e",
+        accentColor: "#0f3460",
+      }),
+      false,
+    );
+  });
+
+  it("returns true for logo, custom footer, or non-install colors", () => {
+    assert.equal(
+      isBrandingConfigured({ logoUrl: "https://cdn.example.com/logo.png" }),
+      true,
+    );
+    assert.equal(
+      isBrandingConfigured({ footerText: "Thanks for shopping" }),
+      true,
+    );
+    assert.equal(
+      isBrandingConfigured({
+        primaryColor: "#008060",
+        secondaryColor: "#16213e",
+        accentColor: "#0f3460",
+      }),
+      true,
+    );
+    assert.equal(
+      isBrandingConfigured({
+        primaryColor: "#1a1a2e",
+        secondaryColor: "#ABCDEF",
+        accentColor: "#0f3460",
+      }),
+      true,
+    );
+    // Old compare is case-sensitive against lowercase install hex.
+    assert.equal(
+      isBrandingConfigured({
+        primaryColor: "#1A1A2E",
+        secondaryColor: "#16213e",
+        accentColor: "#0f3460",
+      }),
+      true,
+    );
+  });
+});
+
+describe("getBrandingForShop", () => {
+  it("returns null when the shop has no active store", async () => {
+    const shop = shopName();
+    assert.equal(await getBrandingForShop(shop), null);
+
+    const { shop: inactiveShop, store } = await seedActiveStore();
+    await prisma.store.update({
+      where: { id: store.id },
+      data: { status: "uninstalled" },
+    });
+    assert.equal(await getBrandingForShop(inactiveShop), null);
+  });
+
+  it("returns display defaults when the active store has no branding row", async () => {
+    const { shop } = await seedActiveStore();
+    const branding = await getBrandingForShop(shop);
+    assert.deepEqual(branding, {
+      primaryColor: "#008060",
+      secondaryColor: "#6d7175",
+      accentColor: "#004c3f",
+      logoUrl: "",
+      footerText: "Thank you for your business",
+      socialLinks: { visible: false, links: [] },
+    });
+  });
+
+  it("resolves stored branding and social links for an active store", async () => {
+    const { shop } = await seedActiveStore();
+    await prisma.shopBranding.create({
+      data: {
+        shop,
+        primaryColor: "#1a1a2e",
+        secondaryColor: "#16213e",
+        accentColor: "#0f3460",
+        logoUrl: "https://cdn.example.com/logo.png",
+        footerText: "See you soon",
+      },
+    });
+    await saveSocialLinksForShop(shop, {
+      showOnInvoice: true,
+      website: { label: "Site", url: "https://acme.test" },
+    });
+
+    const branding = await getBrandingForShop(shop);
+    assert.ok(branding);
+    assert.equal(branding.primaryColor, "#008060");
+    assert.equal(branding.secondaryColor, "#6d7175");
+    assert.equal(branding.accentColor, "#004c3f");
+    assert.equal(branding.logoUrl, "https://cdn.example.com/logo.png");
+    assert.equal(branding.footerText, "See you soon");
+    assert.equal(branding.socialLinks.visible, true);
+    assert.equal(branding.socialLinks.links.length, 1);
+    assert.equal(branding.socialLinks.links[0]?.platform, "website");
+    assert.equal(branding.socialLinks.links[0]?.url, "https://acme.test/");
   });
 });
 

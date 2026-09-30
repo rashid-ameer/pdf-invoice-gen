@@ -15,6 +15,11 @@ export interface StoreBrandingFormData {
   footerText: string;
 }
 
+/** Resolved branding used by documents / readiness (old StoreBrandingData). */
+export interface StoreBrandingData extends StoreBrandingFormData {
+  socialLinks: ResolvedSocialLinks;
+}
+
 export interface StoreBrandingInput {
   primaryColor?: string;
   secondaryColor?: string;
@@ -78,6 +83,29 @@ export function sanitizeLogoUrl(value: string | undefined): string {
   }
 
   return "";
+}
+
+/** Matches old isBrandingConfigured (readiness / dashboard). */
+export function isBrandingConfigured(
+  branding: {
+    logoUrl?: string | null;
+    footerText?: string | null;
+    primaryColor?: string | null;
+    secondaryColor?: string | null;
+    accentColor?: string | null;
+  } | null,
+): boolean {
+  if (!branding) return false;
+  const defaultFooter = "Thank you for your business";
+  const footer = (branding.footerText || "").trim();
+  const customFooter = Boolean(footer && footer !== defaultFooter);
+  return Boolean(
+    branding.logoUrl ||
+      customFooter ||
+      (branding.primaryColor && branding.primaryColor !== "#1a1a2e") ||
+      (branding.secondaryColor && branding.secondaryColor !== "#16213e") ||
+      (branding.accentColor && branding.accentColor !== "#0f3460"),
+  );
 }
 
 function pickColor(
@@ -166,6 +194,42 @@ export async function getBrandingInputForShop(
     },
   });
   return toFormData(row);
+}
+
+/**
+ * Matches old getBrandingForShop: active store required; missing branding row
+ * returns display defaults with empty social links.
+ */
+export async function getBrandingForShop(
+  shopDomain: string,
+): Promise<StoreBrandingData | null> {
+  const store = await prisma.store.findFirst({
+    where: { shopifyDomain: shopDomain, status: "active" },
+  });
+  if (!store) return null;
+
+  const doc = await prisma.shopBranding.findUnique({
+    where: { shop: shopDomain },
+  });
+  if (!doc) {
+    return {
+      ...DEFAULT_BRANDING,
+      socialLinks: { visible: false, links: [] },
+    };
+  }
+
+  const resolved = resolveBranding({
+    primaryColor: doc.primaryColor ?? undefined,
+    secondaryColor: doc.secondaryColor ?? undefined,
+    accentColor: doc.accentColor ?? undefined,
+    logoUrl: doc.logoUrl ?? undefined,
+    footerText: doc.footerText ?? undefined,
+  });
+
+  return {
+    ...resolved,
+    socialLinks: resolveSocialLinks(readSocialLinksFromDoc(doc.socialLinks)),
+  };
 }
 
 export async function saveBrandingForShop(
