@@ -6,6 +6,7 @@ import {
 } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
+import { handleAppInstall } from "./models/install.server";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -18,6 +19,27 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   future: {
     expiringOfflineAccessTokens: true,
+  },
+  hooks: {
+    afterAuth: async ({ session, admin }) => {
+      try {
+        await handleAppInstall(session, admin, {
+          refreshToken: session.refreshToken,
+          refreshTokenExpiresAt: session.refreshTokenExpires,
+        });
+      } catch (installError) {
+        console.warn(
+          "[auth] post-install shop sync failed (continuing to app UI):",
+          installError,
+        );
+      }
+
+      try {
+        await shopify.registerWebhooks({ session });
+      } catch (webhookError) {
+        console.warn("[auth] webhook registration failed:", webhookError);
+      }
+    },
   },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }

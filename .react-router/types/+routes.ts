@@ -34,6 +34,9 @@ type Pages = {
   "/app/branding": {
     params: {};
   };
+  "/app/settings": {
+    params: {};
+  };
   "/app/help": {
     params: {};
   };
@@ -42,7 +45,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/auth/*" | "/app" | "/app/additional" | "/app/branding" | "/app/help";
+    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/auth/*" | "/app" | "/app/additional" | "/app/branding" | "/app/settings" | "/app/help";
   };
   "routes/webhooks.app.scopes_update.tsx": {
     id: "routes/webhooks.app.scopes_update";
@@ -62,7 +65,7 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/additional" | "/app/branding" | "/app/help";
+    page: "/app" | "/app/additional" | "/app/branding" | "/app/settings" | "/app/help";
   };
   "routes/app.additional.tsx": {
     id: "routes/app.additional";
@@ -71,6 +74,10 @@ type RouteFiles = {
   "routes/app.branding.tsx": {
     id: "routes/app.branding";
     page: "/app/branding";
+  };
+  "routes/app.settings.tsx": {
+    id: "routes/app.settings";
+    page: "/app/settings";
   };
   "routes/app._index.tsx": {
     id: "routes/app._index";
@@ -91,6 +98,7 @@ type RouteModules = {
   "routes/app": typeof import("./app/routes/app.tsx");
   "routes/app.additional": typeof import("./app/routes/app.additional.tsx");
   "routes/app.branding": typeof import("./app/routes/app.branding.tsx");
+  "routes/app.settings": typeof import("./app/routes/app.settings.tsx");
   "routes/app._index": typeof import("./app/routes/app._index.tsx");
   "routes/app.help": typeof import("./app/routes/app.help.tsx");
 };

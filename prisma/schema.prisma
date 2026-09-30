@@ -14,33 +14,167 @@ datasource db {
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
-  refreshToken        String?
-  refreshTokenExpires DateTime?
+  id                    String    @id
+  shop                  String
+  state                 String
+  isOnline              Boolean   @default(false)
+  scope                 String?
+  expires               DateTime?
+  accessToken           String
+  userId                BigInt?
+  firstName             String?
+  lastName              String?
+  email                 String?
+  accountOwner          Boolean   @default(false)
+  locale                String?
+  collaborator          Boolean?  @default(false)
+  emailVerified         Boolean?  @default(false)
+  refreshToken          String?
+  refreshTokenExpires   DateTime?
 }
 
 model ShopBranding {
   id             String   @id @default(cuid())
   shop           String   @unique
-  primaryColor   String   @default("#008060")
-  secondaryColor String   @default("#6d7175")
-  accentColor    String   @default("#004c3f")
+  primaryColor   String   @default("#1a1a2e")
+  secondaryColor String   @default("#16213e")
+  accentColor    String   @default("#0f3460")
   logoUrl        String   @default("")
-  footerText     String   @default("Thank you for your business")
+  footerText     String   @default("")
+  /// Matches old StoreBranding.socialLinks nested document.
+  socialLinks    Json     @default("{}")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+}
+
+model Merchant {
+  id            String   @id @default(cuid())
+  name          String
+  billingStatus String   @default("trial")
+  planId        String?
+  ownerUserId   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  stores        Store[]
+  legalEntities LegalEntity[]
+  settings      Setting[]
+}
+
+model Store {
+  id                              String    @id @default(cuid())
+  merchantId                      String
+  shopifyDomain                   String    @unique
+  shopifyStoreId                  String?
+  accessToken                     String
+  accessTokenRef                  String?
+  refreshToken                    String?
+  accessTokenExpiresAt            DateTime?
+  refreshTokenExpiresAt           DateTime?
+  defaultLegalEntityId            String?
+  aspConnectionId                 String?
+  defaultTemplateId               String?
+  defaultPackingSlipTemplateId    String?
+  defaultCreditNoteTemplateId     String?
+  defaultRefundDocumentTemplateId String?
+  invoiceMode                     String    @default("standard")
+  complianceReady                 Boolean   @default(false)
+  status                          String    @default("active")
+  currency                        String    @default("USD")
+  timezone                        String    @default("UTC")
+  createdAt                       DateTime  @default(now())
+  updatedAt                       DateTime  @updatedAt
+
+  merchant     Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  settings     Setting[]
+  invoices     Invoice[]
+  creditNotes  CreditNote[]
+
+  @@index([merchantId])
+}
+
+model LegalEntity {
+  id              String    @id @default(cuid())
+  merchantId      String
+  legalName       String
+  tradeName       String?
+  trn             String?
+  tin             String?
+  tradeLicence    String?
+  vatStatus       String    @default("registered")
+  businessEmail   String
+  businessPhone   String?
+  /// Address object: { line1, line2, city, emirate, postalCode, country }
+  address         Json
+  emirate         String?
+  defaultCurrency String    @default("USD")
+  defaultLanguage String    @default("en")
+  isDefault       Boolean   @default(true)
+  isLocked        Boolean   @default(false)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  merchant       Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  taxIdentifiers TaxIdentifier[]
+
+  @@index([merchantId])
+}
+
+model TaxIdentifier {
+  id               String   @id @default(cuid())
+  legalEntityId    String
+  identifierType   String
+  value            String
+  issuingAuthority String?
+  verifiedStatus   String   @default("pending")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+
+  @@unique([legalEntityId, identifierType])
+  @@index([legalEntityId])
+}
+
+model Setting {
+  id         String   @id @default(cuid())
+  merchantId String?
+  storeId    String?
+  scope      String
+  key        String
+  value      Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  merchant Merchant? @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  store    Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, storeId, key])
+  @@index([merchantId])
+  @@index([storeId])
+}
+
+/// Minimal stub for document numbering counts; full fields land in Group 8.
+model Invoice {
+  id        String   @id @default(cuid())
+  storeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+}
+
+/// Minimal stub for document numbering counts; full fields land in Group 11.
+model CreditNote {
+  id        String   @id @default(cuid())
+  storeId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
 }
