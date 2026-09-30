@@ -1,4 +1,11 @@
+import type { Prisma } from "@prisma/client";
 import prisma from "../db.server";
+import {
+  resolveSocialLinks,
+  sanitizeSocialUrl,
+  type ResolvedSocialLinks,
+  type StoreSocialLinksInput,
+} from "./social-links.server";
 
 export interface StoreBrandingFormData {
   primaryColor: string;
@@ -194,4 +201,108 @@ export async function saveBrandingForShop(
     return { branding, error: LOGO_INVALID_MESSAGE };
   }
   return { branding };
+}
+
+function readSocialLinksFromDoc(
+  socialLinks: Prisma.JsonValue | null | undefined,
+): StoreSocialLinksInput {
+  if (!socialLinks || typeof socialLinks !== "object" || Array.isArray(socialLinks)) {
+    return { showOnInvoice: false };
+  }
+  const social = socialLinks as Record<string, unknown>;
+  const entry = (value: unknown) => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return undefined;
+    }
+    const row = value as { label?: string | null; url?: string | null };
+    return {
+      label: row.label ?? undefined,
+      url: row.url ?? undefined,
+    };
+  };
+  return {
+    showOnInvoice: social.showOnInvoice === true,
+    website: entry(social.website),
+    instagram: entry(social.instagram),
+    x: entry(social.x),
+    facebook: entry(social.facebook),
+    linkedin: entry(social.linkedin),
+    tiktok: entry(social.tiktok),
+    youtube: entry(social.youtube),
+  };
+}
+
+function socialLinksPersistPayload(input: StoreSocialLinksInput) {
+  return {
+    showOnInvoice: input.showOnInvoice === true,
+    website: {
+      label: input.website?.label?.trim() || undefined,
+      url: sanitizeSocialUrl(input.website?.url) || undefined,
+    },
+    instagram: {
+      label: input.instagram?.label?.trim() || undefined,
+      url: sanitizeSocialUrl(input.instagram?.url) || undefined,
+    },
+    x: {
+      label: input.x?.label?.trim() || undefined,
+      url: sanitizeSocialUrl(input.x?.url) || undefined,
+    },
+    facebook: {
+      label: input.facebook?.label?.trim() || undefined,
+      url: sanitizeSocialUrl(input.facebook?.url) || undefined,
+    },
+    linkedin: {
+      label: input.linkedin?.label?.trim() || undefined,
+      url: sanitizeSocialUrl(input.linkedin?.url) || undefined,
+    },
+    tiktok: {
+      label: input.tiktok?.label?.trim() || undefined,
+      url: sanitizeSocialUrl(input.tiktok?.url) || undefined,
+    },
+    youtube: {
+      label: input.youtube?.label?.trim() || undefined,
+      url: sanitizeSocialUrl(input.youtube?.url) || undefined,
+    },
+  };
+}
+
+/** Matches old getBrandingInputForShop socialLinks read (active store only). */
+export async function getSocialLinksForShop(
+  shopDomain: string,
+): Promise<StoreSocialLinksInput | null> {
+  const store = await prisma.store.findFirst({
+    where: { shopifyDomain: shopDomain, status: "active" },
+  });
+  if (!store) return null;
+
+  const doc = await prisma.shopBranding.findUnique({
+    where: { shop: shopDomain },
+  });
+  if (!doc) return { showOnInvoice: false };
+  return readSocialLinksFromDoc(doc.socialLinks);
+}
+
+/** Matches old saveSocialLinksForShop. */
+export async function saveSocialLinksForShop(
+  shopDomain: string,
+  input: StoreSocialLinksInput,
+): Promise<ResolvedSocialLinks | null> {
+  const store = await prisma.store.findFirst({
+    where: { shopifyDomain: shopDomain, status: "active" },
+  });
+  if (!store) return null;
+
+  const resolved = resolveSocialLinks(input);
+  const socialLinks = socialLinksPersistPayload(input);
+
+  await prisma.shopBranding.upsert({
+    where: { shop: shopDomain },
+    create: {
+      shop: shopDomain,
+      socialLinks,
+    },
+    update: { socialLinks },
+  });
+
+  return resolved;
 }

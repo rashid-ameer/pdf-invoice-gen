@@ -22,7 +22,7 @@ export default function App() {
         <s-link href="/app/additional">Additional page</s-link>
         <s-link href="/app/help">Help &amp; Support</s-link>
         <s-link href="/app/branding">Branding</s-link>
-        <s-link href="/app/settings">Settings</s-link>
+        <s-link href="/app/company-setup">Company setup</s-link>
       </s-app-nav>
       <Outlet />
     </AppProvider>
