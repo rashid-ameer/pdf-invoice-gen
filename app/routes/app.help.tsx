@@ -5,7 +5,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useFetcher, useLoaderData } from "react-router";
+import { data, useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
@@ -17,6 +17,7 @@ import {
 import { authenticate } from "../shopify.server";
 
 const MODAL_ID = "help-support-contact-modal";
+const FORM_ID = "help-support-contact-form";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type ContactForm = {
@@ -55,13 +56,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       message: String(formData.get("message") ?? ""),
       shopDomain: session.shop,
     });
-    return { success: true as const };
+    return data({ success: true as const });
   } catch (error) {
-    const message =
-      error instanceof HelpContactError
-        ? error.message
-        : "Failed to send message. Please try again.";
-    return { success: false as const, error: message };
+    if (error instanceof HelpContactError) {
+      return data(
+        { success: false as const, error: error.message },
+        { status: error.status },
+      );
+    }
+    return data(
+      {
+        success: false as const,
+        error: "Failed to send message. Please try again.",
+      },
+      { status: 500 },
+    );
   }
 };
 
@@ -71,7 +80,6 @@ export default function HelpSupportPage() {
   const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const [modalOpen, setModalOpen] = useState(false);
-  const [sent, setSent] = useState(false);
   const [form, setForm] = useState<ContactForm>(EMPTY_FORM);
   const [errors, setErrors] = useState<FormErrors>({});
   const [banner, setBanner] = useState("");
@@ -82,10 +90,14 @@ export default function HelpSupportPage() {
 
   const closeModal = () => setModalOpen(false);
 
-  const openModal = () => {
-    setSent(false);
-    setBanner("");
+  const resetContactForm = () => {
+    setForm(EMPTY_FORM);
     setErrors({});
+    setBanner("");
+  };
+
+  const openModal = () => {
+    resetContactForm();
     setModalOpen(true);
   };
 
@@ -99,25 +111,26 @@ export default function HelpSupportPage() {
   useEffect(() => {
     if (!awaitingResult.current || fetcher.state !== "idle") return;
     awaitingResult.current = false;
+
+    // Network / no response: alerts allow error toast for connection failures.
     if (!fetcher.data || fetcher.data === dataAtSubmit.current) {
-      const message =
-        "Network error. Please check your connection and try again.";
-      setBanner(message);
-      shopify.toast.show(message, { isError: true });
+      shopify.toast.show("Couldn't send", { isError: true });
+      setBanner("Check your connection and try again.");
       return;
     }
+
+    // Success: toast only (≤3 words), then close modal — no success panel/banner.
     if (fetcher.data.success) {
-      setForm(EMPTY_FORM);
-      setErrors({});
-      setBanner("");
-      setSent(true);
+      resetContactForm();
       shopify.toast.show("Message sent");
+      setModalOpen(false);
       return;
     }
-    const message =
-      fetcher.data.error || "Failed to send message. Please try again.";
-    setBanner(message);
-    shopify.toast.show(message, { isError: true });
+
+    // Task/send failure: critical banner near top of modal; no error toast.
+    setBanner(
+      fetcher.data.error || "Failed to send message. Please try again.",
+    );
   }, [fetcher.data, fetcher.state, shopify]);
 
   const patch = (field: keyof ContactForm, value: string) => {
@@ -186,121 +199,99 @@ export default function HelpSupportPage() {
         </s-section>
 
         <s-section heading="Got Support?">
-          <s-button variant="primary" onClick={openModal}>
-            Send a message to the developer.
+          <s-button
+            variant="primary"
+            commandFor={MODAL_ID}
+            command="--show"
+            onClick={openModal}
+          >
+            Send a message to the developer
           </s-button>
         </s-section>
       </s-grid>
 
       <s-modal id={MODAL_ID} heading="Contact Us" onHide={closeModal}>
-        {sent ? (
+        <form id={FORM_ID} onSubmit={onSubmit}>
           <s-stack gap="base">
-            <s-heading>Message sent</s-heading>
+            {banner ? (
+              <s-banner tone="critical" heading="Couldn't send">
+                {banner}
+              </s-banner>
+            ) : null}
+            <s-text-field
+              label="Full Name"
+              name="name"
+              value={form.name}
+              placeholder="Jane Smith"
+              autocomplete="name"
+              error={errors.name}
+              onInput={(event: Event) => patch("name", fieldValue(event))}
+            />
+            <s-text-field
+              label="Phone Number (optional)"
+              name="phone"
+              value={form.phone}
+              placeholder="+1 (555) 000-0000"
+              onInput={(event: Event) => patch("phone", fieldValue(event))}
+            />
+            <s-email-field
+              label="Email Address"
+              name="email"
+              value={form.email}
+              placeholder="jane@yourstore.com"
+              autocomplete="email"
+              error={errors.email}
+              onInput={(event: Event) => patch("email", fieldValue(event))}
+            />
+            <s-text-field
+              label="Subject"
+              name="subject"
+              value={form.subject}
+              placeholder="How can we help?"
+              error={errors.subject}
+              onInput={(event: Event) => patch("subject", fieldValue(event))}
+            />
+            <s-text-area
+              label="Message"
+              name="message"
+              value={form.message}
+              placeholder="Describe your issue or question in detail..."
+              rows={5}
+              error={errors.message}
+              onInput={(event: Event) => patch("message", fieldValue(event))}
+            />
             <s-paragraph>
-              We&apos;ve received your message and will get back to you shortly.
+              Replies go to your email. You can also reach us at{" "}
+              <s-link href={`mailto:${supportEmail}`}>{supportEmail}</s-link>.
+              Messages are sent to the {appName} team. We usually reply within
+              one business day.
             </s-paragraph>
-            <s-button
-              onClick={() => {
-                setSent(false);
-                setForm(EMPTY_FORM);
-                setErrors({});
-                setBanner("");
-              }}
-            >
-              Send another message
-            </s-button>
           </s-stack>
-        ) : (
-          <form onSubmit={onSubmit}>
-            <s-stack gap="base">
-              <s-text-field
-                label="Full Name"
-                name="name"
-                value={form.name}
-                placeholder="Jane Smith"
-                required
-                autocomplete="name"
-                error={errors.name}
-                onInput={(event: Event) =>
-                  patch("name", fieldValue(event))
-                }
-              />
-              <s-text-field
-                label="Phone Number (optional)"
-                name="phone"
-                value={form.phone}
-                placeholder="+1 (555) 000-0000"
-                onInput={(event: Event) =>
-                  patch("phone", fieldValue(event))
-                }
-              />
-              <s-email-field
-                label="Email Address"
-                name="email"
-                value={form.email}
-                placeholder="jane@yourstore.com"
-                required
-                autocomplete="email"
-                error={errors.email}
-                onInput={(event: Event) =>
-                  patch("email", fieldValue(event))
-                }
-              />
-              <s-text-field
-                label="Subject"
-                name="subject"
-                value={form.subject}
-                placeholder="How can we help?"
-                required
-                error={errors.subject}
-                onInput={(event: Event) =>
-                  patch("subject", fieldValue(event))
-                }
-              />
-              <s-text-area
-                label="Message"
-                name="message"
-                value={form.message}
-                placeholder="Describe your issue or question in detail..."
-                rows={5}
-                required
-                error={errors.message}
-                onInput={(event: Event) =>
-                  patch("message", fieldValue(event))
-                }
-              />
-              {banner ? (
-                <s-banner tone="critical" heading="Could not send">
-                  {banner}
-                </s-banner>
-              ) : null}
-              <s-paragraph>
-                Replies go to your email. You can also reach us at{" "}
-                <s-link href={`mailto:${supportEmail}`}>{supportEmail}</s-link>
-                . Messages are sent to the {appName} team. We usually reply
-                within one business day.
-              </s-paragraph>
-            </s-stack>
-            <s-button
-              slot="primary-action"
-              type="submit"
-              variant="primary"
-              {...(sending ? { loading: true } : {})}
-              disabled={sending}
-            >
-              {sending ? "Sending..." : "Send Message"}
-            </s-button>
-            <s-button
-              slot="secondary-actions"
-              type="button"
-              commandFor={MODAL_ID}
-              command="--hide"
-              onClick={closeModal}
-            >
-              Cancel
-            </s-button>
-          </form>
-        )}
+        </form>
+
+        <s-button
+          slot="secondary-actions"
+          variant="secondary"
+          type="button"
+          commandFor={MODAL_ID}
+          command="--hide"
+          onClick={closeModal}
+          {...(sending ? { disabled: true } : {})}
+        >
+          Cancel
+        </s-button>
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          type="button"
+          onClick={() => {
+            const formEl = document.getElementById(FORM_ID);
+            if (formEl instanceof HTMLFormElement) formEl.requestSubmit();
+          }}
+          {...(sending ? { loading: true, disabled: true } : {})}
+        >
+          {sending ? "Sending..." : "Send Message"}
+        </s-button>
       </s-modal>
     </s-page>
   );

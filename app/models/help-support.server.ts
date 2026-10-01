@@ -61,6 +61,11 @@ function isSmtpConfigured() {
   return Boolean(user && pass);
 }
 
+/** Exported for parity checks / tests (old smtp-mailer.service). */
+export function isHelpSmtpConfigured() {
+  return isSmtpConfigured();
+}
+
 function escapeHtml(str: string): string {
   return str
     .replace(/&/g, "&amp;")
@@ -257,7 +262,8 @@ export async function sendHelpContactEmail(input: ContactEmailData) {
 
     const replyName = parsed.name.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
     await transport.sendMail({
-      from: `"${APP_NAME} Support" <${smtp.user}>`,
+      // Matches old help-support route From display name.
+      from: `"PDF Invoice Generator CG Support" <${smtp.user}>`,
       replyTo: `"${replyName}" <${parsed.email}>`,
       to: supportEmail || smtp.user,
       subject: `[Support] ${parsed.subject}`,

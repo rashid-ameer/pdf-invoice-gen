@@ -17,6 +17,7 @@ import {
   buildContactEmailHtml,
   buildContactEmailText,
   getHelpPageLinks,
+  isHelpSmtpConfigured,
   sendHelpContactEmail,
 } from "../app/models/help-support.server";
 import { encryptSecret } from "../app/utils/token-crypto";
@@ -532,6 +533,21 @@ describe("help contact rules", () => {
     } finally {
       restoreEnv("HELP_CENTER_URL", previous.helpCenter);
       restoreEnv("SUPPORT_MAIL", previous.supportMail);
+    }
+  });
+
+  it("reports SMTP as unconfigured when credentials are missing", () => {
+    const previous = {
+      email: process.env.SMTP_EMAIL,
+      pass: process.env.SMTP_PASS,
+    };
+    delete process.env.SMTP_EMAIL;
+    delete process.env.SMTP_PASS;
+    try {
+      assert.equal(isHelpSmtpConfigured(), false);
+    } finally {
+      restoreEnv("SMTP_EMAIL", previous.email);
+      restoreEnv("SMTP_PASS", previous.pass);
     }
   });
 });
