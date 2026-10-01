@@ -3,20 +3,21 @@ import { useEffect, useId, useRef, useState } from "react";
 import { MAX_LOGO_BYTES } from "../models/branding";
 
 export const INVOICE_LOGO_MAX_BYTES = MAX_LOGO_BYTES;
-export const INVOICE_LOGO_ACCEPT = ".png,.jpg,.jpeg,.webp";
+export const INVOICE_LOGO_ACCEPT = ".png,.jpg,.jpeg,.webp,.gif";
 const INVOICE_LOGO_TYPES = new Set([
   "image/png",
   "image/jpeg",
   "image/webp",
+  "image/gif",
 ]);
 
 const URL_ERROR =
   "We couldn't load an image from this link. Check the link and try again.";
-const FILE_ERROR = "Use a .png, .jpg, .jpeg, or .webp file up to 500 KB.";
+const FILE_ERROR = "Use a .png, .jpg, .jpeg, .webp, or .gif file up to 500 KB.";
 const URL_HELPER =
-  "Link to a .png, .jpg, .jpeg, or .webp image that is already hosted online.";
+  "Link to a .png, .jpg, .jpeg, .webp, or .gif image that is already hosted online.";
 const DROP_HELPER =
-  ".png, .jpg, .jpeg, or .webp · up to 500 KB · 400 × 400 px recommended";
+  ".png, .jpg, .jpeg, .webp, or .gif · up to 500 KB · 400 × 400 px recommended";
 
 export type InvoiceLogoSource = "upload" | "url";
 
@@ -89,6 +90,7 @@ function formatFromSrc(src: string): string | null {
     if (path.endsWith(".png")) return "PNG";
     if (path.endsWith(".jpg") || path.endsWith(".jpeg")) return "JPG";
     if (path.endsWith(".webp")) return "WEBP";
+    if (path.endsWith(".gif")) return "GIF";
   } catch {
     /* ignore */
   }
@@ -116,14 +118,6 @@ function fileNameFromSrc(src: string, source: InvoiceLogoSource): string {
     /* ignore */
   }
   return "Image from URL";
-}
-
-function formatDimensions(
-  width: number | null,
-  height: number | null,
-): string | null {
-  if (width == null || height == null) return null;
-  return `${width} × ${height} px`;
 }
 
 function loadImageMeta(
@@ -159,7 +153,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 function validateFile(file: File): string | null {
   const typeOk =
     INVOICE_LOGO_TYPES.has(file.type) ||
-    /\.(png|jpe?g|webp)$/i.test(file.name);
+    /\.(png|jpe?g|webp|gif)$/i.test(file.name);
   if (!typeOk) return FILE_ERROR;
   if (file.size > INVOICE_LOGO_MAX_BYTES) return FILE_ERROR;
   return null;
@@ -374,15 +368,6 @@ export function InvoiceLogoField({
     onChange(emptyInvoiceLogo());
   };
 
-  const urlMetaLine = urlPreview
-    ? [
-        formatDimensions(urlPreview.width, urlPreview.height),
-        urlPreview.format,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
-
   const uploadControls = (
     <s-stack gap="base">
       <s-choice-list
@@ -408,7 +393,7 @@ export function InvoiceLogoField({
             label="Invoice logo"
             labelAccessibilityVisibility="exclusive"
             accept={INVOICE_LOGO_ACCEPT}
-            accessibilityLabel="Add your company logo. PNG, JPG, JPEG, or WebP up to 500 KB."
+            accessibilityLabel="Add your company logo. PNG, JPG, JPEG, WebP, or GIF up to 500 KB."
             error={dropError || undefined}
             disabled={busy}
             onChange={(event: Event) => {
@@ -479,19 +464,16 @@ export function InvoiceLogoField({
           ) : null}
 
           {urlStatus === "valid" && urlPreview ? (
-            <s-stack gap="small-100" direction="inline" alignItems="center">
-              <s-box inlineSize="96px" blockSize="96px" borderRadius="base">
-                <s-image
-                  src={urlPreview.src}
-                  alt="Logo URL preview"
-                  aspectRatio="1/1"
-                  objectFit="contain"
-                  inlineSize="fill"
-                  borderRadius="base"
-                />
-              </s-box>
-              <s-text color="subdued">{urlMetaLine}</s-text>
-            </s-stack>
+            <s-box inlineSize="96px" blockSize="96px" borderRadius="base">
+              <s-image
+                src={urlPreview.src}
+                alt="Logo URL preview"
+                aspectRatio="1/1"
+                objectFit="contain"
+                inlineSize="fill"
+                borderRadius="base"
+              />
+            </s-box>
           ) : null}
 
           <s-stack direction="inline" gap="small-100" justifyContent="end">
@@ -535,7 +517,7 @@ export function InvoiceLogoField({
         {showCompose ? (
           uploadControls
         ) : showPreview ? (
-          <s-stack direction="inline" gap="base" alignItems="start">
+          <s-stack direction="inline" gap="base" alignItems="end">
             <s-box
               inlineSize="112px"
               blockSize="112px"
@@ -562,38 +544,33 @@ export function InvoiceLogoField({
               )}
             </s-box>
 
-            <s-stack gap="small-100">
-              <s-text fontWeight="medium">
-                {value.fileName || "Invoice logo"}
-              </s-text>
-              <s-stack direction="inline" gap="small-100">
-                <s-button
-                  variant="secondary"
-                  commandFor={replaceMenuId}
-                  {...(busy ? { disabled: true } : {})}
-                >
-                  Replace
+            <s-stack direction="inline" gap="small-100">
+              <s-button
+                variant="secondary"
+                commandFor={replaceMenuId}
+                {...(busy ? { disabled: true } : {})}
+              >
+                Replace
+              </s-button>
+              <s-menu
+                id={replaceMenuId}
+                accessibilityLabel="Replace invoice logo"
+              >
+                <s-button icon="upload" onClick={openUploadPanel}>
+                  Upload from computer
                 </s-button>
-                <s-menu
-                  id={replaceMenuId}
-                  accessibilityLabel="Replace invoice logo"
-                >
-                  <s-button icon="upload" onClick={openUploadPanel}>
-                    Upload from computer
-                  </s-button>
-                  <s-button icon="link" onClick={openUrlPanel}>
-                    Use image URL
-                  </s-button>
-                </s-menu>
-                <s-button
-                  variant="secondary"
-                  tone="critical"
-                  onClick={removeLogo}
-                  {...(busy ? { disabled: true } : {})}
-                >
-                  Remove
+                <s-button icon="link" onClick={openUrlPanel}>
+                  Use image URL
                 </s-button>
-              </s-stack>
+              </s-menu>
+              <s-button
+                variant="secondary"
+                tone="critical"
+                onClick={removeLogo}
+                {...(busy ? { disabled: true } : {})}
+              >
+                Remove
+              </s-button>
             </s-stack>
           </s-stack>
         ) : null}
