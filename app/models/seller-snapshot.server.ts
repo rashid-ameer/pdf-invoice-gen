@@ -1,8 +1,7 @@
 import type { Address, SellerInfo } from "../types";
+import { PINT_TAX_SCHEME_VAT } from "./pint.constants";
 
-/** Matches old PINT_TAX_SCHEME_VAT. */
-export const PINT_TAX_SCHEME_VAT = "VAT";
-
+export { PINT_TAX_SCHEME_VAT };
 function normalizeAddress(
   address?: {
     line1?: string | null;
