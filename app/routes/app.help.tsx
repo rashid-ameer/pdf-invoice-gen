@@ -200,7 +200,7 @@ export default function HelpSupportPage() {
 
         <s-section heading="Got Support?">
           <s-button
-            variant="primary"
+            variant="secondary"
             commandFor={MODAL_ID}
             command="--show"
             onClick={openModal}
