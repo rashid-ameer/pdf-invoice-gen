@@ -136,9 +136,15 @@ function loadImageMeta(
   });
 }
 
-function isBareHttpsPlaceholder(value: string): boolean {
+function isBareUrlPlaceholder(value: string): boolean {
   const trimmed = value.trim();
-  return trimmed === "" || trimmed === "https://" || trimmed === "https:/";
+  return (
+    trimmed === "" ||
+    trimmed === "https://" ||
+    trimmed === "https:/" ||
+    trimmed === "http://" ||
+    trimmed === "http:/"
+  );
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -300,14 +306,23 @@ export function InvoiceLogoField({
     const requestId = ++urlRequestRef.current;
     const trimmed = raw.trim();
 
-    if (isBareHttpsPlaceholder(trimmed)) {
+    if (isBareUrlPlaceholder(trimmed)) {
       if (requestId !== urlRequestRef.current) return;
       setUrlStatus("idle");
       setUrlPreview(null);
       return;
     }
 
-    if (!trimmed.startsWith("https://")) {
+    let parsed: URL;
+    try {
+      parsed = new URL(trimmed);
+    } catch {
+      if (requestId !== urlRequestRef.current) return;
+      setUrlStatus("invalid");
+      setUrlPreview(null);
+      return;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
       if (requestId !== urlRequestRef.current) return;
       setUrlStatus("invalid");
       setUrlPreview(null);
@@ -320,6 +335,16 @@ export function InvoiceLogoField({
       const meta = await loadImageMeta(trimmed);
       if (requestId !== urlRequestRef.current) return;
       if (!meta.width && !meta.height) {
+        if (parsed.protocol === "http:") {
+          setUrlPreview({
+            src: trimmed,
+            width: 0,
+            height: 0,
+            format: formatFromSrc(trimmed) ?? "PNG",
+          });
+          setUrlStatus("valid");
+          return;
+        }
         setUrlStatus("invalid");
         setUrlPreview(null);
         return;
@@ -333,6 +358,17 @@ export function InvoiceLogoField({
       setUrlStatus("valid");
     } catch {
       if (requestId !== urlRequestRef.current) return;
+      // HTTPS admin often blocks http image preview (mixed content); server still accepts http.
+      if (parsed.protocol === "http:") {
+        setUrlPreview({
+          src: trimmed,
+          width: 0,
+          height: 0,
+          format: formatFromSrc(trimmed) ?? "PNG",
+        });
+        setUrlStatus("valid");
+        return;
+      }
       setUrlStatus("invalid");
       setUrlPreview(null);
     }

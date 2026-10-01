@@ -100,8 +100,14 @@ describe("branding logo rules", () => {
 });
 
 describe("branding save and reload", () => {
-  it("creates the default green branding on first visit", async () => {
+  it("returns null when there is no active store", async () => {
     const shop = shopName();
+    assert.equal(await getBrandingInputForShop(shop), null);
+    assert.equal(await saveBrandingForShop(shop, { footerText: "Nope" }), null);
+  });
+
+  it("returns green defaults in memory on first visit without creating a row", async () => {
+    const { shop } = await seedActiveStore();
     const branding = await getBrandingInputForShop(shop);
     assert.deepEqual(branding, {
       primaryColor: "#008060",
@@ -113,22 +119,22 @@ describe("branding save and reload", () => {
 
     const again = await getBrandingInputForShop(shop);
     assert.deepEqual(again, branding);
+    assert.equal(await prisma.shopBranding.count({ where: { shop } }), 0);
   });
 
-  it("survives two first visits at the same time", async () => {
-    const shop = shopName();
+  it("survives two first visits at the same time without creating a row", async () => {
+    const { shop } = await seedActiveStore();
     const [first, second] = await Promise.all([
       getBrandingInputForShop(shop),
       getBrandingInputForShop(shop),
     ]);
-    assert.equal(first.primaryColor, "#008060");
-    assert.equal(second.footerText, "Thank you for your business");
-    const rows = await prisma.shopBranding.count({ where: { shop } });
-    assert.equal(rows, 1);
+    assert.equal(first?.primaryColor, "#008060");
+    assert.equal(second?.footerText, "Thank you for your business");
+    assert.equal(await prisma.shopBranding.count({ where: { shop } }), 0);
   });
 
   it("shows stored install colors as the green defaults", async () => {
-    const shop = shopName();
+    const { shop } = await seedActiveStore();
     await prisma.shopBranding.create({
       data: {
         shop,
@@ -140,14 +146,15 @@ describe("branding save and reload", () => {
       },
     });
     const branding = await getBrandingInputForShop(shop);
+    assert.ok(branding);
     assert.equal(branding.primaryColor, "#008060");
     assert.equal(branding.secondaryColor, "#6d7175");
     assert.equal(branding.accentColor, "#004c3f");
   });
 
   it("keeps a public logo url after reload and does not share it with another shop", async () => {
-    const shop = shopName();
-    const other = shopName();
+    const { shop } = await seedActiveStore();
+    const { shop: other } = await seedActiveStore();
     const saved = await saveBrandingForShop(shop, {
       logoUrl: " https://cdn.example.com/logo.png ",
       primaryColor: "#112233",
@@ -155,25 +162,29 @@ describe("branding save and reload", () => {
       accentColor: "#778899",
       footerText: "See you soon",
     });
+    assert.ok(saved);
     assert.equal(saved.error, undefined);
     assert.equal(saved.branding.logoUrl, "https://cdn.example.com/logo.png");
 
     const reloaded = await getBrandingInputForShop(shop);
+    assert.ok(reloaded);
     assert.equal(reloaded.logoUrl, "https://cdn.example.com/logo.png");
     assert.equal(reloaded.footerText, "See you soon");
 
     const isolated = await getBrandingInputForShop(other);
+    assert.ok(isolated);
     assert.equal(isolated.logoUrl, "");
   });
 
   it("falls back when a color is missing, short, or an install default", async () => {
-    const shop = shopName();
+    const { shop } = await seedActiveStore();
     const saved = await saveBrandingForShop(shop, {
       primaryColor: " #1A1A2E ",
       secondaryColor: "#fff",
       accentColor: " #0F3460 ",
       footerText: "Kept",
     });
+    assert.ok(saved);
     assert.equal(saved.branding.primaryColor, "#008060");
     assert.equal(saved.branding.secondaryColor, "#6d7175");
     assert.equal(saved.branding.accentColor, "#004c3f");
@@ -182,6 +193,7 @@ describe("branding save and reload", () => {
     const unrelatedInstallColor = await saveBrandingForShop(shop, {
       accentColor: "#1A1A2E",
     });
+    assert.ok(unrelatedInstallColor);
     assert.equal(unrelatedInstallColor.branding.accentColor, "#1A1A2E");
 
     const mixed = await saveBrandingForShop(shop, {
@@ -189,26 +201,30 @@ describe("branding save and reload", () => {
       secondaryColor: "",
       accentColor: "#004c3f",
     });
+    assert.ok(mixed);
     assert.equal(mixed.branding.primaryColor, "#AaBbCc");
     assert.equal(mixed.branding.secondaryColor, "#6d7175");
   });
 
   it("uses the default footer when empty and cuts a long footer to 500", async () => {
-    const shop = shopName();
+    const { shop } = await seedActiveStore();
     const empty = await saveBrandingForShop(shop, { footerText: "   \n  " });
+    assert.ok(empty);
     assert.equal(empty.branding.footerText, "Thank you for your business");
 
     const long = "x".repeat(501);
     const cut = await saveBrandingForShop(shop, { footerText: `  ${long}` });
+    assert.ok(cut);
     assert.equal(cut.branding.footerText.length, 500);
     assert.equal(cut.branding.footerText, "x".repeat(500));
 
     const exact = await saveBrandingForShop(shop, { footerText: "y".repeat(500) });
+    assert.ok(exact);
     assert.equal(exact.branding.footerText, "y".repeat(500));
   });
 
-  it("rejects an oversized or invalid upload, keeps the other fields, and clears the logo", async () => {
-    const shop = shopName();
+  it("rejects an oversized or invalid upload, keeps the other fields, and keeps the prior logo", async () => {
+    const { shop } = await seedActiveStore();
     await saveBrandingForShop(shop, {
       logoUrl: "https://cdn.example.com/keep.png",
       footerText: "Before",
@@ -225,13 +241,15 @@ describe("branding save and reload", () => {
       },
       { logoUploadAttempted: true },
     );
+    assert.ok(rejected);
     assert.equal(rejected.error, LOGO_INVALID_MESSAGE);
-    assert.equal(rejected.branding.logoUrl, "");
+    assert.equal(rejected.branding.logoUrl, "https://cdn.example.com/keep.png");
     assert.equal(rejected.branding.primaryColor, "#123456");
     assert.equal(rejected.branding.footerText, "After upload");
 
     const stored = await getBrandingInputForShop(shop);
-    assert.equal(stored.logoUrl, "");
+    assert.ok(stored);
+    assert.equal(stored.logoUrl, "https://cdn.example.com/keep.png");
     assert.equal(stored.footerText, "After upload");
 
     const wrongType = await saveBrandingForShop(
@@ -239,16 +257,19 @@ describe("branding save and reload", () => {
       { logoUrl: "data:image/svg+xml;base64,AAAA", footerText: "Still here" },
       { logoUploadAttempted: true },
     );
+    assert.ok(wrongType);
     assert.equal(wrongType.error, LOGO_INVALID_MESSAGE);
     assert.equal(wrongType.branding.footerText, "Still here");
+    assert.equal(wrongType.branding.logoUrl, "https://cdn.example.com/keep.png");
   });
 
   it("drops a bad pasted logo without the upload error and lets a file win over a url", async () => {
-    const shop = shopName();
+    const { shop } = await seedActiveStore();
     const pasted = await saveBrandingForShop(shop, {
       logoUrl: "javascript:alert(1)",
       footerText: "Pasted",
     });
+    assert.ok(pasted);
     assert.equal(pasted.error, undefined);
     assert.equal(pasted.branding.logoUrl, "");
 
@@ -260,16 +281,18 @@ describe("branding save and reload", () => {
       },
       { logoUploadAttempted: true },
     );
+    assert.ok(fileWins);
     assert.equal(fileWins.error, undefined);
     assert.match(fileWins.branding.logoUrl, /^data:image\/gif;base64,/);
 
-    const invalidFileIgnoresUrl = await saveBrandingForShop(
+    const invalidFileKeepsPrior = await saveBrandingForShop(
       shop,
       { logoUrl: "not-a-url" },
       { logoUploadAttempted: true },
     );
-    assert.equal(invalidFileIgnoresUrl.error, LOGO_INVALID_MESSAGE);
-    assert.equal(invalidFileIgnoresUrl.branding.logoUrl, "");
+    assert.ok(invalidFileKeepsPrior);
+    assert.equal(invalidFileKeepsPrior.error, LOGO_INVALID_MESSAGE);
+    assert.match(invalidFileKeepsPrior.branding.logoUrl, /^data:image\/gif;base64,/);
   });
 });
 

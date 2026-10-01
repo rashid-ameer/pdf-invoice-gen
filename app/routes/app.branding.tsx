@@ -35,6 +35,11 @@ const CONNECTION_ERROR_MESSAGE =
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const branding = await getBrandingInputForShop(session.shop);
+  if (!branding) {
+    throw new Response("Store not found. Please reinstall the app.", {
+      status: 404,
+    });
+  }
   return { branding };
 };
 
@@ -55,6 +60,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     },
     { logoUploadAttempted: Boolean(logoData) },
   );
+
+  if (!result) {
+    throw new Response("Store not found", { status: 404 });
+  }
 
   if (result.error) {
     return { error: result.error, branding: result.branding };
@@ -260,7 +269,7 @@ export default function BrandingPage() {
                     label="Primary"
                     fallback="#008060"
                     value={form.primaryColor}
-                    details="Headers and borders"
+                    details="Headers, borders, tax strip"
                     onChange={(value) => patchColor("primaryColor", value)}
                   />
                   <ColorField

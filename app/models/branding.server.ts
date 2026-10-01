@@ -173,15 +173,24 @@ function toFormData(row: {
 
 export async function getBrandingInputForShop(
   shop: string,
-): Promise<StoreBrandingFormData> {
-  const row = await prisma.shopBranding.upsert({
-    where: { shop },
-    update: {},
-    create: {
-      shop,
-      ...DEFAULT_BRANDING,
-    },
+): Promise<StoreBrandingFormData | null> {
+  const store = await prisma.store.findFirst({
+    where: { shopifyDomain: shop, status: "active" },
   });
+  if (!store) return null;
+
+  const row = await prisma.shopBranding.findUnique({
+    where: { shop },
+  });
+  if (!row) {
+    return {
+      primaryColor: DEFAULT_BRANDING.primaryColor,
+      secondaryColor: DEFAULT_BRANDING.secondaryColor,
+      accentColor: DEFAULT_BRANDING.accentColor,
+      logoUrl: "",
+      footerText: DEFAULT_BRANDING.footerText,
+    };
+  }
   return toFormData(row);
 }
 
@@ -225,9 +234,16 @@ export async function saveBrandingForShop(
   shop: string,
   input: StoreBrandingInput,
   options?: { logoUploadAttempted?: boolean },
-): Promise<{ branding: StoreBrandingFormData; error?: string }> {
+): Promise<{ branding: StoreBrandingFormData; error?: string } | null> {
+  const store = await prisma.store.findFirst({
+    where: { shopifyDomain: shop, status: "active" },
+  });
+  if (!store) return null;
+
   const resolved = resolveBranding(input);
   const logoUploadAttempted = options?.logoUploadAttempted === true;
+  // Old mongoose wrote `logoUrl: resolved.logoUrl || undefined`, so a rejected
+  // upload omitted the field and left the prior logo in place.
   const logoRejected = logoUploadAttempted && !resolved.logoUrl;
 
   await prisma.shopBranding.upsert({
@@ -237,19 +253,20 @@ export async function saveBrandingForShop(
       primaryColor: resolved.primaryColor,
       secondaryColor: resolved.secondaryColor,
       accentColor: resolved.accentColor,
-      logoUrl: resolved.logoUrl,
+      logoUrl: logoRejected ? "" : resolved.logoUrl,
       footerText: resolved.footerText,
     },
     update: {
       primaryColor: resolved.primaryColor,
       secondaryColor: resolved.secondaryColor,
       accentColor: resolved.accentColor,
-      logoUrl: resolved.logoUrl,
       footerText: resolved.footerText,
+      ...(logoRejected ? {} : { logoUrl: resolved.logoUrl }),
     },
   });
 
   const branding = await getBrandingInputForShop(shop);
+  if (!branding) return null;
   if (logoRejected) {
     return { branding, error: LOGO_INVALID_MESSAGE };
   }
