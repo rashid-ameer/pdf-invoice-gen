@@ -1,32 +1,43 @@
-import { useEffect, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { redirect, useActionData, useLoaderData, useNavigation } from "react-router";
+import {
+  useActionData,
+  useLoaderData,
+  useNavigation,
+  useSubmit,
+} from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import {
+  InvoiceLogoField,
+  invoiceLogoFromStoredUrl,
+  type InvoiceLogoValue,
+} from "../components/invoice-logo-field";
+import {
   INVALID_HEX_MESSAGE,
-  LOGO_INVALID_MESSAGE,
-  LOGO_TOO_LARGE_MESSAGE,
+  type StoreBrandingFormData,
+} from "../models/branding";
+import {
   getBrandingInputForShop,
   saveBrandingForShop,
-  type StoreBrandingFormData,
 } from "../models/branding.server";
 import { authenticate } from "../shopify.server";
+import { buildBrandingPreviewSrcDoc } from "../utils/branding-preview";
 
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
-const MAX_LOGO_BYTES = 500_000;
-const PREVIEW_PATH = "/app/templates/preview/modern";
+const SAVE_BAR_ID = "branding-save-bar";
+const GRID_3_COLS = "@container (inline-size > 768px) 1fr 1fr 1fr, 1fr";
+const PAGE_LAYOUT_COLS = "@container (inline-size > 900px) 1.15fr 0.85fr, 1fr";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const branding = await getBrandingInputForShop(session.shop);
-  const saved = new URL(request.url).searchParams.get("saved") === "1";
-  return { branding, saved };
+  return { branding };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -51,35 +62,70 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { error: result.error, branding: result.branding };
   }
 
-  const url = new URL(request.url);
-  url.searchParams.set("saved", "1");
-  return redirect(`${url.pathname}?${url.searchParams.toString()}`);
+  return { ok: true as const, branding: result.branding };
 };
 
 export default function BrandingPage() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const shopify = useAppBridge();
   const saving = navigation.state === "submitting";
 
-  const initial =
-    actionData && "branding" in actionData ? actionData.branding : loaderData.branding;
+  const serverBranding =
+    actionData && "branding" in actionData
+      ? actionData.branding
+      : loaderData.branding;
+  const serverKey = JSON.stringify(serverBranding);
 
-  const [form, setForm] = useState<StoreBrandingFormData>(initial);
-  const [logoData, setLogoData] = useState(
-    initial.logoUrl.startsWith("data:") ? initial.logoUrl : "",
+  const [baseline, setBaseline] = useState<StoreBrandingFormData>(serverBranding);
+  const [form, setForm] = useState<StoreBrandingFormData>(serverBranding);
+  const [logo, setLogo] = useState<InvoiceLogoValue>(() =>
+    invoiceLogoFromStoredUrl(serverBranding.logoUrl),
   );
-  const [logoError, setLogoError] = useState("");
+  const [baselineLogo, setBaselineLogo] = useState<InvoiceLogoValue>(() =>
+    invoiceLogoFromStoredUrl(serverBranding.logoUrl),
+  );
+  const [logoResetToken, setLogoResetToken] = useState(0);
   const [hexError, setHexError] = useState("");
-  const logoFileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setForm(initial);
-    setLogoData(initial.logoUrl.startsWith("data:") ? initial.logoUrl : "");
-  }, [initial]);
+    setForm(serverBranding);
+    setBaseline(serverBranding);
+    const nextLogo = invoiceLogoFromStoredUrl(serverBranding.logoUrl);
+    setLogo(nextLogo);
+    setBaselineLogo(nextLogo);
+    setLogoResetToken((token) => token + 1);
+    setHexError("");
+    // Sync only when server payload changes (load / save response).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverKey]);
 
-  const previewLogo = logoData || form.logoUrl;
-  const footerPreview = form.footerText.trim() || "Thank you for your business";
+  useEffect(() => {
+    if (!actionData || !("ok" in actionData) || !actionData.ok) return;
+    shopify.toast.show("Branding saved");
+    shopify.saveBar.hide(SAVE_BAR_ID);
+  }, [actionData, shopify]);
+
+  const dirty = useMemo(
+    () =>
+      JSON.stringify(form) !== JSON.stringify(baseline) ||
+      logo.src !== baselineLogo.src ||
+      logo.source !== baselineLogo.source,
+    [form, baseline, logo, baselineLogo],
+  );
+
+  useEffect(() => {
+    if (dirty) {
+      shopify.saveBar.show(SAVE_BAR_ID);
+    } else {
+      shopify.saveBar.hide(SAVE_BAR_ID);
+    }
+    return () => {
+      shopify.saveBar.hide(SAVE_BAR_ID);
+    };
+  }, [dirty, shopify]);
 
   const patchColor = (
     key: "primaryColor" | "secondaryColor" | "accentColor",
@@ -89,74 +135,57 @@ export default function BrandingPage() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
-  const resetLogoFile = () => {
-    if (logoFileRef.current) logoFileRef.current.value = "";
+  const discardChanges = () => {
+    if (saving) return;
+    setForm(baseline);
+    setLogo(baselineLogo);
+    setLogoResetToken((token) => token + 1);
+    setHexError("");
+    shopify.saveBar.hide(SAVE_BAR_ID);
   };
 
-  const onLogoFile = (file: File | undefined) => {
-    if (!file) return;
-    if (file.size > MAX_LOGO_BYTES) {
-      resetLogoFile();
-      setLogoError(LOGO_TOO_LARGE_MESSAGE);
-      return;
-    }
-    setLogoError("");
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = String(reader.result || "");
-      setLogoData(result);
-      setForm((prev) => ({ ...prev, logoUrl: "" }));
-    };
-    reader.onerror = () => {
-      resetLogoFile();
-      setLogoError(LOGO_INVALID_MESSAGE);
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const clearLogo = () => {
-    resetLogoFile();
-    setLogoData("");
-    setLogoError("");
-    setForm((prev) => ({ ...prev, logoUrl: "" }));
-  };
-
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const saveForm = () => {
+    if (saving) return;
     const colors = [form.primaryColor, form.secondaryColor, form.accentColor];
     if (colors.some((value) => value && !HEX_COLOR.test(value))) {
-      event.preventDefault();
       setHexError(INVALID_HEX_MESSAGE);
+      return;
     }
+    setHexError("");
+    const body = new FormData();
+    body.set("logoData", logo.src.startsWith("data:") ? logo.src : "");
+    body.set(
+      "logoUrl",
+      logo.src && !logo.src.startsWith("data:") ? logo.src : "",
+    );
+    body.set("primaryColor", form.primaryColor);
+    body.set("secondaryColor", form.secondaryColor);
+    body.set("accentColor", form.accentColor);
+    body.set("footerText", form.footerText);
+    submit(body, { method: "post" });
   };
 
   return (
-    <s-page heading="Invoice branding">
-      <s-section>
-        <s-stack gap="base">
-          <s-text>Store identity</s-text>
-          <s-paragraph>
-            Logo, colors, and footer copy flow into every template preview, PDF,
-            and customer download.
-          </s-paragraph>
-          <s-link href={PREVIEW_PATH} target="_blank">
-            Open full preview
-          </s-link>
-        </s-stack>
-      </s-section>
+    <s-page heading="Invoice branding" inlineSize="large">
+      <ui-save-bar id={SAVE_BAR_ID}>
+        <button
+          variant="primary"
+          onClick={saveForm}
+          {...(saving ? { disabled: true, loading: true } : {})}
+        >
+          Save
+        </button>
+        <button
+          onClick={discardChanges}
+          {...(saving ? { disabled: true } : {})}
+        >
+          Discard
+        </button>
+      </ui-save-bar>
 
-      {loaderData.saved && !(actionData && "error" in actionData) ? (
-        <s-banner tone="success" heading="Branding saved">
-          Branding saved. Open a template preview to see your changes.
-        </s-banner>
-      ) : null}
       {actionData && "error" in actionData ? (
         <s-banner tone="critical" heading="Logo not saved">
           {actionData.error}
-        </s-banner>
-      ) : null}
-      {logoError ? (
-        <s-banner tone="critical" heading="Logo not saved">
-          {logoError}
         </s-banner>
       ) : null}
       {hexError ? (
@@ -165,127 +194,199 @@ export default function BrandingPage() {
         </s-banner>
       ) : null}
 
-      <form method="post" onSubmit={onSubmit}>
-        <input type="hidden" name="logoData" value={logoData} />
-        <input
-          type="hidden"
-          name="logoUrl"
-          value={form.logoUrl.startsWith("data:") ? "" : form.logoUrl}
-        />
-        <input type="hidden" name="primaryColor" value={form.primaryColor} />
-        <input type="hidden" name="secondaryColor" value={form.secondaryColor} />
-        <input type="hidden" name="accentColor" value={form.accentColor} />
-        <input type="hidden" name="footerText" value={form.footerText} />
-        <s-stack gap="base">
-          <s-section heading="Logo">
-            <s-paragraph>Displayed on invoice headers across your templates.</s-paragraph>
-            <s-stack gap="base">
-              {previewLogo ? (
-                <img
-                  src={previewLogo}
-                  alt="Store logo"
-                  style={{ maxWidth: "160px", maxHeight: "80px", objectFit: "contain" }}
-                />
-              ) : (
-                <s-text>No logo yet</s-text>
-              )}
-              <s-text-field
-                label="Logo URL"
-                value={form.logoUrl.startsWith("data:") ? "" : form.logoUrl}
-                placeholder="https://cdn.shopify.com/…"
-                details="Public image URL from your store or CDN"
-                onInput={(event: Event) => {
-                  setLogoData("");
-                  setLogoError("");
+      <s-query-container>
+        <s-grid
+          gridTemplateColumns={PAGE_LAYOUT_COLS}
+          gap="large"
+          alignItems="start"
+        >
+          <s-stack gap="large">
+            <InvoiceLogoField
+              value={logo}
+              onChange={setLogo}
+              resetToken={logoResetToken}
+              disabled={saving}
+            />
+
+            <s-section
+              heading="Brand colors"
+              subheading="Primary drives headers; accent highlights totals and key amounts."
+            >
+              <s-query-container>
+                <s-grid gridTemplateColumns={GRID_3_COLS} gap="base">
+                  <ColorField
+                    label="Primary"
+                    fallback="#008060"
+                    value={form.primaryColor}
+                    details="Headers and borders"
+                    onChange={(value) => patchColor("primaryColor", value)}
+                  />
+                  <ColorField
+                    label="Secondary"
+                    fallback="#6d7175"
+                    value={form.secondaryColor}
+                    details="Labels and supporting text"
+                    onChange={(value) => patchColor("secondaryColor", value)}
+                  />
+                  <ColorField
+                    label="Accent"
+                    fallback="#004c3f"
+                    value={form.accentColor}
+                    details="Totals and highlights"
+                    onChange={(value) => patchColor("accentColor", value)}
+                  />
+                </s-grid>
+              </s-query-container>
+            </s-section>
+
+            <s-section
+              heading="Footer message"
+              subheading="A short line shown at the bottom of every invoice."
+            >
+              <s-text-area
+                label="Custom footer message"
+                value={form.footerText}
+                maxLength={500}
+                rows={2}
+                placeholder="Thank you for your business"
+                details={`${form.footerText.length} / 500 characters`}
+                onInput={(event: Event) =>
                   setForm((prev) => ({
                     ...prev,
-                    logoUrl: fieldValue(event),
-                  }));
-                }}
+                    footerText: fieldValue(event),
+                  }))
+                }
+                onChange={(event: Event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    footerText: fieldValue(event),
+                  }))
+                }
               />
-              <s-text>Upload image</s-text>
-              <input
-                ref={logoFileRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp,image/gif"
-                onChange={(event) => onLogoFile(event.currentTarget.files?.[0])}
-              />
-              <s-text>PNG, JPG, or WebP · max 500 KB</s-text>
-              {previewLogo ? (
-                <s-button type="button" tone="critical" onClick={clearLogo}>
-                  Remove logo
-                </s-button>
-              ) : null}
-            </s-stack>
-          </s-section>
+            </s-section>
+          </s-stack>
 
-          <s-section heading="Brand colors">
-            <s-paragraph>
-              Primary drives headers; accent highlights totals and key amounts.
-            </s-paragraph>
-            <ColorField
-              label="Primary"
-              fallback="#008060"
-              value={form.primaryColor}
-              description="Headers, borders, tax strip"
-              onChange={(value) => patchColor("primaryColor", value)}
-            />
-            <ColorField
-              label="Secondary"
-              fallback="#6d7175"
-              value={form.secondaryColor}
-              description="Labels and supporting text"
-              onChange={(value) => patchColor("secondaryColor", value)}
-            />
-            <ColorField
-              label="Accent"
-              fallback="#004c3f"
-              value={form.accentColor}
-              description="Totals and highlights"
-              onChange={(value) => patchColor("accentColor", value)}
+          <s-section heading="Live preview" subheading="Updates as you edit">
+            <InvoiceBrandingPreview
+              logoSrc={logo.src}
+              primaryColor={form.primaryColor}
+              accentColor={form.accentColor}
+              footerText={form.footerText}
             />
           </s-section>
-
-          <s-section heading="Footer message">
-            <s-paragraph>A short line shown at the bottom of every invoice.</s-paragraph>
-            <s-text-area
-              label="Custom footer message"
-              value={form.footerText}
-              maxLength={500}
-              rows={2}
-              placeholder="Thank you for your business"
-              details={`${form.footerText.length} / 500 characters`}
-              onInput={(event: Event) =>
-                setForm((prev) => ({ ...prev, footerText: fieldValue(event) }))
-              }
-            />
-          </s-section>
-
-          <s-section heading="Live preview">
-            <s-text>Updates as you edit</s-text>
-            <InvoiceMock
-              primary={safeHex(form.primaryColor, "#008060")}
-              secondary={safeHex(form.secondaryColor, "#6d7175")}
-              accent={safeHex(form.accentColor, "#004c3f")}
-              logoUrl={previewLogo}
-              footer={footerPreview}
-            />
-            <s-paragraph>
-              Applies to Modern, Professional, Classic Stripe, and custom templates.
-            </s-paragraph>
-          </s-section>
-
-          <s-button
-            type="submit"
-            variant="primary"
-            {...(saving ? { loading: true } : {})}
-            disabled={saving}
-          >
-            Save
-          </s-button>
-        </s-stack>
-      </form>
+        </s-grid>
+      </s-query-container>
     </s-page>
+  );
+}
+
+function InvoiceBrandingPreview({
+  logoSrc,
+  primaryColor,
+  accentColor,
+  footerText,
+}: {
+  logoSrc: string;
+  primaryColor: string;
+  accentColor: string;
+  footerText: string;
+}) {
+  const primary = HEX_COLOR.test(primaryColor) ? primaryColor : "#008060";
+  const accent = HEX_COLOR.test(accentColor) ? accentColor : "#004c3f";
+  const [embedLogo, setEmbedLogo] = useState("");
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!logoSrc) {
+      setEmbedLogo("");
+      return;
+    }
+
+    if (logoSrc.startsWith("data:") || /^https?:\/\//i.test(logoSrc)) {
+      setEmbedLogo(logoSrc);
+      return;
+    }
+
+    if (!logoSrc.startsWith("blob:")) {
+      setEmbedLogo("");
+      return;
+    }
+
+    fetch(logoSrc)
+      .then((response) => response.blob())
+      .then(
+        (blob) =>
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ""));
+            reader.onerror = () => reject(new Error("read failed"));
+            reader.readAsDataURL(blob);
+          }),
+      )
+      .then((dataUrl) => {
+        if (!cancelled) setEmbedLogo(dataUrl);
+      })
+      .catch(() => {
+        if (!cancelled) setEmbedLogo("");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [logoSrc]);
+
+  const srcDoc = useMemo(
+    () =>
+      buildBrandingPreviewSrcDoc({
+        primaryColor: primary,
+        accentColor: accent,
+        logoSrc: embedLogo,
+        footerText,
+      }),
+    [primary, accent, embedLogo, footerText],
+  );
+
+  const fitIframe = () => {
+    const iframe = iframeRef.current;
+    const doc = iframe?.contentDocument;
+    if (!iframe || !doc?.body) return;
+    iframe.style.height = `${Math.max(doc.body.scrollHeight, 240)}px`;
+  };
+
+  useEffect(() => {
+    fitIframe();
+  }, [srcDoc]);
+
+  return (
+    <s-stack gap="small">
+      <s-box
+        padding="none"
+        background="subdued"
+        border="base"
+        borderRadius="base"
+        overflow="hidden"
+      >
+        <iframe
+          ref={iframeRef}
+          title="Invoice branding live preview"
+          srcDoc={srcDoc}
+          sandbox="allow-same-origin"
+          onLoad={fitIframe}
+          style={{
+            display: "block",
+            width: "100%",
+            border: 0,
+            background: "transparent",
+            minHeight: 240,
+          }}
+        />
+      </s-box>
+      <s-text color="subdued">
+        Applies to Modern, Professional, Classic Stripe, and custom templates.
+      </s-text>
+    </s-stack>
   );
 }
 
@@ -293,135 +394,37 @@ function ColorField({
   label,
   fallback,
   value,
-  description,
+  details,
   onChange,
 }: {
   label: string;
   fallback: string;
   value: string;
-  description: string;
+  details: string;
   onChange: (value: string) => void;
 }) {
   const pickerValue = HEX_COLOR.test(value) ? value : fallback;
   const applyPicker = (event: Event) => {
     const next = fieldValue(event);
     if (!HEX_COLOR.test(next)) return;
-    if (!HEX_COLOR.test(value) && next.toLowerCase() === fallback.toLowerCase()) return;
+    if (
+      !HEX_COLOR.test(value) &&
+      next.toLowerCase() === fallback.toLowerCase()
+    ) {
+      return;
+    }
     onChange(next);
   };
-  return (
-    <s-stack gap="small">
-      <s-color-field
-        label={label}
-        value={pickerValue}
-        onInput={applyPicker}
-        onChange={applyPicker}
-      />
-      <s-text-field
-        label={`${label} hex`}
-        labelAccessibilityVisibility="exclusive"
-        value={value}
-        maxLength={7}
-        onInput={(event: Event) => onChange(fieldValue(event))}
-      />
-      <s-text>{description}</s-text>
-    </s-stack>
-  );
-}
 
-function InvoiceMock({
-  primary,
-  secondary,
-  accent,
-  logoUrl,
-  footer,
-}: {
-  primary: string;
-  secondary: string;
-  accent: string;
-  logoUrl: string;
-  footer: string;
-}) {
   return (
-    <div
-      style={{
-        border: "1px solid #e3e3e3",
-        borderRadius: "12px",
-        overflow: "hidden",
-        background: "#fff",
-        maxWidth: "360px",
-      }}
-    >
-      <div
-        style={{
-          height: "8px",
-          background: `linear-gradient(90deg, ${primary}, ${accent}, ${primary})`,
-        }}
-      />
-      <div style={{ padding: "16px" }}>
-        {logoUrl ? (
-          <img
-            src={logoUrl}
-            alt=""
-            style={{ maxWidth: "120px", maxHeight: "48px", objectFit: "contain" }}
-          />
-        ) : null}
-        <div style={{ color: primary, fontWeight: 700, marginTop: "8px" }}>TAX INVOICE</div>
-        <div style={{ color: secondary, fontSize: "12px" }}>INV-00042 · USD</div>
-        <div
-          style={{
-            marginTop: "10px",
-            background: primary,
-            color: "#fff",
-            fontSize: "12px",
-            padding: "4px 8px",
-            display: "inline-block",
-          }}
-        >
-          Tax ID · 100000000000003
-        </div>
-        <div
-          style={{
-            marginTop: "12px",
-            background: primary,
-            color: "#fff",
-            display: "flex",
-            justifyContent: "space-between",
-            padding: "6px 8px",
-            fontSize: "12px",
-          }}
-        >
-          <span>Item</span>
-          <span>Total</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", fontSize: "13px" }}>
-          <span>Sample product</span>
-          <span>315.00</span>
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 8px", fontSize: "13px" }}>
-          <span>Shipping</span>
-          <span>26.25</span>
-        </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            padding: "8px",
-            fontWeight: 700,
-            color: accent,
-          }}
-        >
-          <span>Amount due</span>
-          <span>341.25 USD</span>
-        </div>
-        <div style={{ color: secondary, fontSize: "12px", padding: "8px" }}>{footer}</div>
-      </div>
-    </div>
+    <s-color-field
+      label={label}
+      value={pickerValue}
+      details={details}
+      onInput={applyPicker}
+      onChange={applyPicker}
+    />
   );
-}
-
-function safeHex(value: string, fallback: string) {
-  return HEX_COLOR.test(value) ? value : fallback;
 }
 
 type BrandingField =
@@ -439,8 +442,9 @@ function isBrandingField(target: EventTarget | null): target is BrandingField {
 }
 
 function fieldValue(event: Event) {
-  if (!isBrandingField(event.currentTarget)) return "";
-  return event.currentTarget.value;
+  const target = event.currentTarget ?? event.target;
+  if (!isBrandingField(target)) return "";
+  return target.value ?? "";
 }
 
 export const headers: HeadersFunction = (headersArgs) => {
