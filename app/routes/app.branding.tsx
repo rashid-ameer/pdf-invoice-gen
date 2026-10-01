@@ -118,7 +118,7 @@ export default function BrandingPage() {
 
     if ("ok" in fetcher.data && fetcher.data.ok) {
       setSaveError("");
-      shopify.toast.show("Branding saved");
+      shopify.toast.show("Invoice branding saved");
       shopify.saveBar.hide(SAVE_BAR_ID);
       return;
     }
@@ -248,7 +248,6 @@ export default function BrandingPage() {
               value={logo}
               onChange={setLogo}
               resetToken={logoResetToken}
-              disabled={saving}
             />
 
             <s-section
