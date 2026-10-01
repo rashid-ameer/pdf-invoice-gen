@@ -4,6 +4,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
+import { isNetworkFetchError } from "../utils/network-error";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -31,7 +32,27 @@ export default function App() {
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
 export function ErrorBoundary() {
-  return boundary.error(useRouteError());
+  const error = useRouteError();
+
+  if (isNetworkFetchError(error)) {
+    return (
+      <s-page heading="Connection problem">
+        <s-banner tone="critical" heading="Couldn't connect">
+          Check your connection and try again.
+        </s-banner>
+        <s-button
+          variant="primary"
+          onClick={() => {
+            window.location.reload();
+          }}
+        >
+          Try again
+        </s-button>
+      </s-page>
+    );
+  }
+
+  return boundary.error(error);
 }
 
 export const headers: HeadersFunction = (headersArgs) => {

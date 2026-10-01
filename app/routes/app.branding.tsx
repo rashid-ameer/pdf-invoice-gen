@@ -4,7 +4,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
@@ -23,6 +23,7 @@ import {
 } from "../models/branding.server";
 import { authenticate } from "../shopify.server";
 import { buildBrandingPreviewSrcDoc } from "../utils/branding-preview";
+import { isNetworkFetchError } from "../utils/network-error";
 
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 const SAVE_BAR_ID = "branding-save-bar";
@@ -492,3 +493,22 @@ function fieldValue(event: Event) {
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+
+  if (isNetworkFetchError(error)) {
+    return (
+      <s-page heading="Invoice branding" inlineSize="large">
+        <s-banner tone="critical" heading="Couldn't save">
+          Check your connection and try again.
+        </s-banner>
+        <s-button href="/app/branding" variant="primary">
+          Try again
+        </s-button>
+      </s-page>
+    );
+  }
+
+  return boundary.error(error);
+}
