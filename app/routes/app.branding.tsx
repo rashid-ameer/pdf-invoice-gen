@@ -4,12 +4,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import {
-  useActionData,
-  useLoaderData,
-  useNavigation,
-  useSubmit,
-} from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
@@ -33,6 +28,8 @@ const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
 const SAVE_BAR_ID = "branding-save-bar";
 const GRID_3_COLS = "@container (inline-size > 768px) 1fr 1fr 1fr, 1fr";
 const PAGE_LAYOUT_COLS = "@container (inline-size > 900px) 1.15fr 0.85fr, 1fr";
+const CONNECTION_ERROR_MESSAGE =
+  "Check your connection and try again.";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -67,15 +64,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function BrandingPage() {
   const loaderData = useLoaderData<typeof loader>();
-  const actionData = useActionData<typeof action>();
-  const navigation = useNavigation();
-  const submit = useSubmit();
+  const fetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
-  const saving = navigation.state === "submitting";
+  const saving =
+    fetcher.state === "submitting" || fetcher.state === "loading";
+  const awaitingResult = useRef(false);
+  const dataAtSubmit = useRef(fetcher.data);
 
   const serverBranding =
-    actionData && "branding" in actionData
-      ? actionData.branding
+    fetcher.data && "branding" in fetcher.data
+      ? fetcher.data.branding
       : loaderData.branding;
   const serverKey = JSON.stringify(serverBranding);
 
@@ -89,6 +87,8 @@ export default function BrandingPage() {
   );
   const [logoResetToken, setLogoResetToken] = useState(0);
   const [hexError, setHexError] = useState("");
+  const [connectionError, setConnectionError] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   useEffect(() => {
     setForm(serverBranding);
@@ -103,10 +103,36 @@ export default function BrandingPage() {
   }, [serverKey]);
 
   useEffect(() => {
-    if (!actionData || !("ok" in actionData) || !actionData.ok) return;
-    shopify.toast.show("Branding saved");
-    shopify.saveBar.hide(SAVE_BAR_ID);
-  }, [actionData, shopify]);
+    if (!awaitingResult.current || fetcher.state !== "idle") return;
+    awaitingResult.current = false;
+
+    if (!fetcher.data || fetcher.data === dataAtSubmit.current) {
+      setConnectionError(true);
+      setSaveError("");
+      shopify.toast.show("Couldn't save", { isError: true });
+      return;
+    }
+
+    setConnectionError(false);
+
+    if ("ok" in fetcher.data && fetcher.data.ok) {
+      setSaveError("");
+      shopify.toast.show("Branding saved");
+      shopify.saveBar.hide(SAVE_BAR_ID);
+      return;
+    }
+
+    if ("error" in fetcher.data && fetcher.data.error) {
+      setSaveError(fetcher.data.error);
+    }
+  }, [fetcher.data, fetcher.state, shopify]);
+
+  useEffect(() => {
+    shopify.loading(saving);
+    return () => {
+      shopify.loading(false);
+    };
+  }, [saving, shopify]);
 
   const dirty = useMemo(
     () =>
@@ -141,6 +167,8 @@ export default function BrandingPage() {
     setLogo(baselineLogo);
     setLogoResetToken((token) => token + 1);
     setHexError("");
+    setConnectionError(false);
+    setSaveError("");
     shopify.saveBar.hide(SAVE_BAR_ID);
   };
 
@@ -152,6 +180,8 @@ export default function BrandingPage() {
       return;
     }
     setHexError("");
+    setConnectionError(false);
+    setSaveError("");
     const body = new FormData();
     body.set("logoData", logo.src.startsWith("data:") ? logo.src : "");
     body.set(
@@ -162,7 +192,9 @@ export default function BrandingPage() {
     body.set("secondaryColor", form.secondaryColor);
     body.set("accentColor", form.accentColor);
     body.set("footerText", form.footerText);
-    submit(body, { method: "post" });
+    dataAtSubmit.current = fetcher.data;
+    awaitingResult.current = true;
+    fetcher.submit(body, { method: "post" });
   };
 
   return (
@@ -183,9 +215,19 @@ export default function BrandingPage() {
         </button>
       </ui-save-bar>
 
-      {actionData && "error" in actionData ? (
-        <s-banner tone="critical" heading="Logo not saved">
-          {actionData.error}
+      {connectionError ? (
+        <s-banner
+          tone="critical"
+          heading="Couldn't save"
+          dismissible
+          onDismiss={() => setConnectionError(false)}
+        >
+          {CONNECTION_ERROR_MESSAGE}
+        </s-banner>
+      ) : null}
+      {saveError ? (
+        <s-banner tone="critical" heading="Couldn't save">
+          {saveError}
         </s-banner>
       ) : null}
       {hexError ? (

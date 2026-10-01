@@ -410,18 +410,20 @@ export function InvoiceLogoField({
           >
             <s-stack gap="base" alignItems="center">
               <s-icon type="image" />
-              <s-text>Upload from computer</s-text>
+              <s-text>Click to upload</s-text>
               <s-text color="subdued">{DROP_HELPER}</s-text>
             </s-stack>
           </s-drop-zone>
           {isReplacing ? (
-            <s-button
-              variant="secondary"
-              onClick={cancelCompose}
-              {...(busy ? { disabled: true } : {})}
-            >
-              Cancel
-            </s-button>
+            <s-stack direction="inline" justifyContent="end">
+              <s-button
+                variant="secondary"
+                onClick={cancelCompose}
+                {...(busy ? { disabled: true } : {})}
+              >
+                Cancel
+              </s-button>
+            </s-stack>
           ) : null}
         </s-stack>
       ) : (
