@@ -56,9 +56,10 @@ model Merchant {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  stores        Store[]
-  legalEntities LegalEntity[]
-  settings      Setting[]
+  stores           Store[]
+  legalEntities    LegalEntity[]
+  settings         Setting[]
+  invoiceTemplates InvoiceTemplate[]
 }
 
 model Store {
@@ -85,10 +86,11 @@ model Store {
   createdAt                       DateTime  @default(now())
   updatedAt                       DateTime  @updatedAt
 
-  merchant     Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  settings     Setting[]
-  invoices     Invoice[]
-  creditNotes  CreditNote[]
+  merchant          Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  settings          Setting[]
+  invoices          Invoice[]
+  creditNotes       CreditNote[]
+  invoiceTemplates  InvoiceTemplate[]
 
   @@index([merchantId])
 }
@@ -177,4 +179,44 @@ model CreditNote {
   store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
 
   @@index([storeId])
+}
+
+/// System + future custom templates (Group 5 seed/resolve; Group 14 editor).
+/// Uniqueness is enforced by partial indexes in the SQL migration:
+/// - UNIQUE(code) WHERE isSystem = 1
+/// - UNIQUE(storeId, code) WHERE storeId IS NOT NULL
+/// Do not add @@unique([code, isSystem]) — that would block per-store custom codes.
+model InvoiceTemplate {
+  id             String   @id @default(cuid())
+  code           String
+  name           String
+  description    String?
+  htmlPath       String?
+  previewUrl     String?
+  storeId        String?
+  merchantId     String?
+  baseLayoutCode String   @default("modern")
+  documentType   String   @default("tax_invoice")
+  /// TemplateConfig JSON (layout branding, sections, labels, …)
+  config         Json?
+  /// layout | imported | code — customs use imported/code in Group 14
+  sourceType     String   @default("layout")
+  customHtml     String?
+  customCss      String?
+  /// Import / document-graph metadata for Group 14 imported templates
+  importMeta     Json?
+  version        Int      @default(1)
+  isSystem       Boolean  @default(true)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  store    Store?    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  merchant Merchant? @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([merchantId])
+  @@index([code, isSystem])
+  @@index([isSystem, isActive])
+  @@index([documentType, isSystem, isActive])
 }
