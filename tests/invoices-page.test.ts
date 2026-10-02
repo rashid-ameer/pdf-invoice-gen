@@ -118,15 +118,73 @@ describe("Invoices page wiring", () => {
     assert.match(source, />Invoices</);
   });
 
-  it("keeps a minimal placeholder route without the removed list UI", () => {
+  it("renders an Index Table UI with required columns and no later-group features", () => {
     const source = readFileSync(
       join(process.cwd(), "app/routes/app.invoices.tsx"),
       "utf8",
     );
-    assert.match(source, /Invoices/);
-    assert.match(source, /being rebuilt|placeholder/i);
-    assert.doesNotMatch(source, /View HTML|Download PDF|Export CSV|Sync orders|Re-register webhooks|paymentStatus|s-table/);
-    assert.doesNotMatch(source, /Send email|Resend email|Copy link|packing.?slip|credit.?note|QR code/i);
+    assert.match(source, /inlineSize="large"/);
+    assert.match(source, /<s-table/);
+    assert.doesNotMatch(source, /variant=\{tableVariant\}|variant="list"/);
+    assert.doesNotMatch(source, /matchMedia\(/);
+    assert.match(source, /listSlot="primary"/);
+    assert.match(source, /listSlot="labeled">Order</);
+    assert.match(source, /listSlot="labeled">Payment status</);
+    assert.match(source, /listSlot="labeled">Invoice status</);
+    assert.match(source, /listSlot="labeled">Actions</);
+    assert.doesNotMatch(source, /listSlot="secondary"/);
+    assert.doesNotMatch(source, /listSlot="inline"/);
+    assert.doesNotMatch(source, /listSlot="kicker"/);
+    assert.match(source, /FILTER_GRID_COLS/);
+    assert.match(source, /s-query-container/);
+    assert.match(source, /gridTemplateColumns=\{FILTER_GRID_COLS\}/);
+    assert.match(source, /gridTemplateColumns="auto 1fr"/);
+    assert.match(source, /clickDelegate=\{checkboxId\}/);
+    assert.match(source, />Invoice</);
+    assert.match(source, />Order</);
+    assert.match(source, />Customer</);
+    assert.match(source, />Date</);
+    assert.match(source, />\s*Total\s*</);
+    assert.match(source, /Payment status/);
+    assert.match(source, /Invoice status/);
+    assert.match(source, />Actions</);
+    assert.match(source, /<s-menu/);
+    assert.match(source, /Print selected/);
+    assert.match(source, /Send email/);
+    assert.match(source, /disabled/);
+    assert.doesNotMatch(source, /packing.?slip|credit.?note|QR code|public link/i);
+    assert.doesNotMatch(source, /white-space:\s*nowrap|@media/);
+  });
+
+  it("exposes Sync, Export CSV, and Re-register webhooks as page actions", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/routes/app.invoices.tsx"),
+      "utf8",
+    );
+    assert.match(source, /slot="primary-action"/);
+    assert.match(source, /slot="secondary-actions"/);
+    assert.match(source, />\s*Sync orders\s*</);
+    assert.match(source, />\s*Export CSV\s*</);
+    assert.match(source, />\s*Re-register webhooks\s*</);
+    assert.match(source, /href="\/app\/invoices\/export\/csv"/);
+    assert.match(source, /enqueueSyncOrders/);
+    assert.match(source, /reregisterWebhooksForShop/);
+    assert.match(source, /intent", "reregister"/);
+    assert.doesNotMatch(source, /\/webhooks\/shopify/);
+  });
+
+  it("implements filtered and first-time empty states with Polaris empty-state", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/routes/app.invoices.tsx"),
+      "utf8",
+    );
+    assert.match(source, /<s-empty-state heading="No invoices found"/);
+    assert.match(source, /Clear search and filters/);
+    assert.match(source, /type="search"/);
+    assert.match(source, /<s-empty-state heading="No invoices yet"/);
+    assert.match(source, /Sync orders/);
+    assert.match(source, /enqueueSyncOrders/);
+    assert.match(source, /showEmptyContent = !loading/);
   });
 
   it("does not reintroduce /webhooks/shopify", () => {
