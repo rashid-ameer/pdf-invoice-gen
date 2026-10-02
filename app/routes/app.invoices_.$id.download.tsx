@@ -70,6 +70,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     result.doc.templateName,
   );
 
-  const filename = `${result.doc.invoiceNumber}-${result.doc.templateName.replace(/\s+/g, "-")}`;
+  const filename = result.doc.invoiceNumber;
   return pdfDownloadResponse(result.pdf, filename);
 };
