@@ -270,6 +270,46 @@ export type CreateInvoiceOptions = {
   enrichLineItems?: EnrichFn;
 };
 
+/**
+ * Existing-invoice reconciliation shared by find-before-create and P2002 race paths.
+ * Runs VAT/discount repairs and updates financialStatus when the order payload differs.
+ */
+async function reconcileExistingInvoiceFromOrder(
+  existingInvoice: Invoice,
+  order: ShopifyOrder,
+  opts?: { fromUniqueRace?: boolean },
+): Promise<Invoice> {
+  await repairInvoiceVatAlignedToAmounts(existingInvoice.id);
+  await repairInvoiceDiscountAlignment(existingInvoice.id);
+
+  const current =
+    (await prisma.invoice.findUnique({ where: { id: existingInvoice.id } })) ??
+    existingInvoice;
+
+  const nextStatus = normalizeFinancialStatus(order.financial_status);
+  if (order.financial_status && current.financialStatus !== nextStatus) {
+    // Concurrent unpaid loser must not overwrite a paid winner.
+    if (
+      opts?.fromUniqueRace &&
+      isPaidFinancialStatus(current.financialStatus) &&
+      !isPaidFinancialStatus(nextStatus)
+    ) {
+      return current;
+    }
+    return prisma.invoice.update({
+      where: { id: existingInvoice.id },
+      data: { financialStatus: nextStatus },
+    });
+  }
+
+  return current;
+}
+
+function isPaidFinancialStatus(status?: string | null): boolean {
+  const normalized = normalizeFinancialStatus(status);
+  return normalized === "paid" || normalized === "partially_paid";
+}
+
 /** Create invoice from a Shopify order payload. Safe to call from webhooks or manual sync. */
 export async function createInvoiceFromShopifyOrder(
   shopDomain: string,
@@ -294,22 +334,12 @@ export async function createInvoiceFromShopifyOrder(
     },
   });
   if (existingInvoice) {
-    await repairInvoiceVatAlignedToAmounts(existingInvoice.id);
-    await repairInvoiceDiscountAlignment(existingInvoice.id);
-    if (
-      order.financial_status &&
-      existingInvoice.financialStatus !==
-        normalizeFinancialStatus(order.financial_status)
-    ) {
-      return prisma.invoice.update({
-        where: { id: existingInvoice.id },
-        data: {
-          financialStatus: normalizeFinancialStatus(order.financial_status),
-        },
-      });
-    }
+    const reconciled = await reconcileExistingInvoiceFromOrder(
+      existingInvoice,
+      order,
+    );
     console.log(`[orders] invoice already exists for order ${order.name}`);
-    return prisma.invoice.findUnique({ where: { id: existingInvoice.id } });
+    return reconciled;
   }
 
   const legalEntity = store.defaultLegalEntityId
@@ -467,10 +497,25 @@ export async function createInvoiceFromShopifyOrder(
         console.log(
           `[orders] duplicate create race resolved for order ${order.name} → ${existing.invoiceNumber}`,
         );
+        const reconciled = await reconcileExistingInvoiceFromOrder(
+          existing,
+          order,
+          { fromUniqueRace: true },
+        );
         if (orderIsPaidFlag(order, options)) {
-          await scheduleInvoiceAutoEmailOnPaid(shopDomain, existing.id);
+          const paidStatus =
+            normalizeFinancialStatus(order.financial_status) || "paid";
+          const withPaid =
+            reconciled.financialStatus !== paidStatus
+              ? await prisma.invoice.update({
+                  where: { id: reconciled.id },
+                  data: { financialStatus: paidStatus },
+                })
+              : reconciled;
+          await scheduleInvoiceAutoEmailOnPaid(shopDomain, withPaid.id);
+          return withPaid;
         }
-        return existing;
+        return reconciled;
       }
     }
     throw error;
@@ -522,21 +567,10 @@ export async function handleOrderCreated(
     },
   });
   if (existingInvoice) {
-    await repairInvoiceVatAlignedToAmounts(existingInvoice.id);
-    await repairInvoiceDiscountAlignment(existingInvoice.id);
-    let result = existingInvoice;
-    if (
-      order.financial_status &&
-      existingInvoice.financialStatus !==
-        normalizeFinancialStatus(order.financial_status)
-    ) {
-      result = await prisma.invoice.update({
-        where: { id: existingInvoice.id },
-        data: {
-          financialStatus: normalizeFinancialStatus(order.financial_status),
-        },
-      });
-    }
+    const result = await reconcileExistingInvoiceFromOrder(
+      existingInvoice,
+      order,
+    );
     if (orderIsPaid) {
       await scheduleInvoiceAutoEmailOnPaid(shopDomain, result.id);
     }

@@ -287,6 +287,126 @@ describe("createInvoiceFromShopifyOrder", () => {
     assert.equal(count, 1);
   });
 
+  it("P2002 race: create wins unpaid then paid loser marks invoice paid", async () => {
+    const { store } = await seedStore();
+    const unpaid = baseOrder({
+      id: 900050,
+      name: "#900050",
+      financial_status: "pending",
+    });
+    const paid = { ...unpaid, financial_status: "paid" };
+
+    let releasePaidEnrich!: () => void;
+    const paidEnrichGate = new Promise<void>((resolve) => {
+      releasePaidEnrich = resolve;
+    });
+
+    // Paid passes the find-before-create check, then waits in enrichment.
+    const paidPromise = createInvoiceFromShopifyOrder(
+      store.shopifyDomain,
+      paid,
+      "webhook",
+      {
+        orderIsPaid: true,
+        enrichLineItems: async (_shop, _lines, items) => {
+          await paidEnrichGate;
+          return items;
+        },
+      },
+    );
+
+    await new Promise((resolve) => setTimeout(resolve, 40));
+
+    // Unpaid creates first while paid is still gated → unpaid wins insert.
+    const unpaidResult = await createInvoiceFromShopifyOrder(
+      store.shopifyDomain,
+      unpaid,
+      "webhook",
+      { enrichLineItems: passthroughEnrich },
+    );
+    assert.equal(unpaidResult!.financialStatus, "pending");
+
+    releasePaidEnrich();
+    const paidResult = await paidPromise;
+
+    assert.equal(paidResult!.id, unpaidResult!.id);
+    assert.equal(paidResult!.financialStatus, "paid");
+
+    const final = await prisma.invoice.findUnique({
+      where: { id: unpaidResult!.id },
+    });
+    assert.equal(final!.financialStatus, "paid");
+    assert.equal(
+      await prisma.invoice.count({
+        where: { storeId: store.id, shopifyOrderId: "900050" },
+      }),
+      1,
+    );
+  });
+
+  it("paid request on existing invoice remains paid", async () => {
+    const { store } = await seedStore();
+    const order = baseOrder({
+      id: 900051,
+      name: "#900051",
+      financial_status: "paid",
+    });
+    const first = await createInvoiceFromShopifyOrder(
+      store.shopifyDomain,
+      order,
+      "webhook",
+      { enrichLineItems: passthroughEnrich, orderIsPaid: true },
+    );
+    assert.equal(first!.financialStatus, "paid");
+
+    const second = await createInvoiceFromShopifyOrder(
+      store.shopifyDomain,
+      order,
+      "webhook",
+      { enrichLineItems: passthroughEnrich, orderIsPaid: true },
+    );
+    assert.equal(second!.id, first!.id);
+    assert.equal(second!.financialStatus, "paid");
+    assert.equal(
+      await prisma.invoice.count({
+        where: { storeId: store.id, shopifyOrderId: "900051" },
+      }),
+      1,
+    );
+  });
+
+  it("duplicate unpaid create does not unnecessarily change financialStatus", async () => {
+    const { store } = await seedStore();
+    const order = baseOrder({
+      id: 900052,
+      name: "#900052",
+      financial_status: "pending",
+    });
+    const first = await createInvoiceFromShopifyOrder(
+      store.shopifyDomain,
+      order,
+      "webhook",
+      { enrichLineItems: passthroughEnrich },
+    );
+    assert.equal(first!.financialStatus, "pending");
+    const before = await prisma.invoice.findUnique({ where: { id: first!.id } });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    const second = await createInvoiceFromShopifyOrder(
+      store.shopifyDomain,
+      order,
+      "webhook",
+      { enrichLineItems: passthroughEnrich },
+    );
+    assert.equal(second!.id, first!.id);
+    assert.equal(second!.financialStatus, "pending");
+
+    const after = await prisma.invoice.findUnique({ where: { id: first!.id } });
+    assert.equal(after!.financialStatus, "pending");
+    assert.equal(after!.updatedAt.getTime(), before!.updatedAt.getTime());
+  });
+
   it("returns null when store is missing", async () => {
     const order = baseOrder({ id: 900004 });
     const result = await createInvoiceFromShopifyOrder(
