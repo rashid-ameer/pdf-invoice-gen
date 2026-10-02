@@ -31,6 +31,8 @@ import {
   paymentStatusBadgeTone,
 } from "../utils/invoice-status-badges";
 import { hasActiveInvoiceUiFilters } from "../utils/invoice-ui-filters";
+import { downloadPackingSlipPdf } from "../utils/download-packing-slip-pdf";
+import { fetchAndPrintPackingSlipDocument } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
 /**
@@ -150,6 +152,7 @@ export default function PackingSlipsPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchDraft, setSearchDraft] = useState(data.query.q);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -283,6 +286,39 @@ export default function PackingSlipsPage() {
       else next.delete(id);
       return next;
     });
+  };
+
+  const openView = (id: string) => {
+    navigate(`/app/invoices/${encodeURIComponent(id)}/packing-slip/view`);
+  };
+
+  const openPrint = (id: string) => {
+    void fetchAndPrintPackingSlipDocument(id);
+  };
+
+  /**
+   * Direct packing-slip PDF download (G5/G7).
+   * Plain fetch — no React Router navigation, no new tab, no table loading.
+   */
+  const openDownload = async (
+    id: string,
+    orderNumber: string,
+    invoiceNumber: string,
+  ) => {
+    if (downloadingId) return;
+    setDownloadingId(id);
+    try {
+      await downloadPackingSlipPdf({
+        invoiceId: id,
+        orderNumber,
+        invoiceNumber,
+        onError: (message) => {
+          shopify.toast.show(message, { isError: true });
+        },
+      });
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   return (
@@ -478,6 +514,7 @@ export default function PackingSlipsPage() {
               ) : showTableRows ? (
                 data.items.map((invoice: InvoiceListItem) => {
                   const checkboxId = `packing-select-${invoice.id}`;
+                  const menuId = `packing-actions-${invoice.id}`;
                   const paymentLabel = formatPaymentStatus(
                     invoice.financialStatus,
                   );
@@ -531,7 +568,46 @@ export default function PackingSlipsPage() {
                         </s-badge>
                       </s-table-cell>
                       <s-table-cell>
-                        {/* Phase 2: packing-slip view / print / download */}
+                        <s-button
+                          icon="menu-horizontal"
+                          variant="tertiary"
+                          accessibilityLabel={`More actions for ${invoice.invoiceNumber}`}
+                          commandFor={menuId}
+                        />
+                        <s-menu
+                          id={menuId}
+                          accessibilityLabel={`Actions for ${invoice.invoiceNumber}`}
+                        >
+                          <s-button
+                            icon="view"
+                            onClick={() => openView(invoice.id)}
+                          >
+                            View
+                          </s-button>
+                          <s-button
+                            icon="print"
+                            onClick={() => openPrint(invoice.id)}
+                          >
+                            Print
+                          </s-button>
+                          <s-button
+                            icon="download"
+                            onClick={() =>
+                              void openDownload(
+                                invoice.id,
+                                invoice.shopifyOrderNumber,
+                                invoice.invoiceNumber,
+                              )
+                            }
+                            {...(downloadingId === invoice.id
+                              ? { loading: true, disabled: true }
+                              : downloadingId
+                                ? { disabled: true }
+                                : {})}
+                          >
+                            Download
+                          </s-button>
+                        </s-menu>
                       </s-table-cell>
                     </s-table-row>
                   );

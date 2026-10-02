@@ -218,3 +218,67 @@ export async function fetchAndPrintInvoiceDocuments(
     );
   }
 }
+
+/**
+ * Fetch packing-slip embed HTML (view?embed=1) and print via a dedicated tab.
+ * Does not record packing_slip_downloaded (view path).
+ */
+export async function fetchAndPrintPackingSlipDocument(
+  invoiceId: string,
+): Promise<void> {
+  const id = String(invoiceId ?? "").trim();
+  if (!id) return;
+
+  const tab = window.open("about:blank", "_blank");
+  if (!tab) return;
+
+  try {
+    writeTabMessage(
+      tab,
+      "Preparing packing slip…",
+      "Preparing packing slip for print…",
+    );
+
+    const url = `/app/invoices/${encodeURIComponent(id)}/packing-slip/view?embed=1`;
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+    });
+    if (!response.ok) {
+      writeTabMessage(
+        tab,
+        "Print failed",
+        `Could not prepare packing slip (HTTP ${response.status}).`,
+      );
+      return;
+    }
+
+    const contentType = response.headers.get("Content-Type") ?? "";
+    if (!contentType.includes("text/html")) {
+      writeTabMessage(
+        tab,
+        "Print failed",
+        "Server returned a non-HTML document. Close this tab and try again.",
+      );
+      return;
+    }
+
+    const html = await response.text();
+    if (!html.trim() || !/<body[\s>]/i.test(html)) {
+      writeTabMessage(
+        tab,
+        "Print failed",
+        "Packing slip HTML was empty or incomplete.",
+      );
+      return;
+    }
+
+    printHtmlInDedicatedTab(html, tab);
+  } catch {
+    writeTabMessage(
+      tab,
+      "Print failed",
+      "Could not prepare packing slip. Check your connection and try again.",
+    );
+  }
+}

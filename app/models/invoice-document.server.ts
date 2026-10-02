@@ -176,14 +176,14 @@ export type RenderedInvoiceDocument = {
 };
 
 /**
- * Render tax invoice HTML for an existing invoice.
- * Template resolved at view/download time (Group 8 does not store defaultTemplateId).
- * QR / verification intentionally omitted until Group 13.
+ * Shared render path for an existing invoice document (tax invoice or packing slip).
+ * Template resolved at view/download time. QR/verification only for tax invoices (Group 13).
  */
-export async function renderInvoiceDocument(
+async function renderDocumentForInvoice(
   shopDomain: string,
   invoiceId: string,
-  templateId?: string,
+  templateId: string | undefined,
+  documentType: DocumentType,
 ): Promise<RenderedInvoiceDocument | null> {
   const store = await getActiveStoreForShop(shopDomain);
   if (!store) return null;
@@ -196,17 +196,17 @@ export async function renderInvoiceDocument(
   const resolved = await resolveTemplateForShop(
     shopDomain,
     templateId,
-    "tax_invoice",
+    documentType,
   );
   if (!resolved) return null;
 
   const layout = (resolved.template.baseLayoutCode ?? "modern") as BaseLayoutCode;
-  const data = invoiceToRenderData(invoice, "tax_invoice");
+  const data = invoiceToRenderData(invoice, documentType);
   const branding = await getBrandingForShop(shopDomain);
   const config = mergeConfigWithBranding(
     resolved.config,
     branding,
-    "tax_invoice",
+    documentType,
   );
 
   // Group 13: QR / integrity verification — do not attach here.
@@ -225,7 +225,7 @@ export async function renderInvoiceDocument(
     layout,
     config,
     data,
-    "tax_invoice",
+    documentType,
     customHtml,
     undefined,
     resolved.template.sourceType,
@@ -240,8 +240,22 @@ export async function renderInvoiceDocument(
     templateId: resolved.template.id,
     templateCode: resolved.template.code,
     templateName: resolved.template.name,
-    documentType: "tax_invoice",
+    documentType,
   };
+}
+
+/** Render tax invoice HTML for an existing invoice. */
+export async function renderInvoiceDocument(
+  shopDomain: string,
+  invoiceId: string,
+  templateId?: string,
+): Promise<RenderedInvoiceDocument | null> {
+  return renderDocumentForInvoice(
+    shopDomain,
+    invoiceId,
+    templateId,
+    "tax_invoice",
+  );
 }
 
 export async function renderInvoiceDocumentPdf(
@@ -250,6 +264,32 @@ export async function renderInvoiceDocumentPdf(
   templateId?: string,
 ): Promise<{ pdf: Buffer; doc: RenderedInvoiceDocument } | null> {
   const doc = await renderInvoiceDocument(shopDomain, invoiceId, templateId);
+  if (!doc) return null;
+  const a4 = applyA4DocumentLayout(doc.html);
+  const pdf = await cachedHtmlToPdfBuffer(a4);
+  return { pdf, doc };
+}
+
+/** Render packing slip HTML (default packing_slip template when templateId omitted). */
+export async function renderPackingSlipDocument(
+  shopDomain: string,
+  invoiceId: string,
+  templateId?: string,
+): Promise<RenderedInvoiceDocument | null> {
+  return renderDocumentForInvoice(
+    shopDomain,
+    invoiceId,
+    templateId,
+    "packing_slip",
+  );
+}
+
+export async function renderPackingSlipDocumentPdf(
+  shopDomain: string,
+  invoiceId: string,
+  templateId?: string,
+): Promise<{ pdf: Buffer; doc: RenderedInvoiceDocument } | null> {
+  const doc = await renderPackingSlipDocument(shopDomain, invoiceId, templateId);
   if (!doc) return null;
   const a4 = applyA4DocumentLayout(doc.html);
   const pdf = await cachedHtmlToPdfBuffer(a4);
@@ -363,6 +403,39 @@ export async function recordInvoiceDownload(
         templateId,
         templateName,
         documentType: "tax_invoice",
+      },
+    },
+  });
+}
+
+/**
+ * Old recordPackingSlipDownload: status event only.
+ * Does NOT flip invoice.status to downloaded.
+ */
+export async function recordPackingSlipDownload(
+  shopDomain: string,
+  invoiceId: string,
+  templateId: string,
+  templateName: string,
+): Promise<void> {
+  const store = await getActiveStoreForShop(shopDomain);
+  if (!store) return;
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, storeId: store.id },
+  });
+  if (!invoice) return;
+
+  await prisma.invoiceStatusEvent.create({
+    data: {
+      invoiceId: invoice.id,
+      status: "packing_slip_downloaded",
+      source: "merchant",
+      message: `Packing slip downloaded using ${templateName} template`,
+      metadata: {
+        templateId,
+        templateName,
+        documentType: "packing_slip",
       },
     },
   });

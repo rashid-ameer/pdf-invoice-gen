@@ -151,10 +151,13 @@ describe("packing slips Phase 1 — list + CSV", () => {
     assert.match(packingSrc, /\/app\/packing-slips\/export\/csv/);
     assert.match(packingSrc, /No packing slips yet/);
     assert.match(packingSrc, /No packing slips found/);
-    // Phase 1: no packing document actions wired
-    assert.doesNotMatch(packingSrc, /packing-slip\/view/);
-    assert.doesNotMatch(packingSrc, /downloadInvoicePdf/);
-    assert.doesNotMatch(packingSrc, /fetchAndPrint/);
+    // Phase 2: View / Print / Download only
+    assert.match(packingSrc, /packing-slip\/view/);
+    assert.match(packingSrc, /downloadPackingSlipPdf/);
+    assert.match(packingSrc, /fetchAndPrintPackingSlipDocument/);
+    assert.doesNotMatch(packingSrc, /Print selected/);
+    assert.doesNotMatch(packingSrc, />\s*Copy\s*</);
+    assert.doesNotMatch(packingSrc, />\s*Send email\s*</);
 
     const invoicesSrc = readFileSync(
       join(process.cwd(), "app/routes/app.invoices.tsx"),
