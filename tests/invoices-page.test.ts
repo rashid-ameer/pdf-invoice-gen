@@ -166,7 +166,12 @@ describe("Invoices page wiring", () => {
     assert.match(source, />\s*Sync orders\s*</);
     assert.match(source, />\s*Export CSV\s*</);
     assert.match(source, />\s*Re-register webhooks\s*</);
-    assert.match(source, /href="\/app\/invoices\/export\/csv"/);
+    assert.match(source, /downloadCsvExport/);
+    assert.match(source, /\/app\/invoices\/export\/csv/);
+    assert.doesNotMatch(
+      source,
+      /href="\/app\/invoices\/export\/csv"/,
+    );
     assert.match(source, /enqueueSyncOrders/);
     assert.match(source, /reregisterWebhooksForShop/);
     assert.match(source, /intent", "reregister"/);

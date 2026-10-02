@@ -214,6 +214,34 @@ export default function InvoicesPage() {
     webhookFetcher.submit(form, { method: "post" });
   };
 
+  /** Download CSV without React Router navigation (avoids table loading / leaving the page). */
+  const downloadCsvExport = async () => {
+    try {
+      const response = await fetch("/app/invoices/export/csv");
+      if (!response.ok) {
+        shopify.toast.show("Failed to export CSV. Try again.", {
+          isError: true,
+        });
+        return;
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const filenameMatch = /filename="([^"]+)"/.exec(disposition);
+      const filename = filenameMatch?.[1] || "invoices.csv";
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = filename.endsWith(".csv") ? filename : `${filename}.csv`;
+      anchor.rel = "noopener";
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      shopify.toast.show("Failed to export CSV. Try again.", { isError: true });
+    }
+  };
+
   const visibleIds = useMemo(
     () => data.items.map((item) => item.id),
     [data.items],
@@ -308,7 +336,9 @@ export default function InvoicesPage() {
       <s-button
         slot="secondary-actions"
         variant="secondary"
-        href="/app/invoices/export/csv"
+        onClick={() => {
+          void downloadCsvExport();
+        }}
       >
         Export CSV
       </s-button>
