@@ -399,3 +399,79 @@ export async function listTaxInvoiceTemplatesForShop(
     isDefault: store.defaultTemplateId === t.id,
   }));
 }
+
+export type InvoiceDetailsData = {
+  id: string;
+  invoiceNumber: string;
+  shopifyOrderId: string;
+  shopifyOrderNumber: string;
+  buyerName: string;
+  issueDateIso: string;
+  status: string;
+  financialStatus: string | null;
+  currency: string;
+  grandTotal: number;
+  shopDomain: string;
+  /** Shopify Admin order URL when a numeric order id is available. */
+  orderAdminUrl: string | null;
+  /** Same-origin embed URL for the G5/G7 rendered invoice HTML. */
+  previewEmbedUrl: string;
+  printUrl: string;
+  downloadUrl: string;
+};
+
+function shopifyAdminOrderUrl(
+  shopDomain: string,
+  shopifyOrderId: string,
+): string | null {
+  const orderId = String(shopifyOrderId || "").trim();
+  if (!/^\d+$/.test(orderId)) return null;
+  const handle = shopDomain
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/$/, "")
+    .replace(/\.myshopify\.com$/i, "");
+  if (!handle) return null;
+  return `https://admin.shopify.com/store/${encodeURIComponent(handle)}/orders/${orderId}`;
+}
+
+/**
+ * Load invoice metadata for the Polaris details page.
+ * Document HTML/PDF continue to come from renderInvoiceDocument* (G5/G7).
+ */
+export async function getInvoiceDetailsForShop(
+  shopDomain: string,
+  invoiceId: string,
+): Promise<InvoiceDetailsData | null> {
+  const store = await getActiveStoreForShop(shopDomain);
+  if (!store) return null;
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, storeId: store.id },
+  });
+  if (!invoice) return null;
+
+  const buyer = parseJson<{ name?: string | null }>(invoice.buyer, {});
+  const totals = parseJson<{ grandTotal?: number }>(invoice.totals, {});
+  const encodedId = encodeURIComponent(invoice.id);
+
+  return {
+    id: invoice.id,
+    invoiceNumber: invoice.invoiceNumber,
+    shopifyOrderId: invoice.shopifyOrderId,
+    shopifyOrderNumber: invoice.shopifyOrderNumber ?? "—",
+    buyerName: buyer.name?.trim() || "Customer",
+    issueDateIso: invoice.issueDate.toISOString(),
+    status: invoice.status,
+    financialStatus: invoice.financialStatus,
+    currency: invoice.currency || DEFAULT_CURRENCY,
+    grandTotal: totals.grandTotal ?? 0,
+    shopDomain: store.shopifyDomain,
+    orderAdminUrl: shopifyAdminOrderUrl(
+      store.shopifyDomain,
+      invoice.shopifyOrderId,
+    ),
+    previewEmbedUrl: `/app/invoices/${encodedId}/view?embed=1`,
+    printUrl: `/app/invoices/${encodedId}/download?mode=print`,
+    downloadUrl: `/app/invoices/${encodedId}/download`,
+  };
+}

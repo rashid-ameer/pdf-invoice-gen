@@ -10,6 +10,7 @@ import {
   wrapA4DocumentViewerHtml,
 } from "../app/models/document-preview.server";
 import {
+  getInvoiceDetailsForShop,
   listTaxInvoiceTemplatesForShop,
   recordInvoiceDownload,
   renderInvoiceDocument,
@@ -139,7 +140,13 @@ describe("Invoices page wiring", () => {
     assert.match(source, /s-query-container/);
     assert.match(source, /gridTemplateColumns=\{FILTER_GRID_COLS\}/);
     assert.match(source, /gridTemplateColumns="auto 1fr"/);
-    assert.match(source, /clickDelegate=\{checkboxId\}/);
+    assert.match(source, /clickDelegate=\{linkId\}/);
+    assert.match(source, /detailsHref/);
+    assert.match(source, /navigate\(`\/app\/invoices\/\$\{encodeURIComponent\(id\)\}`\)/);
+    assert.doesNotMatch(
+      source,
+      /href=\{`\/app\/invoices\/\$\{encodeURIComponent\(invoice\.id\)\}\/view`\}/,
+    );
     assert.match(source, />Invoice</);
     assert.match(source, />Order</);
     assert.match(source, />Customer</);
@@ -376,6 +383,105 @@ describe("HTML view + template picker + bulk (no QR)", () => {
     );
     const updated = await prisma.invoice.findUnique({ where: { id: invoice.id } });
     assert.equal(updated!.status, "downloaded");
+  });
+});
+
+describe("Invoice details page", () => {
+  it("wires Polaris details shell to G5/G7 embed preview routes", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/routes/app.invoices_.$id.tsx"),
+      "utf8",
+    );
+    assert.match(source, /getInvoiceDetailsForShop/);
+    assert.match(source, /slot="breadcrumb-actions"/);
+    assert.match(source, /href="\/app\/invoices"/);
+    assert.match(source, /slot="accessory"/);
+    assert.match(source, /paymentStatusBadgeTone/);
+    assert.match(source, /invoiceStatusBadgeTone/);
+    assert.match(source, /slot="primary-action"/);
+    assert.match(source, />\s*Send email\s*</);
+    assert.match(source, /commandFor=\{MORE_MENU_ID\}/);
+    assert.match(source, /icon="clipboard"/);
+    assert.match(source, /icon="print"/);
+    assert.match(source, /icon="download"/);
+    assert.match(source, />\s*Copy\s*</);
+    assert.match(source, />\s*More actions\s*</);
+    assert.equal(
+      [...source.matchAll(/slot="secondary-actions"/g)].length,
+      1,
+      "Print/Download should only live under More actions",
+    );
+    assert.match(source, /slot="aside"/);
+    assert.match(source, /heading="Summary"/);
+    assert.match(source, /Customer/);
+    assert.match(source, /Order/);
+    assert.match(source, /Invoice date/);
+    assert.match(source, /Total/);
+    assert.doesNotMatch(source, /heading="Customer"/);
+    assert.doesNotMatch(source, /heading="Order"/);
+    assert.doesNotMatch(source, /heading="Details"/);
+    assert.match(source, /isInvoiceDetailsPath/);
+    assert.match(source, /loadingDetailsContent/);
+    assert.match(source, /shopify\.loading/);
+    assert.match(source, /navigation\.location/);
+    assert.doesNotMatch(
+      source,
+      /const invoiceLoading = navigation\.state === "loading"/,
+    );
+    assert.match(source, /previewHtml/);
+    assert.match(source, /srcDoc=\{previewHtml\}/);
+    assert.match(source, /wrapA4EmbedHtml/);
+    assert.match(source, /renderInvoiceDocument/);
+    assert.match(source, /<iframe/);
+    assert.match(source, /Invoice not found/);
+    assert.match(source, /Back to Invoices/);
+    assert.doesNotMatch(source, /inlineSize="large"/);
+    assert.doesNotMatch(source, /packing.?slip|credit.?note|QR code|public link/i);
+
+    const docSource = readFileSync(
+      join(process.cwd(), "app/models/invoice-document.server.ts"),
+      "utf8",
+    );
+    assert.match(docSource, /getInvoiceDetailsForShop/);
+    assert.match(docSource, /view\?embed=1/);
+  });
+
+  it("loads details metadata and reuses the same document URLs as list actions", async () => {
+    const { store, invoice } = await seedInvoice({
+      financialStatus: "paid",
+      invoiceNumber: "INV-DETAILS-1",
+    });
+    const details = await getInvoiceDetailsForShop(
+      store.shopifyDomain,
+      invoice.id,
+    );
+    assert.ok(details);
+    assert.equal(details!.invoiceNumber, "INV-DETAILS-1");
+    assert.equal(details!.buyerName, "UI Buyer");
+    assert.equal(details!.shopifyOrderNumber, "#UI-1");
+    assert.equal(details!.status, "generated");
+    assert.equal(details!.financialStatus, "paid");
+    assert.equal(details!.grandTotal, 10.5);
+    assert.equal(details!.currency, "AED");
+    assert.equal(
+      details!.previewEmbedUrl,
+      `/app/invoices/${encodeURIComponent(invoice.id)}/view?embed=1`,
+    );
+    assert.equal(
+      details!.printUrl,
+      `/app/invoices/${encodeURIComponent(invoice.id)}/download?mode=print`,
+    );
+    assert.equal(
+      details!.downloadUrl,
+      `/app/invoices/${encodeURIComponent(invoice.id)}/download`,
+    );
+    assert.match(details!.orderAdminUrl ?? "", /admin\.shopify\.com\/store\//);
+    assert.match(details!.orderAdminUrl ?? "", /\/orders\//);
+
+    assert.equal(
+      await getInvoiceDetailsForShop(store.shopifyDomain, "missing-id"),
+      null,
+    );
   });
 });
 

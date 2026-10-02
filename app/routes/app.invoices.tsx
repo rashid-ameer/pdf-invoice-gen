@@ -289,11 +289,7 @@ export default function InvoicesPage() {
   };
 
   const openView = (id: string) => {
-    window.open(
-      `/app/invoices/${encodeURIComponent(id)}/view`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    navigate(`/app/invoices/${encodeURIComponent(id)}`);
   };
 
   const openPrint = (id: string) => {
@@ -517,12 +513,14 @@ export default function InvoicesPage() {
               ) : showTableRows ? (
                 data.items.map((invoice: InvoiceListItem) => {
                   const checkboxId = `invoice-select-${invoice.id}`;
+                  const linkId = `invoice-link-${invoice.id}`;
                   const menuId = `invoice-actions-${invoice.id}`;
+                  const detailsHref = `/app/invoices/${encodeURIComponent(invoice.id)}`;
                   const paymentLabel = formatPaymentStatus(
                     invoice.financialStatus,
                   );
                   return (
-                    <s-table-row key={invoice.id} clickDelegate={checkboxId}>
+                    <s-table-row key={invoice.id} clickDelegate={linkId}>
                       <s-table-cell>
                         <s-grid
                           gridTemplateColumns="auto 1fr"
@@ -541,10 +539,7 @@ export default function InvoicesPage() {
                               );
                             }}
                           />
-                          <s-link
-                            href={`/app/invoices/${encodeURIComponent(invoice.id)}/view`}
-                            target="_blank"
-                          >
+                          <s-link id={linkId} href={detailsHref}>
                             {invoice.invoiceNumber}
                           </s-link>
                         </s-grid>

@@ -294,6 +294,28 @@ export function wrapA4ThumbnailHtml(html: string): string {
   return output;
 }
 
+/**
+ * Invoice details embed: same A4 document + preview chrome as the viewer,
+ * fitted to a narrow Polaris column (no toolbar — page actions own Print/Download).
+ */
+export function wrapA4EmbedHtml(html: string): string {
+  let output = wrapA4ThumbnailHtml(html);
+  output = injectStyles(
+    output,
+    `
+  html {
+    background: #f1f2f3;
+    overflow-x: auto;
+  }
+
+  body {
+    margin: 16px auto !important;
+  }
+`,
+  );
+  return output;
+}
+
 /** Legacy preview wrapper (print-only toolbar). */
 export function wrapA4PreviewHtml(html: string): string {
   return wrapA4DocumentViewerHtml(html, {

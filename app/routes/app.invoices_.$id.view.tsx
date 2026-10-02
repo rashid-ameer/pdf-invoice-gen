@@ -4,6 +4,7 @@ import { renderInvoiceDocument } from "../models/invoice-document.server";
 import {
   applyA4DocumentLayout,
   wrapA4DocumentViewerHtml,
+  wrapA4EmbedHtml,
 } from "../models/document-preview.server";
 import { authenticate } from "../shopify.server";
 import { htmlDocumentResponse } from "../utils/document-response.server";
@@ -24,11 +25,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Invoice not found", { status: 404 });
   }
 
-  const laidOut = applyA4DocumentLayout(doc.html);
   if (embed) {
-    return htmlDocumentResponse(laidOut);
+    return htmlDocumentResponse(wrapA4EmbedHtml(doc.html));
   }
 
+  const laidOut = applyA4DocumentLayout(doc.html);
   const downloadQs = new URLSearchParams({
     templateId: doc.templateId,
   });
