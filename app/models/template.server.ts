@@ -1,4 +1,4 @@
-import type { InvoiceTemplate, Prisma } from "@prisma/client";
+import { Prisma, type InvoiceTemplate } from "@prisma/client";
 
 import prisma from "../db.server";
 import type { DocumentType } from "../types/index";
@@ -86,14 +86,46 @@ async function upsertSystemTemplate(template: (typeof SYSTEM_TEMPLATES)[number])
   });
 
   if (existing) {
-    await prisma.invoiceTemplate.update({
-      where: { id: existing.id },
-      data,
-    });
-    return;
+    try {
+      await prisma.invoiceTemplate.update({
+        where: { id: existing.id },
+        data,
+      });
+      return;
+    } catch (error) {
+      // Concurrent tests may delete the row between find and update (P2025).
+      if (
+        !(
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === "P2025"
+        )
+      ) {
+        throw error;
+      }
+    }
   }
 
-  await prisma.invoiceTemplate.create({ data });
+  try {
+    await prisma.invoiceTemplate.create({ data });
+  } catch (error) {
+    // Concurrent ensure may create the same system code (partial unique).
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      const again = await prisma.invoiceTemplate.findFirst({
+        where: { code: template.code, isSystem: true },
+      });
+      if (again) {
+        await prisma.invoiceTemplate.update({
+          where: { id: again.id },
+          data,
+        });
+        return;
+      }
+    }
+    throw error;
+  }
 }
 
 async function runEnsureSystemTemplates() {
