@@ -18,6 +18,7 @@ import {
   renderInvoiceDocument,
 } from "../models/invoice-document.server";
 import { formatPaymentStatus } from "../utils/csv";
+import { downloadInvoicePdf } from "../utils/download-invoice-pdf";
 import {
   formatInvoiceStatusLabel,
   invoiceStatusBadgeTone,
@@ -89,6 +90,7 @@ export default function InvoiceDetailsPage() {
     navigation.location != null &&
     isInvoiceDetailsPath(navigation.location.pathname);
   const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
@@ -169,8 +171,20 @@ export default function InvoiceDetailsPage() {
     });
   };
 
-  const openDownload = () => {
-    window.open(invoice.downloadUrl, "_blank", "noopener,noreferrer");
+  const openDownload = async () => {
+    if (!invoice || downloading) return;
+    setDownloading(true);
+    try {
+      await downloadInvoicePdf({
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        onError: (message) => {
+          shopify.toast.show(message, { isError: true });
+        },
+      });
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -220,7 +234,11 @@ export default function InvoiceDetailsPage() {
         <s-button icon="print" onClick={printInvoice}>
           Print
         </s-button>
-        <s-button icon="download" onClick={openDownload}>
+        <s-button
+          icon="download"
+          onClick={() => void openDownload()}
+          {...(downloading ? { loading: true, disabled: true } : {})}
+        >
           Download
         </s-button>
       </s-menu>

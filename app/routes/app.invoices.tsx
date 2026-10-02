@@ -31,6 +31,7 @@ import {
   paymentStatusBadgeTone,
 } from "../utils/invoice-status-badges";
 import { hasActiveInvoiceUiFilters } from "../utils/invoice-ui-filters";
+import { downloadInvoicePdf } from "../utils/download-invoice-pdf";
 import {
   fetchAndPrintInvoiceDocument,
   fetchAndPrintInvoiceDocuments,
@@ -149,6 +150,7 @@ export default function InvoicesPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchDraft, setSearchDraft] = useState(data.query.q);
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -301,12 +303,24 @@ export default function InvoicesPage() {
     void fetchAndPrintInvoiceDocument(id);
   };
 
-  const openDownload = (id: string) => {
-    window.open(
-      `/app/invoices/${encodeURIComponent(id)}/download`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+  /**
+   * Direct PDF download via existing /download route (G5/G7).
+   * Plain fetch — no React Router navigation, no new tab, no table loading.
+   */
+  const openDownload = async (id: string, invoiceNumber: string) => {
+    if (downloadingId) return;
+    setDownloadingId(id);
+    try {
+      await downloadInvoicePdf({
+        invoiceId: id,
+        invoiceNumber,
+        onError: (message) => {
+          shopify.toast.show(message, { isError: true });
+        },
+      });
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const printSelected = () => {
@@ -609,7 +623,17 @@ export default function InvoicesPage() {
                           </s-button>
                           <s-button
                             icon="download"
-                            onClick={() => openDownload(invoice.id)}
+                            onClick={() =>
+                              void openDownload(
+                                invoice.id,
+                                invoice.invoiceNumber,
+                              )
+                            }
+                            {...(downloadingId === invoice.id
+                              ? { loading: true, disabled: true }
+                              : downloadingId
+                                ? { disabled: true }
+                                : {})}
                           >
                             Download
                           </s-button>
