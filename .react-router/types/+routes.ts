@@ -20,6 +20,12 @@ type Pages = {
   "/webhooks/app/uninstalled": {
     params: {};
   };
+  "/webhooks/orders/create": {
+    params: {};
+  };
+  "/webhooks/orders/paid": {
+    params: {};
+  };
   "/auth/*": {
     params: {
       "*": string;
@@ -45,7 +51,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/auth/*" | "/app" | "/app/additional" | "/app/branding" | "/app/settings" | "/app/help";
+    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/additional" | "/app/branding" | "/app/settings" | "/app/help";
   };
   "routes/webhooks.app.scopes_update.tsx": {
     id: "routes/webhooks.app.scopes_update";
@@ -54,6 +60,14 @@ type RouteFiles = {
   "routes/webhooks.app.uninstalled.tsx": {
     id: "routes/webhooks.app.uninstalled";
     page: "/webhooks/app/uninstalled";
+  };
+  "routes/webhooks.orders.create.tsx": {
+    id: "routes/webhooks.orders.create";
+    page: "/webhooks/orders/create";
+  };
+  "routes/webhooks.orders.paid.tsx": {
+    id: "routes/webhooks.orders.paid";
+    page: "/webhooks/orders/paid";
   };
   "routes/_index/route.tsx": {
     id: "routes/_index";
@@ -93,6 +107,8 @@ type RouteModules = {
   "root": typeof import("./app/root.tsx");
   "routes/webhooks.app.scopes_update": typeof import("./app/routes/webhooks.app.scopes_update.tsx");
   "routes/webhooks.app.uninstalled": typeof import("./app/routes/webhooks.app.uninstalled.tsx");
+  "routes/webhooks.orders.create": typeof import("./app/routes/webhooks.orders.create.tsx");
+  "routes/webhooks.orders.paid": typeof import("./app/routes/webhooks.orders.paid.tsx");
   "routes/_index": typeof import("./app/routes/_index/route.tsx");
   "routes/auth.$": typeof import("./app/routes/auth.$.tsx");
   "routes/app": typeof import("./app/routes/app.tsx");

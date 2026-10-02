@@ -127,7 +127,26 @@ describe("document numbering", () => {
     assert.equal(await nextInvoiceNumber(store.id, merchant.id), "INV-00001");
     assert.equal(await nextCreditNoteNumber(store.id, merchant.id), "CN-00001");
 
-    await prisma.invoice.create({ data: { storeId: store.id } });
+    await prisma.invoice.create({
+      data: {
+        merchantId: merchant.id,
+        storeId: store.id,
+        legalEntityId: merchant.id,
+        shopifyOrderId: `order-${randomUUID()}`,
+        invoiceNumber: "INV-00001",
+        issueDate: new Date(),
+        seller: { legalName: "Test", address: { line1: "", city: "", country: "" } },
+        buyer: { name: "Buyer" },
+        lineItems: [],
+        totals: {
+          subtotal: 0,
+          discount: 0,
+          vatTotal: 0,
+          shipping: 0,
+          grandTotal: 0,
+        },
+      },
+    });
     await prisma.creditNote.create({ data: { storeId: store.id } });
 
     assert.equal(await nextInvoiceNumber(store.id, merchant.id), "INV-00002");

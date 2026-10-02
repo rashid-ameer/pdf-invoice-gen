@@ -60,6 +60,7 @@ model Merchant {
   legalEntities    LegalEntity[]
   settings         Setting[]
   invoiceTemplates InvoiceTemplate[]
+  invoices         Invoice[]
 }
 
 model Store {
@@ -157,16 +158,78 @@ model Setting {
   @@index([storeId])
 }
 
-/// Minimal stub for document numbering counts; full fields land in Group 8.
+/// Tax invoice created from a Shopify order (Group 8).
+/// legalEntityId may equal merchantId when no LegalEntity exists (old parity).
 model Invoice {
-  id        String   @id @default(cuid())
-  storeId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                 String    @id @default(cuid())
+  merchantId         String
+  storeId            String
+  legalEntityId      String
+  shopifyOrderId     String
+  shopifyOrderNumber String?
+  invoiceNumber      String
+  mode               String    @default("standard")
+  status             String    @default("generated")
+  financialStatus    String?
+  issueDate          DateTime
+  currency           String    @default("USD")
+  /// SellerInfo JSON snapshot at creation time
+  seller             Json
+  /// BuyerInfo JSON
+  buyer              Json
+  /// Address JSON
+  shippingAddress    Json?
+  shippingMethod     String?
+  orderNote          String?
+  /// InvoiceLineItem[] JSON (includes enrichment + PINT line fields)
+  lineItems          Json
+  /// InvoiceTotals JSON
+  totals             Json
+  /// PintInvoiceMetadata JSON
+  pint               Json?
+  pdfUrl             String?
+  defaultTemplateId  String?
+  aspExternalId      String?
+  aspPayloadRef      String?
+  aspStatus          String?
+  /// string[] JSON
+  validationErrors   Json?
+  /// { tokenHash, token, expiresAt, issuedAt }
+  publicAccess       Json?
+  /// { integrityHash, sealedAt }
+  verification       Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store        Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  merchant     Merchant              @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  statusEvents InvoiceStatusEvent[]
 
+  @@unique([storeId, shopifyOrderId])
+  @@unique([legalEntityId, invoiceNumber])
   @@index([storeId])
+  @@index([merchantId, status, createdAt])
+  @@index([storeId, createdAt])
+  @@index([storeId, issueDate])
+  @@index([storeId, status])
+}
+
+model InvoiceStatusEvent {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  creditNoteId String?
+  status       String
+  source       String   @default("system")
+  message      String?
+  metadata     Json?
+  payloadRef   String?
+  occurredAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId, occurredAt])
 }
 
 /// Minimal stub for document numbering counts; full fields land in Group 11.
