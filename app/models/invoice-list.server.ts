@@ -360,7 +360,43 @@ function formatDay(iso: string): string {
   return date.toLocaleDateString(APP_LOCALE);
 }
 
-export function invoicesToCsv(items: InvoiceListItem[]): string {
+/**
+ * CSV for invoices or packing slips (same rows; different columns).
+ * Packing-slip columns match the old app `kind=packing-slips` export.
+ */
+export function invoicesToCsv(
+  items: InvoiceListItem[],
+  kind: "invoices" | "packing-slips" = "invoices",
+): string {
+  if (kind === "packing-slips") {
+    return toCsv(
+      [
+        "Order",
+        "Invoice",
+        "Customer",
+        "Email",
+        "Phone",
+        "Date",
+        "Payment status",
+        "Shipping method",
+        "Currency",
+        "Grand total",
+      ],
+      items.map((row) => [
+        row.shopifyOrderNumber,
+        row.invoiceNumber,
+        row.buyerName,
+        row.buyerEmail,
+        row.buyerPhone,
+        formatDay(row.issueDate),
+        formatPaymentStatus(row.financialStatus),
+        row.shippingMethod,
+        row.currency,
+        row.grandTotal,
+      ]),
+    );
+  }
+
   return toCsv(
     [
       "Invoice",
