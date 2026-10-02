@@ -151,8 +151,8 @@ describe("packing slips Phase 1 — list + CSV", () => {
     assert.match(packingSrc, /\/app\/packing-slips\/export\/csv/);
     assert.match(packingSrc, /No packing slips yet/);
     assert.match(packingSrc, /No packing slips found/);
-    // Phase 2: View / Print / Download only
-    assert.match(packingSrc, /packing-slip\/view/);
+    // Phase 2/3: View opens details; Print / Download on list
+    assert.match(packingSrc, /\/app\/packing-slips\/\$\{/);
     assert.match(packingSrc, /downloadPackingSlipPdf/);
     assert.match(packingSrc, /fetchAndPrintPackingSlipDocument/);
     assert.doesNotMatch(packingSrc, /Print selected/);

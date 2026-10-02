@@ -7,6 +7,7 @@ import { join } from "node:path";
 import prisma from "../app/db.server";
 import {
   invoiceToRenderData,
+  getPackingSlipDetailsForShop,
   recordPackingSlipDownload,
   renderPackingSlipDocument,
   renderPackingSlipDocumentPdf,
@@ -258,7 +259,7 @@ describe("packing slip routes wiring", () => {
       join(process.cwd(), "app/routes/app.packing-slips.tsx"),
       "utf8",
     );
-    assert.match(src, /packing-slip\/view/);
+    assert.match(src, /\/app\/packing-slips\/\$\{/);
     assert.match(src, /fetchAndPrintPackingSlipDocument/);
     assert.match(src, /downloadPackingSlipPdf/);
     assert.match(src, />\s*View\s*</);
@@ -268,5 +269,73 @@ describe("packing slip routes wiring", () => {
     assert.doesNotMatch(src, />\s*Send email\s*</);
     assert.doesNotMatch(src, /Print selected/);
     assert.doesNotMatch(src, /templateId|template picker/i);
+  });
+});
+
+describe("packing slip details page", () => {
+  it("wires Polaris details shell with Print/Download and packing-slip preview", () => {
+    const source = readFileSync(
+      join(process.cwd(), "app/routes/app.packing-slips_.$id.tsx"),
+      "utf8",
+    );
+    assert.match(source, /getPackingSlipDetailsForShop/);
+    assert.match(source, /renderPackingSlipDocument/);
+    assert.match(source, /wrapA4EmbedHtml/);
+    assert.match(source, /slot="breadcrumb-actions"/);
+    assert.match(source, /href="\/app\/packing-slips"/);
+    assert.match(source, /slot="accessory"/);
+    assert.match(source, /paymentStatusBadgeTone/);
+    assert.match(source, /invoiceStatusBadgeTone/);
+    assert.match(source, /slot="primary-action"/);
+    assert.match(source, /slot="secondary-actions"/);
+    assert.match(source, />\s*Print\s*</);
+    assert.match(source, />\s*Download\s*</);
+    assert.match(source, /printInvoiceHtml/);
+    assert.match(source, /downloadPackingSlipPdf/);
+    assert.match(source, /heading="Packing slip"/);
+    assert.match(source, /heading="Customer"/);
+    assert.match(source, /heading="Order"/);
+    assert.match(source, /heading="Details"/);
+    assert.match(source, /Payment status/);
+    assert.match(source, /Invoice date/);
+    assert.match(source, /Total/);
+    assert.match(source, /srcDoc=\{previewHtml\}/);
+    assert.match(source, /Packing slip not found/);
+    assert.match(source, /Back to Packing slips/);
+    assert.match(source, /isPackingSlipDetailsPath/);
+    assert.match(source, /shopify\.loading/);
+    assert.doesNotMatch(source, />\s*Send email\s*</);
+    assert.doesNotMatch(source, />\s*Copy\s*</);
+    assert.doesNotMatch(source, /More actions/);
+    assert.doesNotMatch(source, /template picker|QR code|public link/i);
+    assert.doesNotMatch(source, /inlineSize="large"/);
+  });
+
+  it("loads packing-slip details metadata with packing document URLs", async () => {
+    const { store, invoice } = await seedStoreWithInvoice({
+      shopifyOrderNumber: "#PS-DET-1",
+    });
+    const details = await getPackingSlipDetailsForShop(
+      store.shopifyDomain,
+      invoice.id,
+    );
+    assert.ok(details);
+    assert.equal(details!.invoiceNumber, invoice.invoiceNumber);
+    assert.equal(details!.shopifyOrderNumber, "#PS-DET-1");
+    assert.equal(details!.buyerName, "Buyer Co");
+    assert.equal(
+      details!.previewEmbedUrl,
+      `/app/invoices/${encodeURIComponent(invoice.id)}/packing-slip/view?embed=1`,
+    );
+    assert.equal(
+      details!.downloadUrl,
+      `/app/invoices/${encodeURIComponent(invoice.id)}/packing-slip`,
+    );
+    assert.match(details!.orderAdminUrl ?? "", /admin\.shopify\.com\/store\//);
+
+    assert.equal(
+      await getPackingSlipDetailsForShop(store.shopifyDomain, "missing-id"),
+      null,
+    );
   });
 });

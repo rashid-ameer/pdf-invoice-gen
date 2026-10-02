@@ -40,6 +40,11 @@ type Pages = {
   "/app/invoices/export/csv": {
     params: {};
   };
+  "/app/packing-slips/:id": {
+    params: {
+      "id": string;
+    };
+  };
   "/app/invoices/bulk": {
     params: {};
   };
@@ -91,7 +96,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/packing-slips/export/csv" | "/app/invoices/export/csv" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/packing-slips/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/:id" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
   };
   "routes/webhooks.app.scopes_update.tsx": {
     id: "routes/webhooks.app.scopes_update";
@@ -119,7 +124,7 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/packing-slips/export/csv" | "/app/invoices/export/csv" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/app" | "/app/packing-slips/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/:id" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
   };
   "routes/app.packing-slips_.export.csv.tsx": {
     id: "routes/app.packing-slips_.export.csv";
@@ -128,6 +133,10 @@ type RouteFiles = {
   "routes/app.invoices_.export.csv.tsx": {
     id: "routes/app.invoices_.export.csv";
     page: "/app/invoices/export/csv";
+  };
+  "routes/app.packing-slips_.$id.tsx": {
+    id: "routes/app.packing-slips_.$id";
+    page: "/app/packing-slips/:id";
   };
   "routes/app.invoices_.bulk.tsx": {
     id: "routes/app.invoices_.bulk";
@@ -194,6 +203,7 @@ type RouteModules = {
   "routes/app": typeof import("./app/routes/app.tsx");
   "routes/app.packing-slips_.export.csv": typeof import("./app/routes/app.packing-slips_.export.csv.tsx");
   "routes/app.invoices_.export.csv": typeof import("./app/routes/app.invoices_.export.csv.tsx");
+  "routes/app.packing-slips_.$id": typeof import("./app/routes/app.packing-slips_.$id.tsx");
   "routes/app.invoices_.bulk": typeof import("./app/routes/app.invoices_.bulk.tsx");
   "routes/app.invoices_.$id": typeof import("./app/routes/app.invoices_.$id.tsx");
   "routes/app.invoices_.$id.packing-slip": typeof import("./app/routes/app.invoices_.$id.packing-slip.tsx");

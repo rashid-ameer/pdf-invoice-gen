@@ -548,3 +548,22 @@ export async function getInvoiceDetailsForShop(
     downloadUrl: `/app/invoices/${encodedId}/download`,
   };
 }
+
+/**
+ * Metadata for Packing Slip Details. Same invoice row; packing-slip document URLs.
+ * Preview/PDF come from renderPackingSlipDocument* (G5/G7).
+ */
+export async function getPackingSlipDetailsForShop(
+  shopDomain: string,
+  invoiceId: string,
+): Promise<InvoiceDetailsData | null> {
+  const details = await getInvoiceDetailsForShop(shopDomain, invoiceId);
+  if (!details) return null;
+  const encodedId = encodeURIComponent(details.id);
+  return {
+    ...details,
+    previewEmbedUrl: `/app/invoices/${encodedId}/packing-slip/view?embed=1`,
+    printUrl: `/app/invoices/${encodedId}/packing-slip/view?embed=1`,
+    downloadUrl: `/app/invoices/${encodedId}/packing-slip`,
+  };
+}

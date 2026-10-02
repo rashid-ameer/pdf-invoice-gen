@@ -289,7 +289,7 @@ export default function PackingSlipsPage() {
   };
 
   const openView = (id: string) => {
-    navigate(`/app/invoices/${encodeURIComponent(id)}/packing-slip/view`);
+    navigate(`/app/packing-slips/${encodeURIComponent(id)}`);
   };
 
   const openPrint = (id: string) => {
