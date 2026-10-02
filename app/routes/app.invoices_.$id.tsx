@@ -93,10 +93,6 @@ export default function InvoiceDetailsPage() {
   const [downloading, setDownloading] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  useEffect(() => {
-    setPreviewLoaded(false);
-  }, [invoice?.id, previewHtml]);
-
   // Host-level indicator only while navigating to (or reloading) details.
   useEffect(() => {
     if (!loadingDetailsContent) return;
@@ -106,22 +102,81 @@ export default function InvoiceDetailsPage() {
     };
   }, [loadingDetailsContent, shopify]);
 
-  const fitPreview = () => {
-    const iframe = iframeRef.current;
-    const doc = iframe?.contentDocument;
-    if (!iframe || !doc?.body) {
+  /**
+   * Mark the preview ready once the srcDoc iframe has laid out.
+   * On hard refresh, iframe `load` can fire before React attaches onLoad, and a
+   * separate "reset loaded" effect would leave the spinner stuck forever.
+   */
+  useEffect(() => {
+    if (!previewHtml) {
       setPreviewLoaded(true);
       return;
     }
-    const contentWidth = Math.max(doc.body.scrollWidth, 1);
-    const frameWidth = Math.max(iframe.clientWidth, 1);
-    const scale = Math.min(1, frameWidth / contentWidth);
-    doc.body.style.transformOrigin = "top left";
-    doc.body.style.transform = scale < 1 ? `scale(${scale})` : "";
-    const scaledHeight = Math.ceil(doc.body.scrollHeight * scale) + 24;
-    iframe.height = String(Math.max(scaledHeight, 320));
-    setPreviewLoaded(true);
-  };
+
+    setPreviewLoaded(false);
+    let cancelled = false;
+    let finished = false;
+
+    const finish = () => {
+      if (cancelled || finished) return;
+      finished = true;
+      const iframe = iframeRef.current;
+      const doc = iframe?.contentDocument;
+      if (iframe && doc?.body) {
+        const contentWidth = Math.max(doc.body.scrollWidth, 1);
+        const frameWidth = Math.max(iframe.clientWidth, 1);
+        const scale = Math.min(1, frameWidth / contentWidth);
+        doc.body.style.transformOrigin = "top left";
+        doc.body.style.transform = scale < 1 ? `scale(${scale})` : "";
+        const scaledHeight = Math.ceil(doc.body.scrollHeight * scale) + 24;
+        iframe.height = String(Math.max(scaledHeight, 320));
+      }
+      setPreviewLoaded(true);
+    };
+
+    const iframe = iframeRef.current;
+    if (!iframe) {
+      // Iframe not in the DOM yet — attach on next frame after paint.
+      let el: HTMLIFrameElement | null = null;
+      const raf = requestAnimationFrame(() => {
+        el = iframeRef.current;
+        if (!el) {
+          finish();
+          return;
+        }
+        el.addEventListener("load", finish);
+        try {
+          if (el.contentDocument?.readyState === "complete") finish();
+        } catch {
+          // ignore cross-origin edge cases
+        }
+      });
+      const timer = window.setTimeout(finish, 2000);
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(raf);
+        window.clearTimeout(timer);
+        el?.removeEventListener("load", finish);
+      };
+    }
+
+    iframe.addEventListener("load", finish);
+    try {
+      // Hard refresh: document may already be complete before this effect runs.
+      if (iframe.contentDocument?.readyState === "complete") {
+        finish();
+      }
+    } catch {
+      // ignore
+    }
+    const timer = window.setTimeout(finish, 2000);
+
+    return () => {
+      cancelled = true;
+      iframe.removeEventListener("load", finish);
+      window.clearTimeout(timer);
+    };
+  }, [invoice?.id, previewHtml]);
 
   if (!invoice) {
     return (
@@ -273,7 +328,6 @@ export default function InvoiceDetailsPage() {
                 srcDoc={previewHtml}
                 width="100%"
                 height="640"
-                onLoad={fitPreview}
               />
             </s-box>
           )}
