@@ -3,7 +3,6 @@ import { renderToPipeableStream } from "react-dom/server";
 import { ServerRouter } from "react-router";
 import { createReadableStreamFromReadable } from "@react-router/node";
 import { type EntryContext } from "react-router";
-import { isbot } from "isbot";
 import { addDocumentResponseHeaders } from "./shopify.server";
 
 export const streamTimeout = 5000;
@@ -15,11 +14,11 @@ export default async function handleRequest(
   reactRouterContext: EntryContext
 ) {
   addDocumentResponseHeaders(request, responseHeaders);
-  const userAgent = request.headers.get("user-agent");
-  const callbackName = isbot(userAgent ?? '')
-    ? "onAllReady"
-    : "onShellReady";
 
+  // Always wait for the full document. Streaming (`onShellReady`) leaves React
+  // suspense markers (`<!--$-->`) that Cloudflare Web Analytics / other injected
+  // beacons can break, which renders a visible "$" before </body>.
+  // See: https://github.com/Shopify/shopify-app-template-react-router/issues/125
   return new Promise((resolve, reject) => {
     const { pipe, abort } = renderToPipeableStream(
       <ServerRouter
@@ -27,7 +26,7 @@ export default async function handleRequest(
         url={request.url}
       />,
       {
-        [callbackName]: () => {
+        onAllReady() {
           const body = new PassThrough();
           const stream = createReadableStreamFromReadable(body);
 
