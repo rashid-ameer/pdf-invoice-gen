@@ -23,6 +23,7 @@ import {
   invoiceStatusBadgeTone,
   paymentStatusBadgeTone,
 } from "../utils/invoice-status-badges";
+import { printInvoiceHtml } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
 /** `/app/invoices/:id` only — not list, view, download, export, or bulk. */
@@ -156,8 +157,16 @@ export default function InvoiceDetailsPage() {
     }
   };
 
-  const openPrint = () => {
-    window.open(invoice.printUrl, "_blank", "noopener,noreferrer");
+  /**
+   * Native browser print of the same G5/G7 HTML already in the preview iframe.
+   * Stays on this page — no PDF download, toast, or app navigation.
+   */
+  const printInvoice = () => {
+    if (!previewHtml) return;
+    printInvoiceHtml(previewHtml, {
+      iframe: iframeRef.current,
+      iframeReady: previewLoaded,
+    });
   };
 
   const openDownload = () => {
@@ -208,7 +217,7 @@ export default function InvoiceDetailsPage() {
         <s-button icon="clipboard" onClick={() => void copyInvoiceNumber()}>
           Copy
         </s-button>
-        <s-button icon="print" onClick={openPrint}>
+        <s-button icon="print" onClick={printInvoice}>
           Print
         </s-button>
         <s-button icon="download" onClick={openDownload}>

@@ -31,6 +31,7 @@ import {
   paymentStatusBadgeTone,
 } from "../utils/invoice-status-badges";
 import { hasActiveInvoiceUiFilters } from "../utils/invoice-ui-filters";
+import { fetchAndPrintInvoiceDocument } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
 /** Filters: stacked (small) → 2 cols (medium) → single row (large).
@@ -293,11 +294,7 @@ export default function InvoicesPage() {
   };
 
   const openPrint = (id: string) => {
-    window.open(
-      `/app/invoices/${encodeURIComponent(id)}/download?mode=print`,
-      "_blank",
-      "noopener,noreferrer",
-    );
+    void fetchAndPrintInvoiceDocument(id);
   };
 
   const openDownload = (id: string) => {
