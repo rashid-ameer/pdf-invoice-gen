@@ -30,8 +30,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     .filter(Boolean)
     .slice(0, BULK_INVOICE_LIMIT);
   const templateId = url.searchParams.get("templateId") ?? undefined;
-  const mode = url.searchParams.get("mode") ?? "download";
   const embed = url.searchParams.get("embed") === "1";
+  // embed=1 / explicit preview|print → HTML for browser print. Default remains PDF download.
+  const modeParam = url.searchParams.get("mode");
+  const mode =
+    modeParam ??
+    (embed ? "preview" : "download");
 
   if (invoiceIds.length === 0) {
     throw new Response("No invoices selected", { status: 400 });
@@ -69,7 +73,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const laidOut = applyA4DocumentLayout(bulk.html);
-  if (embed) {
+  if (embed || mode === "print") {
     return htmlDocumentResponse(laidOut);
   }
   return htmlDocumentResponse(wrapA4PreviewHtml(laidOut));

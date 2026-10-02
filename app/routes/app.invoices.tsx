@@ -31,7 +31,10 @@ import {
   paymentStatusBadgeTone,
 } from "../utils/invoice-status-badges";
 import { hasActiveInvoiceUiFilters } from "../utils/invoice-ui-filters";
-import { fetchAndPrintInvoiceDocument } from "../utils/print-invoice-document";
+import {
+  fetchAndPrintInvoiceDocument,
+  fetchAndPrintInvoiceDocuments,
+} from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
 /** Filters: stacked (small) → 2 cols (medium) → single row (large).
@@ -145,6 +148,7 @@ export default function InvoicesPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchDraft, setSearchDraft] = useState(data.query.q);
+  const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -307,13 +311,11 @@ export default function InvoicesPage() {
 
   const printSelected = () => {
     const ids = [...selectedIds];
-    if (ids.length === 0) return;
-    if (ids.length === 1) {
-      openPrint(ids[0]);
-      return;
-    }
-    const href = `/app/invoices/bulk?ids=${encodeURIComponent(ids.join(","))}`;
-    window.open(href, "_blank", "noopener,noreferrer");
+    if (ids.length === 0 || printSelectedBusy) return;
+    setPrintSelectedBusy(true);
+    void fetchAndPrintInvoiceDocuments(ids).finally(() => {
+      setPrintSelectedBusy(false);
+    });
   };
 
   return (
@@ -389,7 +391,14 @@ export default function InvoicesPage() {
                   justifyContent="space-between"
                 >
                   <s-text type="strong">{selectedIds.size} selected</s-text>
-                  <s-button onClick={printSelected}>Print selected</s-button>
+                  <s-button
+                    onClick={printSelected}
+                    {...(printSelectedBusy
+                      ? { loading: true, disabled: true }
+                      : {})}
+                  >
+                    Print selected
+                  </s-button>
                 </s-stack>
               </s-box>
             ) : (

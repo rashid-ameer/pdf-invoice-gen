@@ -65,8 +65,9 @@ function preparePrintableHtml(html: string): string {
 }
 
 /**
- * Open a dedicated tab that contains only the rendered invoice and triggers
+ * Open a dedicated tab that contains only the rendered invoice(s) and triggers
  * the native print dialog. Does not alter the Invoices page DOM.
+ * Keeps the tab open so the browser print dialog can complete.
  */
 function printHtmlInDedicatedTab(html: string, existingTab?: Window | null): void {
   const printable = preparePrintableHtml(html);
@@ -79,9 +80,22 @@ function printHtmlInDedicatedTab(html: string, existingTab?: Window | null): voi
   tab.document.open();
   tab.document.write(printable);
   tab.document.close();
-  tab.opener = null;
+  // Do not set opener=null before print — some browsers treat that as
+  // permission to auto-discard the tab. Leave the tab open for the print UI.
   try {
     tab.focus();
+  } catch {
+    // ignore
+  }
+}
+
+function writeTabMessage(tab: Window, title: string, message: string): void {
+  try {
+    tab.document.open();
+    tab.document.write(
+      `<!DOCTYPE html><html><head><title>${title}</title></head><body style="font-family:system-ui,sans-serif;padding:24px;"><p>${message}</p><p>You can close this tab and try again.</p></body></html>`,
+    );
+    tab.document.close();
   } catch {
     // ignore
   }
@@ -124,49 +138,83 @@ export function printInvoiceHtml(
 
 /**
  * Fetch the same embed HTML used by Invoice Details (G5/G7 via view?embed=1),
- * then print via a dedicated tab. Opens the blank tab synchronously on click
- * to reduce popup-blocker issues; does not mutate the Invoices page or use
- * React Router navigation (no table loading state).
+ * then print via a dedicated tab.
  */
 export async function fetchAndPrintInvoiceDocument(
   invoiceId: string,
 ): Promise<void> {
   const id = String(invoiceId ?? "").trim();
   if (!id) return;
+  await fetchAndPrintInvoiceDocuments([id]);
+}
+
+/**
+ * Bulk print: reuses GET /app/invoices/bulk?mode=preview&embed=1 → renderInvoicesBulk
+ * (G5/G7) + applyA4DocumentLayout with .doc-page breaks (one page per invoice).
+ * Dedicated print tab only — never injects invoice HTML into the Invoices page.
+ *
+ * Important: bulk defaults to PDF download when mode is omitted. Always pass
+ * mode=preview (or rely on embed=1 server default) so the response is HTML.
+ */
+export async function fetchAndPrintInvoiceDocuments(
+  invoiceIds: string[],
+): Promise<void> {
+  const ids = [
+    ...new Set(invoiceIds.map((id) => String(id ?? "").trim()).filter(Boolean)),
+  ];
+  if (ids.length === 0) return;
 
   // Open in the user-gesture turn so the browser allows the print tab.
   const tab = window.open("about:blank", "_blank");
   if (!tab) return;
 
   try {
-    tab.document.open();
-    tab.document.write(
-      "<!DOCTYPE html><title>Preparing invoice…</title><body></body>",
-    );
-    tab.document.close();
+    writeTabMessage(tab, "Preparing invoices…", "Preparing invoices for print…");
 
-    const response = await fetch(
-      `/app/invoices/${encodeURIComponent(id)}/view?embed=1`,
-      {
-        credentials: "same-origin",
-        headers: { Accept: "text/html" },
-      },
-    );
+    const url =
+      ids.length === 1
+        ? `/app/invoices/${encodeURIComponent(ids[0])}/view?embed=1`
+        : `/app/invoices/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=preview&embed=1`;
+
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+    });
     if (!response.ok) {
-      tab.close();
+      writeTabMessage(
+        tab,
+        "Print failed",
+        `Could not prepare invoices (HTTP ${response.status}).`,
+      );
       return;
     }
+
+    const contentType = response.headers.get("Content-Type") ?? "";
+    if (!contentType.includes("text/html")) {
+      writeTabMessage(
+        tab,
+        "Print failed",
+        "Server returned a non-HTML document. Close this tab and try again.",
+      );
+      return;
+    }
+
     const html = await response.text();
     if (!html.trim() || !/<body[\s>]/i.test(html)) {
-      tab.close();
+      writeTabMessage(
+        tab,
+        "Print failed",
+        "Invoice HTML was empty or incomplete.",
+      );
       return;
     }
+
     printHtmlInDedicatedTab(html, tab);
   } catch {
-    try {
-      tab.close();
-    } catch {
-      // ignore
-    }
+    writeTabMessage(
+      tab,
+      "Print failed",
+      "Could not prepare invoices. Check your connection and try again.",
+    );
   }
 }
