@@ -4,23 +4,18 @@ import {
   BULK_REFUND_DOCUMENT_LIMIT,
   recordRefundDocumentDownload,
   renderRefundDocumentsBulk,
-  renderRefundDocumentsBulkPdf,
 } from "../models/credit-note-document.server";
 import {
   applyA4DocumentLayout,
   wrapA4PreviewHtml,
 } from "../models/document-preview.server";
 import { authenticate } from "../shopify.server";
-import {
-  htmlDocumentResponse,
-  pdfDownloadResponse,
-} from "../utils/document-response.server";
+import { htmlDocumentResponse } from "../utils/document-response.server";
 
 /**
- * GET /app/refund-documents/bulk?ids=…&templateId=…&mode=download|print|preview&embed=1
- * Bulk refund_document HTML merge or combined PDF. Cap 50 (old app).
- * Records download for every selected id on success (print and download).
- * Combined PDF filename: refund-documents-{count}.pdf
+ * GET /app/refund-documents/bulk?ids=…&templateId=…&mode=print|preview&embed=1
+ * Bulk refund_document HTML for browser print only (no bulk PDF download).
+ * Cap 50. Records download for every selected id on success.
  */
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -45,25 +40,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   if (mode === "download") {
-    const result = await renderRefundDocumentsBulkPdf(
-      session.shop,
-      creditNoteIds,
-      templateId,
-    );
-    if (!result) {
-      throw new Response("No refund documents found", { status: 404 });
-    }
-    await Promise.all(
-      creditNoteIds.map((id) =>
-        recordRefundDocumentDownload(
-          session.shop,
-          id,
-          result.templateId,
-          result.templateName,
-        ),
-      ),
-    );
-    return pdfDownloadResponse(result.pdf, `refund-documents-${result.count}`);
+    throw new Response("Bulk PDF download is not supported for refund documents", {
+      status: 400,
+    });
   }
 
   const bulk = await renderRefundDocumentsBulk(

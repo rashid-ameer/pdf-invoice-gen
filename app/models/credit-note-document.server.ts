@@ -405,32 +405,6 @@ export async function renderCreditNotesBulkPdf(
   };
 }
 
-export async function renderRefundDocumentsBulkPdf(
-  shopDomain: string,
-  creditNoteIds: string[],
-  templateId?: string,
-): Promise<{
-  pdf: Buffer;
-  count: number;
-  templateId: string;
-  templateName: string;
-} | null> {
-  const bulk = await renderRefundDocumentsBulk(
-    shopDomain,
-    creditNoteIds,
-    templateId,
-  );
-  if (!bulk) return null;
-  const a4 = applyA4DocumentLayout(bulk.html);
-  const pdf = await cachedHtmlToPdfBuffer(a4);
-  return {
-    pdf,
-    count: bulk.count,
-    templateId: bulk.templateId,
-    templateName: bulk.templateName,
-  };
-}
-
 /**
  * Shared download recording for credit_note / refund_document.
  * generated|ready → downloaded; always creates InvoiceStatusEvent.

@@ -14,7 +14,6 @@ import {
   renderRefundDocument,
   renderRefundDocumentPdf,
   renderRefundDocumentsBulk,
-  renderRefundDocumentsBulkPdf,
 } from "../app/models/credit-note-document.server";
 import { createCreditNoteFromRefund } from "../app/models/credit-note.server";
 import { ensureSystemTemplates } from "../app/models/template.server";
@@ -311,7 +310,7 @@ describe("getRefundDocumentDetailsForShop", () => {
 });
 
 describe("Refund document route wiring", () => {
-  it("wires view without record; download and bulk record", () => {
+  it("wires view without record; download records; bulk is print-only", () => {
     const viewSrc = readFileSync(
       join(
         process.cwd(),
@@ -339,9 +338,9 @@ describe("Refund document route wiring", () => {
     );
     assert.match(bulkSrc, /recordRefundDocumentDownload/);
     assert.match(bulkSrc, /renderRefundDocumentsBulk/);
-    assert.match(bulkSrc, /mode === "download"/);
-    assert.match(bulkSrc, /refund-documents-\$/);
     assert.match(bulkSrc, /BULK_REFUND_DOCUMENT_LIMIT/);
+    assert.doesNotMatch(bulkSrc, /renderRefundDocumentsBulkPdf|pdfDownloadResponse/);
+    assert.match(bulkSrc, /Bulk PDF download is not supported/);
   });
 
   it("wires details page to refund_document preview without template modal", () => {
@@ -367,10 +366,12 @@ describe("Refund document route wiring", () => {
     assert.match(page, /listRefundDocumentTemplatesForShop/);
     assert.match(page, /fetchAndPrintRefundDocument/);
     assert.match(page, /downloadRefundDocumentPdf/);
-    assert.match(page, /downloadRefundDocumentsBulkPdf/);
+    assert.match(page, /fetchAndPrintRefundDocuments/);
     assert.match(page, /\/refund/);
-    assert.match(page, /Download PDF/);
+    assert.match(page, /Print selected/);
     assert.match(page, /defaultRefundTemplateId/);
+    assert.doesNotMatch(page, /downloadRefundDocumentsBulkPdf|downloadSelectedRefunds/);
+    assert.doesNotMatch(page, /Download PDF/);
     assert.doesNotMatch(page, /REFUND_TEMPLATE_MODAL_ID|s-modal/);
   });
 });
@@ -388,20 +389,6 @@ describe("renderRefundDocumentPdf", () => {
       assert.ok(result);
       assert.ok(result!.pdf.length > 100);
       assert.equal(result!.doc.documentType, "refund_document");
-    },
-  );
-
-  it(
-    "bulk PDF download works when Chromium is available",
-    { skip: !hasChromium },
-    async () => {
-      const { store, creditNote } = await seedCreditNote();
-      const result = await renderRefundDocumentsBulkPdf(store.shopifyDomain, [
-        creditNote.id,
-      ]);
-      assert.ok(result);
-      assert.equal(result!.count, 1);
-      assert.ok(result!.pdf.length > 100);
     },
   );
 });

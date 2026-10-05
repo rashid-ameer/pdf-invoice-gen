@@ -26,10 +26,7 @@ import { listRefundDocumentTemplatesForShop } from "../models/credit-note-docume
 import { enqueueSyncRefunds } from "../models/sync-queue.server";
 import { formatPaymentStatus } from "../utils/csv";
 import { downloadCreditNotePdf } from "../utils/download-credit-note-pdf";
-import {
-  downloadRefundDocumentPdf,
-  downloadRefundDocumentsBulkPdf,
-} from "../utils/download-refund-document-pdf";
+import { downloadRefundDocumentPdf } from "../utils/download-refund-document-pdf";
 import {
   formatInvoiceStatusLabel,
   invoiceStatusBadgeTone,
@@ -353,27 +350,6 @@ export default function CreditNotesPage() {
     void fetchAndPrintCreditNoteDocuments(ids).finally(done);
   };
 
-  const downloadSelectedRefunds = () => {
-    const ids = [...selectedIds];
-    if (ids.length === 0 || printSelectedBusy) return;
-    if (ids.length > BULK_PRINT_LIMIT) {
-      shopify.toast.show("You can download up to 50 documents at once", {
-        isError: true,
-      });
-      return;
-    }
-    setPrintSelectedBusy(true);
-    void downloadRefundDocumentsBulkPdf({
-      creditNoteIds: ids,
-      templateId: defaultRefundTemplateId,
-      onError: (message) => {
-        shopify.toast.show(message, { isError: true });
-      },
-    }).finally(() => {
-      setPrintSelectedBusy(false);
-    });
-  };
-
   const documentTypeSwitcher = (
     <s-button-group gap="none" accessibilityLabel="Document type">
       <s-button
@@ -471,16 +447,6 @@ export default function CreditNotesPage() {
                 >
                   <s-text type="strong">{selectedIds.size} selected</s-text>
                   <s-stack direction="inline" gap="small">
-                    {isRefundTab ? (
-                      <s-button
-                        onClick={downloadSelectedRefunds}
-                        {...(printSelectedBusy
-                          ? { loading: true, disabled: true }
-                          : {})}
-                      >
-                        Download PDF
-                      </s-button>
-                    ) : null}
                     <s-button
                       onClick={printSelected}
                       {...(printSelectedBusy
