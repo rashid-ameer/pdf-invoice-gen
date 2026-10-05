@@ -19,11 +19,7 @@ import {
 } from "../models/invoice-document.server";
 import { formatPaymentStatus } from "../utils/csv";
 import { downloadPackingSlipPdf } from "../utils/download-packing-slip-pdf";
-import {
-  formatInvoiceStatusLabel,
-  invoiceStatusBadgeTone,
-  paymentStatusBadgeTone,
-} from "../utils/invoice-status-badges";
+import { paymentStatusBadgeTone } from "../utils/invoice-status-badges";
 import { printInvoiceHtml } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
@@ -234,21 +230,6 @@ export default function PackingSlipDetailsPage() {
         Packing slips
       </s-link>
 
-      {paymentLabel ? (
-        <s-badge
-          slot="accessory"
-          tone={paymentStatusBadgeTone(packingSlip.financialStatus)}
-        >
-          {paymentLabel}
-        </s-badge>
-      ) : null}
-      <s-badge
-        slot="accessory"
-        tone={invoiceStatusBadgeTone(packingSlip.status)}
-      >
-        {formatInvoiceStatusLabel(packingSlip.status)}
-      </s-badge>
-
       <s-button
         slot="primary-action"
         variant="primary"
@@ -324,13 +305,7 @@ export default function PackingSlipDetailsPage() {
             </s-stack>
             <s-stack gap="none">
               <s-text color="subdued">Order</s-text>
-              {packingSlip.orderAdminUrl ? (
-                <s-link href={packingSlip.orderAdminUrl} target="_blank">
-                  {packingSlip.shopifyOrderNumber}
-                </s-link>
-              ) : (
-                <s-text>{packingSlip.shopifyOrderNumber}</s-text>
-              )}
+              <s-text>{packingSlip.shopifyOrderNumber}</s-text>
             </s-stack>
             <s-stack gap="none">
               <s-text color="subdued">Invoice date</s-text>

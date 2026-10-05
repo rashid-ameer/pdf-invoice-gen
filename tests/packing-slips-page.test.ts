@@ -151,9 +151,11 @@ describe("packing slips Phase 1 — list + CSV", () => {
     assert.match(packingSrc, /\/app\/packing-slips\/export\/csv/);
     assert.match(packingSrc, /No packing slips yet/);
     assert.match(packingSrc, /No packing slips found/);
-    // Order is primary; no Invoice table column
-    assert.match(packingSrc, /<s-text>Order<\/s-text>/);
-    assert.doesNotMatch(packingSrc, /<s-text>Invoice<\/s-text>/);
+    // Same columns as Invoices: Invoice (linked) primary, then Order…
+    assert.match(packingSrc, /<s-text>Invoice<\/s-text>/);
+    assert.match(packingSrc, /listSlot="labeled">Order</);
+    assert.match(packingSrc, /clickDelegate=\{linkId\}/);
+    assert.match(packingSrc, /s-link id=\{linkId\} href=\{detailsHref\}/);
     // Phase 2/3: View opens details; Print / Download on list
     assert.match(packingSrc, /\/app\/packing-slips\/\$\{/);
     assert.match(packingSrc, /downloadPackingSlipPdf/);

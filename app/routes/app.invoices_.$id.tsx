@@ -19,11 +19,7 @@ import {
 } from "../models/invoice-document.server";
 import { formatPaymentStatus } from "../utils/csv";
 import { downloadInvoicePdf } from "../utils/download-invoice-pdf";
-import {
-  formatInvoiceStatusLabel,
-  invoiceStatusBadgeTone,
-  paymentStatusBadgeTone,
-} from "../utils/invoice-status-badges";
+import { paymentStatusBadgeTone } from "../utils/invoice-status-badges";
 import { printInvoiceHtml } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
@@ -248,21 +244,6 @@ export default function InvoiceDetailsPage() {
         Invoices
       </s-link>
 
-      {paymentLabel ? (
-        <s-badge
-          slot="accessory"
-          tone={paymentStatusBadgeTone(invoice.financialStatus)}
-        >
-          {paymentLabel}
-        </s-badge>
-      ) : null}
-      <s-badge
-        slot="accessory"
-        tone={invoiceStatusBadgeTone(invoice.status)}
-      >
-        {formatInvoiceStatusLabel(invoice.status)}
-      </s-badge>
-
       <s-button
         slot="primary-action"
         variant="primary"
@@ -347,17 +328,23 @@ export default function InvoiceDetailsPage() {
             </s-stack>
             <s-stack gap="none">
               <s-text color="subdued">Order</s-text>
-              {invoice.orderAdminUrl ? (
-                <s-link href={invoice.orderAdminUrl} target="_blank">
-                  {invoice.shopifyOrderNumber}
-                </s-link>
-              ) : (
-                <s-text>{invoice.shopifyOrderNumber}</s-text>
-              )}
+              <s-text>{invoice.shopifyOrderNumber}</s-text>
             </s-stack>
             <s-stack gap="none">
               <s-text color="subdued">Invoice date</s-text>
               <s-text>{formatIssueDate(invoice.issueDateIso)}</s-text>
+            </s-stack>
+            <s-stack gap="none">
+              <s-text color="subdued">Payment status</s-text>
+              {paymentLabel ? (
+                <s-badge
+                  tone={paymentStatusBadgeTone(invoice.financialStatus)}
+                >
+                  {paymentLabel}
+                </s-badge>
+              ) : (
+                <s-text>—</s-text>
+              )}
             </s-stack>
             <s-stack gap="none">
               <s-text color="subdued">Total</s-text>

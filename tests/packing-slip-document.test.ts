@@ -354,9 +354,7 @@ describe("packing slip details page", () => {
     assert.match(source, /wrapA4EmbedHtml/);
     assert.match(source, /slot="breadcrumb-actions"/);
     assert.match(source, /href="\/app\/packing-slips"/);
-    assert.match(source, /slot="accessory"/);
-    assert.match(source, /paymentStatusBadgeTone/);
-    assert.match(source, /invoiceStatusBadgeTone/);
+    assert.doesNotMatch(source, /slot="accessory"/);
     assert.match(source, /slot="primary-action"/);
     assert.match(source, /slot="secondary-actions"/);
     assert.match(source, />\s*Print\s*</);

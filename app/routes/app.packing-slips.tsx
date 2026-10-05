@@ -495,12 +495,13 @@ export default function PackingSlipsPage() {
                         );
                       }}
                     />
-                    <s-text>Order</s-text>
+                    <s-text>Invoice</s-text>
                   </s-grid>
                 ) : (
-                  <s-text>Order</s-text>
+                  <s-text>Invoice</s-text>
                 )}
               </s-table-header>
+              <s-table-header listSlot="labeled">Order</s-table-header>
               <s-table-header listSlot="labeled">Customer</s-table-header>
               <s-table-header listSlot="labeled">Date</s-table-header>
               <s-table-header listSlot="labeled" format="currency">
@@ -534,14 +535,14 @@ export default function PackingSlipsPage() {
               ) : showTableRows ? (
                 data.items.map((invoice: InvoiceListItem) => {
                   const checkboxId = `packing-select-${invoice.id}`;
+                  const linkId = `packing-link-${invoice.id}`;
                   const menuId = `packing-actions-${invoice.id}`;
-                  const orderLabel =
-                    invoice.shopifyOrderNumber || invoice.invoiceNumber;
+                  const detailsHref = `/app/packing-slips/${encodeURIComponent(invoice.id)}`;
                   const paymentLabel = formatPaymentStatus(
                     invoice.financialStatus,
                   );
                   return (
-                    <s-table-row key={invoice.id}>
+                    <s-table-row key={invoice.id} clickDelegate={linkId}>
                       <s-table-cell>
                         <s-grid
                           gridTemplateColumns="auto 1fr"
@@ -551,7 +552,7 @@ export default function PackingSlipsPage() {
                           <s-checkbox
                             id={checkboxId}
                             checked={selectedIds.has(invoice.id)}
-                            accessibilityLabel={`Select ${orderLabel}`}
+                            accessibilityLabel={`Select ${invoice.invoiceNumber}`}
                             onChange={(event: Event) => {
                               toggleRow(
                                 invoice.id,
@@ -560,9 +561,12 @@ export default function PackingSlipsPage() {
                               );
                             }}
                           />
-                          <s-text>{invoice.shopifyOrderNumber}</s-text>
+                          <s-link id={linkId} href={detailsHref}>
+                            {invoice.invoiceNumber}
+                          </s-link>
                         </s-grid>
                       </s-table-cell>
+                      <s-table-cell>{invoice.shopifyOrderNumber}</s-table-cell>
                       <s-table-cell>{invoice.buyerName}</s-table-cell>
                       <s-table-cell>
                         {formatIssueDate(invoice.issueDate)}
@@ -592,12 +596,12 @@ export default function PackingSlipsPage() {
                         <s-button
                           icon="menu-horizontal"
                           variant="tertiary"
-                          accessibilityLabel={`More actions for ${orderLabel}`}
+                          accessibilityLabel={`More actions for ${invoice.invoiceNumber}`}
                           commandFor={menuId}
                         />
                         <s-menu
                           id={menuId}
-                          accessibilityLabel={`Actions for ${orderLabel}`}
+                          accessibilityLabel={`Actions for ${invoice.invoiceNumber}`}
                         >
                           <s-button
                             icon="view"

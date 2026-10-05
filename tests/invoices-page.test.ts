@@ -395,9 +395,7 @@ describe("Invoice details page", () => {
     assert.match(source, /getInvoiceDetailsForShop/);
     assert.match(source, /slot="breadcrumb-actions"/);
     assert.match(source, /href="\/app\/invoices"/);
-    assert.match(source, /slot="accessory"/);
-    assert.match(source, /paymentStatusBadgeTone/);
-    assert.match(source, /invoiceStatusBadgeTone/);
+    assert.doesNotMatch(source, /slot="accessory"/);
     assert.match(source, /slot="primary-action"/);
     assert.match(source, />\s*Send email\s*</);
     assert.match(source, /commandFor=\{MORE_MENU_ID\}/);
@@ -416,6 +414,8 @@ describe("Invoice details page", () => {
     assert.match(source, /Customer/);
     assert.match(source, /Order/);
     assert.match(source, /Invoice date/);
+    assert.match(source, /Payment status/);
+    assert.match(source, /paymentStatusBadgeTone/);
     assert.match(source, /Total/);
     assert.doesNotMatch(source, /heading="Customer"/);
     assert.doesNotMatch(source, /heading="Order"/);
