@@ -40,71 +40,75 @@ async function seedStore() {
   return store;
 }
 
-describe("Delivery page UI wiring", () => {
+describe("Email config page UI wiring", () => {
   it("adds Email nav to /app/delivery without duplicating existing items", () => {
     const nav = readFileSync(join(process.cwd(), "app/routes/app.tsx"), "utf8");
     assert.match(nav, /href="\/app\/delivery">Email</);
-    assert.match(nav, /href="\/app\/invoices"/);
-    assert.match(nav, /href="\/app\/packing-slips"/);
-    assert.match(nav, /href="\/app\/credit-notes"/);
     assert.equal((nav.match(/href="\/app\/delivery"/g) || []).length, 1);
   });
 
-  it("renders Polaris settings sections matching old Delivery structure", () => {
+  it("is configuration-only: switches, sender, recipients — no templates or layout", () => {
     const page = readFileSync(
       join(process.cwd(), "app/routes/app.delivery.tsx"),
       "utf8",
     );
 
     assert.match(page, /heading="Email"/);
-    assert.match(page, /Automated emails/);
     assert.match(page, /Tax invoices/);
     assert.match(page, /Credit notes/);
     assert.match(page, /Refund documents/);
-    assert.match(page, /Email templates/);
     assert.match(page, /Sender/);
     assert.match(page, /Recipients/);
+    assert.match(page, /s-switch/);
+    assert.match(page, /Send when/);
+    assert.match(page, /Edit template/);
+    assert.match(page, /\/app\/delivery\/invoice/);
+    assert.match(page, /\/app\/delivery\/credit-note/);
+    assert.match(page, /\/app\/delivery\/refund/);
+    assert.match(page, /enabled", "1"/);
+    assert.match(page, /ui-save-bar/);
+    assert.match(page, /slot="aside"/);
+    assert.match(page, /Sandbox mode/);
+    assert.match(page, /resend\.com\/domains/);
+
+    assert.doesNotMatch(page, /Live preview/);
+    assert.doesNotMatch(page, /Email templates/);
+    assert.doesNotMatch(page, /emailLayout/);
+    assert.doesNotMatch(page, /Subject line/);
+    assert.doesNotMatch(page, /s-checkbox[\s\S]*Enabled|Disabled/);
+    assert.doesNotMatch(page, /name=["']RESEND_API_KEY["']/);
+  });
+
+  it("wires edit-template route for all three types and invalid type", () => {
+    const page = readFileSync(
+      join(process.cwd(), "app/routes/app.delivery.$type.tsx"),
+      "utf8",
+    );
+    assert.match(page, /Tax invoice email/);
+    assert.match(page, /Credit note email/);
+    assert.match(page, /Refund document email/);
+    assert.match(page, /s-clickable-chip/);
     assert.match(page, /Live preview/);
     assert.match(page, /Send test/);
-
-    assert.match(page, /s-page/);
-    assert.match(page, /s-section/);
-    assert.match(page, /s-checkbox/);
-    assert.match(page, /s-select/);
-    assert.match(page, /s-choice-list/);
-    assert.match(page, /s-text-field/);
-    assert.match(page, /s-email-field/);
-    assert.match(page, /s-text-area/);
-    assert.match(page, /s-banner/);
-    assert.match(page, /ui-save-bar/);
-
-    assert.match(page, /When order is paid/);
-    assert.match(page, /When invoice is created/);
-    assert.match(page, /Minimal/);
-    assert.match(page, /Classic/);
-    assert.match(page, /Card/);
-    assert.match(page, /Show “View document” button/);
-    assert.match(page, /From name/);
-    assert.match(page, /Reply-to/);
-    assert.match(page, /CC staff/);
-    assert.match(page, /Subject line/);
-    assert.match(page, /custom_html/);
-    assert.match(page, /Designed/);
-    assert.match(page, /Auto-send/);
-    assert.match(page, /invoiceWhen/);
     assert.match(page, /showViewButton/);
-    assert.match(page, /testTo/);
-
-    assert.match(page, /getDeliverySettings/);
-    assert.match(page, /saveDeliverySettings/);
+    assert.match(page, /Unknown template type/);
+    assert.match(page, /breadcrumb-actions/);
     assert.match(page, /previewDocumentEmail/);
     assert.match(page, /sendDocumentTestEmail/);
-    assert.match(page, /settingsFromFormData/);
+  });
 
-    assert.doesNotMatch(page, /Packing [Ss]lip.*[Aa]uto/);
-    assert.doesNotMatch(page, /name=["']RESEND_API_KEY["']/);
-    assert.doesNotMatch(page, /scheduleInvoiceAutoEmail/);
-    assert.doesNotMatch(page, /sendInvoiceEmail\(/);
+  it("moves email layout to Branding page", () => {
+    const branding = readFileSync(
+      join(process.cwd(), "app/routes/app.branding.tsx"),
+      "utf8",
+    );
+    assert.match(branding, /Email layout/);
+    assert.match(branding, /Applies to all email types/);
+    assert.match(branding, /Minimal: clean white layout/);
+    assert.match(branding, /Classic: brand-colored header bar/);
+    assert.match(branding, /Card: centered card on a soft background/);
+    assert.match(branding, /saveDeliverySettings/);
+    assert.match(branding, /getDeliverySettings/);
   });
 });
 

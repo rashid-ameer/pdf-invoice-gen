@@ -47,6 +47,7 @@ async function main() {
   }> = [];
 
   for (const row of rows) {
+    if (!row.store) continue;
     const value = (row.value ?? {}) as DeliveryValue;
     const masterEnabled = asBool(value.enabled);
     const invoiceAutoSend = asBool(value.invoiceAutoSend);
