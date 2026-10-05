@@ -194,7 +194,16 @@ describe("Invoices page wiring", () => {
     assert.match(source, /Clear search and filters/);
     assert.match(source, /type="search"/);
     assert.match(source, /<s-empty-state heading="No invoices yet"/);
-    assert.match(source, /Sync orders/);
+    assert.match(
+      source,
+      /Invoices are created from your orders\. Sync your orders to start\s+generating invoices\./,
+    );
+    // First-time empty state has no Sync button — page header already has it
+    assert.doesNotMatch(
+      source,
+      /heading="No invoices yet"[\s\S]*?slot="primary-action"[\s\S]*?Sync orders/,
+    );
+    assert.match(source, /slot="primary-action"[\s\S]*?>\s*Sync orders\s*</);
     assert.match(source, /enqueueSyncOrders/);
     assert.match(source, /showEmptyContent = !loading/);
   });

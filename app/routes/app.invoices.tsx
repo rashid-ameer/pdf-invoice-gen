@@ -365,17 +365,9 @@ export default function InvoicesPage() {
           <s-empty-state heading="No invoices yet">
             <s-icon slot="graphic" type="order" size="base" color="subdued" />
             <s-text slot="subheading">
-              Tax invoices appear here when Shopify orders sync. Use Sync
-              orders if you already have orders in the store.
+              Invoices are created from your orders. Sync your orders to start
+              generating invoices.
             </s-text>
-            <s-button
-              slot="primary-action"
-              variant="primary"
-              onClick={startSyncOrders}
-              {...(syncBusy ? { loading: true } : {})}
-            >
-              Sync orders
-            </s-button>
           </s-empty-state>
         </s-section>
       ) : (
