@@ -22,8 +22,9 @@ import { applyA4DocumentLayout } from "./document-preview.server";
 import { cachedHtmlToPdfBuffer } from "./pdf-cache.server";
 
 const BULK_RENDER_CONCURRENCY = 4;
-/** Old credit-notes bulk route rejects > 50. */
+/** Old credit-notes / refund-documents bulk routes reject > 50. */
 export const BULK_CREDIT_NOTE_LIMIT = 50;
+export const BULK_REFUND_DOCUMENT_LIMIT = BULK_CREDIT_NOTE_LIMIT;
 
 function formatIssueDate(date: Date): string {
   return date.toLocaleDateString(APP_LOCALE, {
@@ -140,6 +141,8 @@ export function creditNoteToRenderData(
   };
 }
 
+export type CreditNoteDerivedDocumentType = "credit_note" | "refund_document";
+
 export type RenderedCreditNoteDocument = {
   html: string;
   creditNoteNumber: string;
@@ -148,17 +151,19 @@ export type RenderedCreditNoteDocument = {
   templateId: string;
   templateCode: string;
   templateName: string;
-  documentType: "credit_note";
+  documentType: CreditNoteDerivedDocumentType;
 };
 
 /**
- * Render credit_note HTML from an existing CreditNote (G5/G7).
- * Template resolved at view/download time. No QR (Group 13).
+ * Shared CreditNote → HTML for credit_note or refund_document (G5/G7).
+ * Same mapper data; documentType drives template resolution and labels.
+ * No QR (Group 13).
  */
-export async function renderCreditNoteDocument(
+async function renderCreditNoteDerivedDocument(
   shopDomain: string,
   creditNoteId: string,
-  templateId?: string,
+  templateId: string | undefined,
+  documentType: CreditNoteDerivedDocumentType,
 ): Promise<RenderedCreditNoteDocument | null> {
   const store = await getActiveStoreForShop(shopDomain);
   if (!store) return null;
@@ -175,7 +180,7 @@ export async function renderCreditNoteDocument(
   const resolved = await resolveTemplateForShop(
     shopDomain,
     templateId,
-    "credit_note",
+    documentType,
   );
   if (!resolved) return null;
 
@@ -191,7 +196,7 @@ export async function renderCreditNoteDocument(
   const config = mergeConfigWithBranding(
     resolved.config,
     branding,
-    "credit_note",
+    documentType,
   );
 
   // Group 13: QR / integrity verification — do not attach here.
@@ -210,7 +215,7 @@ export async function renderCreditNoteDocument(
     layout,
     config,
     data,
-    "credit_note",
+    documentType,
     customHtml,
     undefined,
     resolved.template.sourceType,
@@ -226,8 +231,36 @@ export async function renderCreditNoteDocument(
     templateId: resolved.template.id,
     templateCode: resolved.template.code,
     templateName: resolved.template.name,
-    documentType: "credit_note",
+    documentType,
   };
+}
+
+/** Render credit_note HTML from an existing CreditNote. */
+export async function renderCreditNoteDocument(
+  shopDomain: string,
+  creditNoteId: string,
+  templateId?: string,
+): Promise<RenderedCreditNoteDocument | null> {
+  return renderCreditNoteDerivedDocument(
+    shopDomain,
+    creditNoteId,
+    templateId,
+    "credit_note",
+  );
+}
+
+/** Render refund_document HTML from the same CreditNote record. */
+export async function renderRefundDocument(
+  shopDomain: string,
+  creditNoteId: string,
+  templateId?: string,
+): Promise<RenderedCreditNoteDocument | null> {
+  return renderCreditNoteDerivedDocument(
+    shopDomain,
+    creditNoteId,
+    templateId,
+    "refund_document",
+  );
 }
 
 export async function renderCreditNoteDocumentPdf(
@@ -246,10 +279,23 @@ export async function renderCreditNoteDocumentPdf(
   return { pdf, doc };
 }
 
-export async function renderCreditNotesBulk(
+export async function renderRefundDocumentPdf(
+  shopDomain: string,
+  creditNoteId: string,
+  templateId?: string,
+): Promise<{ pdf: Buffer; doc: RenderedCreditNoteDocument } | null> {
+  const doc = await renderRefundDocument(shopDomain, creditNoteId, templateId);
+  if (!doc) return null;
+  const a4 = applyA4DocumentLayout(doc.html);
+  const pdf = await cachedHtmlToPdfBuffer(a4);
+  return { pdf, doc };
+}
+
+async function renderCreditNoteDerivedBulk(
   shopDomain: string,
   creditNoteIds: string[],
-  templateId?: string,
+  templateId: string | undefined,
+  documentType: CreditNoteDerivedDocumentType,
 ): Promise<{
   html: string;
   count: number;
@@ -266,7 +312,13 @@ export async function renderCreditNotesBulk(
   const rendered = await mapWithConcurrency(
     uniqueIds,
     BULK_RENDER_CONCURRENCY,
-    (id) => renderCreditNoteDocument(shopDomain, id, templateId),
+    (id) =>
+      renderCreditNoteDerivedDocument(
+        shopDomain,
+        id,
+        templateId,
+        documentType,
+      ),
   );
 
   const docs: string[] = [];
@@ -291,11 +343,40 @@ export async function renderCreditNotesBulk(
   if (!docs.length || !templateMeta) return null;
 
   return {
-    html: mergeDocumentHtml(docs, "Credit Notes"),
+    html: mergeDocumentHtml(
+      docs,
+      documentType === "refund_document" ? "Refund Documents" : "Credit Notes",
+    ),
     count: docs.length,
     creditNoteNumbers: numbers,
     ...templateMeta,
   };
+}
+
+export async function renderCreditNotesBulk(
+  shopDomain: string,
+  creditNoteIds: string[],
+  templateId?: string,
+) {
+  return renderCreditNoteDerivedBulk(
+    shopDomain,
+    creditNoteIds,
+    templateId,
+    "credit_note",
+  );
+}
+
+export async function renderRefundDocumentsBulk(
+  shopDomain: string,
+  creditNoteIds: string[],
+  templateId?: string,
+) {
+  return renderCreditNoteDerivedBulk(
+    shopDomain,
+    creditNoteIds,
+    templateId,
+    "refund_document",
+  );
 }
 
 export async function renderCreditNotesBulkPdf(
@@ -324,15 +405,42 @@ export async function renderCreditNotesBulkPdf(
   };
 }
 
+export async function renderRefundDocumentsBulkPdf(
+  shopDomain: string,
+  creditNoteIds: string[],
+  templateId?: string,
+): Promise<{
+  pdf: Buffer;
+  count: number;
+  templateId: string;
+  templateName: string;
+} | null> {
+  const bulk = await renderRefundDocumentsBulk(
+    shopDomain,
+    creditNoteIds,
+    templateId,
+  );
+  if (!bulk) return null;
+  const a4 = applyA4DocumentLayout(bulk.html);
+  const pdf = await cachedHtmlToPdfBuffer(a4);
+  return {
+    pdf,
+    count: bulk.count,
+    templateId: bulk.templateId,
+    templateName: bulk.templateName,
+  };
+}
+
 /**
- * Old recordCreditNoteDownload: generated|ready → downloaded + status event.
- * Always records event; status flip only when generated or ready.
+ * Shared download recording for credit_note / refund_document.
+ * generated|ready → downloaded; always creates InvoiceStatusEvent.
  */
-export async function recordCreditNoteDownload(
+async function recordCreditNoteDerivedDownload(
   shopDomain: string,
   creditNoteId: string,
   templateId: string,
   templateName: string,
+  documentType: CreditNoteDerivedDocumentType,
 ): Promise<void> {
   const store = await getActiveStoreForShop(shopDomain);
   if (!store) return;
@@ -349,20 +457,52 @@ export async function recordCreditNoteDownload(
     });
   }
 
+  const label =
+    documentType === "refund_document" ? "Refund document" : "Credit note";
   await prisma.invoiceStatusEvent.create({
     data: {
       invoiceId: creditNote.invoiceId,
       creditNoteId: creditNote.id,
       status: "downloaded",
       source: "merchant",
-      message: `Credit note downloaded using ${templateName} template`,
+      message: `${label} downloaded using ${templateName} template`,
       metadata: {
         templateId,
         templateName,
-        documentType: "credit_note",
+        documentType,
       },
     },
   });
+}
+
+export async function recordCreditNoteDownload(
+  shopDomain: string,
+  creditNoteId: string,
+  templateId: string,
+  templateName: string,
+): Promise<void> {
+  return recordCreditNoteDerivedDownload(
+    shopDomain,
+    creditNoteId,
+    templateId,
+    templateName,
+    "credit_note",
+  );
+}
+
+export async function recordRefundDocumentDownload(
+  shopDomain: string,
+  creditNoteId: string,
+  templateId: string,
+  templateName: string,
+): Promise<void> {
+  return recordCreditNoteDerivedDownload(
+    shopDomain,
+    creditNoteId,
+    templateId,
+    templateName,
+    "refund_document",
+  );
 }
 
 export type CreditNoteTemplateOption = {
@@ -397,10 +537,36 @@ export async function listCreditNoteTemplatesForShop(
   }));
 }
 
+/** Active refund_document templates for the shop (system + store customs). */
+export async function listRefundDocumentTemplatesForShop(
+  shopDomain: string,
+): Promise<CreditNoteTemplateOption[] | null> {
+  await ensureSystemTemplates();
+  const store = await getActiveStoreForShop(shopDomain);
+  if (!store) return null;
+
+  const templates = await prisma.invoiceTemplate.findMany({
+    where: {
+      isActive: true,
+      documentType: "refund_document",
+      OR: [{ isSystem: true }, { storeId: store.id }],
+    },
+    orderBy: [{ isSystem: "desc" }, { name: "asc" }],
+  });
+
+  return templates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    code: t.code,
+    isDefault: store.defaultRefundDocumentTemplateId === t.id,
+  }));
+}
+
 export type CreditNoteDetailsData = {
   id: string;
   creditNoteNumber: string;
   originalInvoiceNumber: string;
+  originalInvoiceId: string;
   shopifyOrderId: string;
   shopifyOrderNumber: string;
   buyerName: string;
@@ -443,6 +609,7 @@ export async function getCreditNoteDetailsForShop(
     id: creditNote.id,
     creditNoteNumber: creditNote.creditNoteNumber,
     originalInvoiceNumber: invoice?.invoiceNumber ?? "—",
+    originalInvoiceId: creditNote.invoiceId,
     shopifyOrderId: creditNote.shopifyOrderId,
     shopifyOrderNumber: invoice?.shopifyOrderNumber ?? "—",
     buyerName: buyer.name?.trim() || "Customer",
@@ -457,4 +624,27 @@ export async function getCreditNoteDetailsForShop(
     printUrl: `/app/credit-notes/${encodedId}/view?embed=1`,
     downloadUrl: `/app/credit-notes/${encodedId}/download`,
   };
+}
+
+/**
+ * Same CreditNote metadata for Refund Document details; refund_document URLs.
+ */
+export async function getRefundDocumentDetailsForShop(
+  shopDomain: string,
+  creditNoteId: string,
+): Promise<CreditNoteDetailsData | null> {
+  const base = await getCreditNoteDetailsForShop(shopDomain, creditNoteId);
+  if (!base) return null;
+  const encodedId = encodeURIComponent(base.id);
+  return {
+    ...base,
+    previewEmbedUrl: `/app/credit-notes/${encodedId}/refund-document/view?embed=1`,
+    printUrl: `/app/credit-notes/${encodedId}/refund-document/view?embed=1`,
+    downloadUrl: `/app/credit-notes/${encodedId}/refund-document`,
+  };
+}
+
+/** Old single refund PDF basename: refund-{creditNoteNumber} */
+export function refundDocumentPdfBasename(creditNoteNumber: string): string {
+  return `refund-${creditNoteNumber}`;
 }

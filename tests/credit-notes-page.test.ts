@@ -282,8 +282,16 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /refund-documents/);
     assert.match(page, /aria-pressed/);
     assert.match(page, /kind=\$\{encodeURIComponent\(kind\)\}|kind=refund-documents/);
-    assert.match(page, /Reference/);
+    assert.match(page, />\s*Document\s*</);
+    assert.match(page, /slot="filters"/);
+    assert.match(page, /documentTypeSwitcher/);
     assert.match(page, /No document refunds yet/);
+    assert.match(page, /No credit notes yet/);
+    assert.match(page, /listRefundDocumentTemplatesForShop/);
+    assert.match(page, /fetchAndPrintRefundDocument/);
+    assert.match(page, /downloadRefundDocumentPdf/);
+    assert.match(page, /Download PDF/);
+    assert.doesNotMatch(page, /numberColumnLabel|>\s*Reference\s*</);
     assert.doesNotMatch(page, /DOCUMENT_PAGE_SIZE_OPTIONS|Per page|Items per page/);
     assert.doesNotMatch(page, /buyerEmail/);
     assert.doesNotMatch(page, /listCreditNoteTemplatesForShop/);

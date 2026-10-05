@@ -37,10 +37,28 @@ type Pages = {
   "/app": {
     params: {};
   };
+  "/app/credit-notes/:id/refund-document": {
+    params: {
+      "id": string;
+    };
+  };
+  "/app/credit-notes/:id/refund-document/view": {
+    params: {
+      "id": string;
+    };
+  };
+  "/app/credit-notes/:id/refund": {
+    params: {
+      "id": string;
+    };
+  };
   "/app/packing-slips/export/csv": {
     params: {};
   };
   "/app/credit-notes/export/csv": {
+    params: {};
+  };
+  "/app/refund-documents/bulk": {
     params: {};
   };
   "/app/invoices/export/csv": {
@@ -126,7 +144,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/refund-documents/bulk" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
   };
   "routes/webhooks.app.scopes_update.tsx": {
     id: "routes/webhooks.app.scopes_update";
@@ -158,7 +176,19 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/refund-documents/bulk" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
+  };
+  "routes/app.credit-notes_.$id_.refund-document.tsx": {
+    id: "routes/app.credit-notes_.$id_.refund-document";
+    page: "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view";
+  };
+  "routes/app.credit-notes_.$id_.refund-document.view.tsx": {
+    id: "routes/app.credit-notes_.$id_.refund-document.view";
+    page: "/app/credit-notes/:id/refund-document/view";
+  };
+  "routes/app.credit-notes_.$id_.refund.tsx": {
+    id: "routes/app.credit-notes_.$id_.refund";
+    page: "/app/credit-notes/:id/refund";
   };
   "routes/app.packing-slips_.export.csv.tsx": {
     id: "routes/app.packing-slips_.export.csv";
@@ -167,6 +197,10 @@ type RouteFiles = {
   "routes/app.credit-notes_.export.csv.tsx": {
     id: "routes/app.credit-notes_.export.csv";
     page: "/app/credit-notes/export/csv";
+  };
+  "routes/app.refund-documents_.bulk.tsx": {
+    id: "routes/app.refund-documents_.bulk";
+    page: "/app/refund-documents/bulk";
   };
   "routes/app.invoices_.export.csv.tsx": {
     id: "routes/app.invoices_.export.csv";
@@ -264,8 +298,12 @@ type RouteModules = {
   "routes/_index": typeof import("./app/routes/_index/route.tsx");
   "routes/auth.$": typeof import("./app/routes/auth.$.tsx");
   "routes/app": typeof import("./app/routes/app.tsx");
+  "routes/app.credit-notes_.$id_.refund-document": typeof import("./app/routes/app.credit-notes_.$id_.refund-document.tsx");
+  "routes/app.credit-notes_.$id_.refund-document.view": typeof import("./app/routes/app.credit-notes_.$id_.refund-document.view.tsx");
+  "routes/app.credit-notes_.$id_.refund": typeof import("./app/routes/app.credit-notes_.$id_.refund.tsx");
   "routes/app.packing-slips_.export.csv": typeof import("./app/routes/app.packing-slips_.export.csv.tsx");
   "routes/app.credit-notes_.export.csv": typeof import("./app/routes/app.credit-notes_.export.csv.tsx");
+  "routes/app.refund-documents_.bulk": typeof import("./app/routes/app.refund-documents_.bulk.tsx");
   "routes/app.invoices_.export.csv": typeof import("./app/routes/app.invoices_.export.csv.tsx");
   "routes/app.packing-slips_.bulk": typeof import("./app/routes/app.packing-slips_.bulk.tsx");
   "routes/app.credit-notes_.bulk": typeof import("./app/routes/app.credit-notes_.bulk.tsx");

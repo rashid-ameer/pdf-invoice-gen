@@ -481,7 +481,8 @@ describe("Credit note document routes / UI wiring", () => {
     assert.match(source, /hasSelection/);
     assert.doesNotMatch(source, /DOCUMENT_PAGE_SIZE_OPTIONS|Per page/);
     assert.doesNotMatch(source, /buyerEmail/);
-    assert.doesNotMatch(source, /credit-note-document\.server/);
+    assert.match(source, /listRefundDocumentTemplatesForShop/);
+    assert.match(source, /fetchAndPrintRefundDocument/);
   });
 
   it("view route does not record download; download and bulk do", () => {
