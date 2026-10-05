@@ -294,22 +294,26 @@ export default function EmailConfigPage() {
         </button>
       </ui-save-bar>
 
-      <s-stack gap="base">
-        {isSandbox ? (
-          <s-banner tone="warning" heading="Sandbox mode">
-            Emails are only delivered to your email provider account email until
-            you verify your own domain.
-            <s-button
-              slot="secondary-actions"
-              variant="secondary"
-              href={RESEND_DOMAINS_URL}
-              target="_blank"
-            >
-              Verify domain
-            </s-button>
-          </s-banner>
-        ) : null}
+      {isSandbox ? (
+        <s-banner
+          slot="supplemental-start"
+          tone="warning"
+          heading="Sandbox mode"
+        >
+          Emails are only delivered to your email provider account email until
+          you verify your own domain.
+          <s-button
+            slot="secondary-actions"
+            variant="secondary"
+            href={RESEND_DOMAINS_URL}
+            target="_blank"
+          >
+            Verify domain
+          </s-button>
+        </s-banner>
+      ) : null}
 
+      <s-stack gap="base">
         {connectionError ? (
           <s-banner
             tone="critical"
@@ -327,7 +331,7 @@ export default function EmailConfigPage() {
           </s-banner>
         ) : null}
 
-        <s-stack gap="small-200">
+        <s-stack gap="none">
           <s-heading>Automated emails</s-heading>
           <s-paragraph color="subdued">
             Send PDF documents when Shopify orders are paid or refunds are
@@ -422,27 +426,29 @@ function DocumentTypeCard({
   return (
     <s-section>
       <s-stack gap="base">
-        <s-stack
-          direction="inline"
-          justifyContent="space-between"
-          alignItems="center"
-          gap="base"
-        >
-          <s-heading>{config.heading}</s-heading>
-          <s-switch
-            accessibilityLabel={config.switchLabel}
-            label={config.switchLabel}
-            checked={autoSend}
-            disabled={saving || undefined}
-            onChange={(event: Event) => {
-              onToggle(
-                Boolean((event.currentTarget as HTMLInputElement).checked),
-              );
-            }}
-          />
-        </s-stack>
+        <s-stack gap="none">
+          <s-stack
+            direction="inline"
+            justifyContent="space-between"
+            alignItems="center"
+            gap="base"
+          >
+            <s-heading>{config.heading}</s-heading>
+            <s-switch
+              accessibilityLabel={config.switchLabel}
+              label={config.switchLabel}
+              checked={autoSend}
+              disabled={saving || undefined}
+              onChange={(event: Event) => {
+                onToggle(
+                  Boolean((event.currentTarget as HTMLInputElement).checked),
+                );
+              }}
+            />
+          </s-stack>
 
-        <s-paragraph color="subdued">{config.description}</s-paragraph>
+          <s-paragraph color="subdued">{config.description}</s-paragraph>
+        </s-stack>
 
         {config.hasTrigger && autoSend ? (
           <s-select
