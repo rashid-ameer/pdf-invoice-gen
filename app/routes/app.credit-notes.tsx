@@ -20,6 +20,7 @@ import {
   listCreditNotesForShop,
   parseCreditNoteListQuery,
   type CreditNoteListItem,
+  type CreditNoteListTab,
 } from "../models/credit-note-list.server";
 import { enqueueSyncRefunds } from "../models/sync-queue.server";
 import { formatPaymentStatus } from "../utils/csv";
@@ -37,8 +38,8 @@ import { authenticate } from "../shopify.server";
 
 /**
  * Credit Notes index — Polaris table sibling of Invoices.
- * Docs: https://shopify.dev/docs/api/app-home/latest/web-components/layout-and-structure/table
- *       https://shopify.dev/docs/apps/design/layout#using-tables
+ * Tabs use App Home segmented button-group (no s-tabs in App Home):
+ * https://shopify.dev/docs/apps/build/app-home/migrate-from-polaris-react/tabs
  *
  * Keep this constant client-safe (do not import from *.server modules into
  * the route component — React Router blocks that and the page fails to load).
@@ -51,8 +52,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const query = parseCreditNoteListQuery(
     Object.fromEntries(url.searchParams.entries()),
   );
-  // Credit notes index always lists credit-note rows (refund documents are separate).
-  query.tab = "credit-notes";
 
   const list = await listCreditNotesForShop(session.shop, query);
   if (!list) {
@@ -150,7 +149,11 @@ export default function CreditNotesPage() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [data.page, data.limit]);
+  }, [data.page, data.limit, data.query.tab]);
+
+  const activeTab: CreditNoteListTab = data.query.tab;
+  const isRefundTab = activeTab === "refund-documents";
+  const numberColumnLabel = isRefundTab ? "Reference" : "Credit note";
 
   const updateQuery = useCallback(
     (patch: Record<string, string | null | undefined>) => {
@@ -160,13 +163,19 @@ export default function CreditNotesPage() {
         else next.set(key, value);
       }
       if (!("page" in patch)) next.delete("page");
-      // Always stay on credit-notes list.
-      next.delete("tab");
       const qs = next.toString();
       navigate(qs ? `/app/credit-notes?${qs}` : "/app/credit-notes");
     },
     [navigate, searchParams],
   );
+
+  const switchTab = (tab: CreditNoteListTab) => {
+    if (tab === activeTab) return;
+    updateQuery({
+      tab: tab === "credit-notes" ? null : "refund-documents",
+      page: null,
+    });
+  };
 
   const startSyncRefunds = () => {
     const form = new FormData();
@@ -178,8 +187,9 @@ export default function CreditNotesPage() {
     if (csvBusy) return;
     setCsvBusy(true);
     try {
+      const kind = isRefundTab ? "refund-documents" : "credit-notes";
       const response = await fetch(
-        "/app/credit-notes/export/csv?kind=credit-notes",
+        `/app/credit-notes/export/csv?kind=${encodeURIComponent(kind)}`,
       );
       if (!response.ok) {
         shopify.toast.show("Failed to export CSV. Try again.", {
@@ -190,7 +200,9 @@ export default function CreditNotesPage() {
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") ?? "";
       const filenameMatch = /filename="([^"]+)"/.exec(disposition);
-      const filename = filenameMatch?.[1] || "credit-notes.csv";
+      const filename =
+        filenameMatch?.[1] ||
+        (isRefundTab ? "refund-documents.csv" : "credit-notes.csv");
       const objectUrl = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = objectUrl;
@@ -280,9 +292,12 @@ export default function CreditNotesPage() {
     const ids = [...selectedIds];
     if (ids.length === 0 || printSelectedBusy) return;
     if (ids.length > BULK_PRINT_LIMIT) {
-      shopify.toast.show("You can print up to 50 credit notes at once", {
-        isError: true,
-      });
+      shopify.toast.show(
+        isRefundTab
+          ? "You can print up to 50 document refunds at once"
+          : "You can print up to 50 credit notes at once",
+        { isError: true },
+      );
       return;
     }
     setPrintSelectedBusy(true);
@@ -312,19 +327,57 @@ export default function CreditNotesPage() {
         Export CSV
       </s-button>
 
+      <s-section padding="none" accessibilityLabel="Document type">
+        <s-box padding="base">
+          <s-button-group gap="none" accessibilityLabel="Document type">
+            <s-button
+              slot="secondary-actions"
+              variant="secondary"
+              icon={activeTab === "credit-notes" ? "check" : undefined}
+              aria-pressed={activeTab === "credit-notes"}
+              onClick={() => switchTab("credit-notes")}
+            >
+              Credit notes
+            </s-button>
+            <s-button
+              slot="secondary-actions"
+              variant="secondary"
+              icon={isRefundTab ? "check" : undefined}
+              aria-pressed={isRefundTab}
+              onClick={() => switchTab("refund-documents")}
+            >
+              Document refunds
+            </s-button>
+          </s-button-group>
+        </s-box>
+      </s-section>
+
       {showEmptyContent ? (
-        <s-section accessibilityLabel="No credit notes yet">
-          <s-empty-state heading="No credit notes yet">
+        <s-section
+          accessibilityLabel={
+            isRefundTab ? "No document refunds yet" : "No credit notes yet"
+          }
+        >
+          <s-empty-state
+            heading={
+              isRefundTab ? "No document refunds yet" : "No credit notes yet"
+            }
+          >
             <s-icon slot="graphic" type="order" size="base" color="subdued" />
             <s-text slot="subheading">
-              Credit notes appear here when Shopify refunds are issued for
-              orders that already have an invoice. Use Sync refunds if you
-              already have refunds in the store.
+              {isRefundTab
+                ? "Document refunds use the same Shopify refund records as credit notes. Sync refunds to generate them."
+                : "Credit notes appear here when Shopify refunds are issued for orders that already have an invoice. Use Sync refunds if you already have refunds in the store."}
             </s-text>
           </s-empty-state>
         </s-section>
       ) : (
-        <s-section padding="none" accessibilityLabel="Credit notes table">
+        <s-section
+          padding="none"
+          accessibilityLabel={
+            isRefundTab ? "Document refunds table" : "Credit notes table"
+          }
+        >
           <s-table
             {...(showPagination
               ? {
@@ -373,17 +426,21 @@ export default function CreditNotesPage() {
                     <s-checkbox
                       checked={allOnPageSelected}
                       {...(someOnPageSelected ? { indeterminate: true } : {})}
-                      accessibilityLabel="Select all credit notes on this page"
+                      accessibilityLabel={
+                        isRefundTab
+                          ? "Select all document refunds on this page"
+                          : "Select all credit notes on this page"
+                      }
                       onChange={(event: Event) => {
                         togglePage(
                           (event.currentTarget as HTMLInputElement).checked,
                         );
                       }}
                     />
-                    <s-text>Credit note</s-text>
+                    <s-text>{numberColumnLabel}</s-text>
                   </s-grid>
                 ) : (
-                  <s-text>Credit note</s-text>
+                  <s-text>{numberColumnLabel}</s-text>
                 )}
               </s-table-header>
               <s-table-header listSlot="labeled">Invoice</s-table-header>
@@ -402,9 +459,15 @@ export default function CreditNotesPage() {
             <s-table-body>
               {showTableRows
                 ? data.items.map((note: CreditNoteListItem) => {
-                    const checkboxId = `credit-note-select-${note.id}`;
-                    const linkId = `credit-note-link-${note.id}`;
-                    const menuId = `credit-note-actions-${note.id}`;
+                    const checkboxId = isRefundTab
+                      ? `refund-doc-select-${note.id}`
+                      : `credit-note-select-${note.id}`;
+                    const linkId = isRefundTab
+                      ? `refund-doc-link-${note.id}`
+                      : `credit-note-link-${note.id}`;
+                    const menuId = isRefundTab
+                      ? `refund-doc-actions-${note.id}`
+                      : `credit-note-actions-${note.id}`;
                     const detailsHref = `/app/credit-notes/${encodeURIComponent(note.id)}`;
                     const paymentLabel = formatPaymentStatus(
                       note.financialStatus,

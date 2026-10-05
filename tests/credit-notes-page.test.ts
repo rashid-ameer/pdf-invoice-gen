@@ -276,11 +276,18 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /menu-horizontal/);
     assert.match(page, /formatIssueDate/);
     assert.match(page, /month: "short"/);
-    assert.match(page, /hasSelection/);
-    assert.match(page, /slot="filters"/);
+    assert.match(page, /s-button-group/);
+    assert.match(page, /Document refunds/);
+    assert.match(page, /switchTab/);
+    assert.match(page, /refund-documents/);
+    assert.match(page, /aria-pressed/);
+    assert.match(page, /kind=\$\{encodeURIComponent\(kind\)\}|kind=refund-documents/);
+    assert.match(page, /Reference/);
+    assert.match(page, /No document refunds yet/);
     assert.doesNotMatch(page, /DOCUMENT_PAGE_SIZE_OPTIONS|Per page|Items per page/);
     assert.doesNotMatch(page, /buyerEmail/);
     assert.doesNotMatch(page, /listCreditNoteTemplatesForShop/);
+    assert.doesNotMatch(page, /<s-tabs[<\\s]|<s-tab-list|<s-tab-panel/);
 
     const nav = readFileSync(join(process.cwd(), "app/routes/app.tsx"), "utf8");
     assert.match(nav, /href="\/app\/credit-notes"/);
