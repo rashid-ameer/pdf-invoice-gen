@@ -2,7 +2,11 @@
  * Group 12 document email — delivery settings, send, events, idempotency.
  * Customer document email uses Resend (not Help SMTP).
  *
- * Phase 1: infrastructure only. Auto hooks remain no-op stubs until Phase 4.
+ * Auto-send is gated only by per-document settings (invoiceAutoSend,
+ * creditNoteAutoSend, refundDocumentAutoSend) and invoiceWhen. The legacy
+ * master `enabled` field is still persisted for UI compatibility but is not
+ * read for send decisions.
+ *
  * Public links are optional (Group 13); send continues without them.
  */
 
@@ -43,7 +47,7 @@ export { getEmailProviderStatus };
 export { isResendConfigured as isEmailProviderConfigured };
 
 // ---------------------------------------------------------------------------
-// Phase 4 extension points (no-op until wired)
+// Auto-send schedule (per-document gates only — legacy master `enabled` ignored)
 // ---------------------------------------------------------------------------
 
 export type ScheduleInvoiceAutoEmail = (
@@ -57,11 +61,181 @@ export type ScheduleInvoiceAutoEmailOnPaid = (
   invoiceId: string,
 ) => Promise<void>;
 
-let scheduleInvoiceAutoEmailImpl: ScheduleInvoiceAutoEmail = async () => {};
-let scheduleInvoiceAutoEmailOnPaidImpl: ScheduleInvoiceAutoEmailOnPaid =
-  async () => {};
+/** True when invoice auto-send should run for this create/paid context. Ignores master `enabled`. */
+export function shouldAutoSendInvoice(
+  settings: Pick<DeliverySettings, "invoiceAutoSend" | "invoiceWhen">,
+  orderIsPaid: boolean,
+): boolean {
+  if (!settings.invoiceAutoSend) return false;
+  if (settings.invoiceWhen === "paid" && !orderIsPaid) return false;
+  return true;
+}
 
-/** Injectable for tests — restores to no-op via restoreDocumentEmailHooks(). */
+/** True when orders/paid should trigger invoice auto-send. Ignores master `enabled`. */
+export function shouldAutoSendInvoiceOnPaid(
+  settings: Pick<DeliverySettings, "invoiceAutoSend" | "invoiceWhen">,
+): boolean {
+  return Boolean(settings.invoiceAutoSend && settings.invoiceWhen === "paid");
+}
+
+/** Ignores master `enabled`. */
+export function shouldAutoSendCreditNote(
+  settings: Pick<DeliverySettings, "creditNoteAutoSend">,
+): boolean {
+  return Boolean(settings.creditNoteAutoSend);
+}
+
+/** Ignores master `enabled`. */
+export function shouldAutoSendRefundDocument(
+  settings: Pick<DeliverySettings, "refundDocumentAutoSend">,
+): boolean {
+  return Boolean(settings.refundDocumentAutoSend);
+}
+
+async function recordProviderMissingFailure(
+  invoiceId: string,
+  documentType: DocumentEmailType,
+  creditNoteId?: string,
+) {
+  await recordEmailEvent({
+    invoiceId,
+    creditNoteId,
+    status: "email_failed",
+    message:
+      "Email not sent: RESEND_API_KEY or EMAIL_FROM is not configured on the server",
+    metadata: {
+      documentType,
+      trigger: "auto",
+      error: "RESEND_API_KEY or EMAIL_FROM not configured",
+    },
+    source: "system",
+  });
+}
+
+async function defaultScheduleInvoiceAutoEmail(
+  shopDomain: string,
+  invoiceId: string,
+  orderIsPaid: boolean,
+): Promise<void> {
+  try {
+    const settings = await getDeliverySettings(shopDomain);
+    if (!settings) return;
+
+    if (!shouldAutoSendInvoice(settings, orderIsPaid)) {
+      if (!settings.invoiceAutoSend) {
+        console.log(
+          `[email] skip invoice auto-send for ${invoiceId}: invoiceAutoSend disabled`,
+        );
+      } else {
+        console.log(
+          `[email] skip invoice auto-send for ${invoiceId}: waiting for order paid (invoiceWhen=paid)`,
+        );
+      }
+      return;
+    }
+
+    if (await hasEmailSentEvent(invoiceId, "tax_invoice")) {
+      console.log(
+        `[email] skip invoice auto-send for ${invoiceId}: already emailed`,
+      );
+      return;
+    }
+
+    if (!isResendConfigured()) {
+      console.warn(
+        `[email] invoice auto-send blocked for ${invoiceId}: RESEND_API_KEY or EMAIL_FROM not configured`,
+      );
+      await recordProviderMissingFailure(invoiceId, "tax_invoice");
+      return;
+    }
+
+    console.log(
+      `[email] auto-sending invoice ${invoiceId} (orderPaid=${orderIsPaid})`,
+    );
+    const result = await sendInvoiceEmail({
+      shop: shopDomain,
+      invoiceId,
+      trigger: "auto",
+    });
+    if (!result.ok) {
+      console.warn(
+        `[email] invoice auto-send failed for ${invoiceId}: ${result.error}`,
+      );
+    } else if (!result.skipped) {
+      console.log(
+        `[email] invoice auto-send ok for ${invoiceId} → ${result.to}`,
+      );
+    }
+  } catch (error) {
+    console.error(`[email] invoice auto-send error for ${invoiceId}:`, error);
+  }
+}
+
+async function defaultScheduleInvoiceAutoEmailOnPaid(
+  shopDomain: string,
+  invoiceId: string,
+): Promise<void> {
+  try {
+    const settings = await getDeliverySettings(shopDomain);
+    if (!settings) return;
+
+    if (!shouldAutoSendInvoiceOnPaid(settings)) {
+      if (!settings.invoiceAutoSend) {
+        console.log(
+          `[email] skip paid auto-send for ${invoiceId}: invoiceAutoSend disabled`,
+        );
+      } else {
+        console.log(
+          `[email] skip paid auto-send for ${invoiceId}: invoiceWhen=${settings.invoiceWhen}`,
+        );
+      }
+      return;
+    }
+
+    if (await hasEmailSentEvent(invoiceId, "tax_invoice")) {
+      console.log(
+        `[email] skip paid auto-send for ${invoiceId}: already emailed`,
+      );
+      return;
+    }
+
+    if (!isResendConfigured()) {
+      console.warn(
+        `[email] paid auto-send blocked for ${invoiceId}: RESEND_API_KEY or EMAIL_FROM not configured`,
+      );
+      await recordProviderMissingFailure(invoiceId, "tax_invoice");
+      return;
+    }
+
+    console.log(`[email] auto-sending invoice on paid ${invoiceId}`);
+    const result = await sendInvoiceEmail({
+      shop: shopDomain,
+      invoiceId,
+      trigger: "auto",
+    });
+    if (!result.ok) {
+      console.warn(
+        `[email] invoice paid auto-send failed for ${invoiceId}: ${result.error}`,
+      );
+    } else if (!result.skipped) {
+      console.log(
+        `[email] invoice paid auto-send ok for ${invoiceId} → ${result.to}`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `[email] invoice paid auto-send error for ${invoiceId}:`,
+      error,
+    );
+  }
+}
+
+let scheduleInvoiceAutoEmailImpl: ScheduleInvoiceAutoEmail =
+  defaultScheduleInvoiceAutoEmail;
+let scheduleInvoiceAutoEmailOnPaidImpl: ScheduleInvoiceAutoEmailOnPaid =
+  defaultScheduleInvoiceAutoEmailOnPaid;
+
+/** Injectable for tests — restoreDocumentEmailHooks() restores production defaults. */
 export function setDocumentEmailHooks(hooks: {
   scheduleInvoiceAutoEmail?: ScheduleInvoiceAutoEmail;
   scheduleInvoiceAutoEmailOnPaid?: ScheduleInvoiceAutoEmailOnPaid;
@@ -75,8 +249,8 @@ export function setDocumentEmailHooks(hooks: {
 }
 
 export function restoreDocumentEmailHooks(): void {
-  scheduleInvoiceAutoEmailImpl = async () => {};
-  scheduleInvoiceAutoEmailOnPaidImpl = async () => {};
+  scheduleInvoiceAutoEmailImpl = defaultScheduleInvoiceAutoEmail;
+  scheduleInvoiceAutoEmailOnPaidImpl = defaultScheduleInvoiceAutoEmailOnPaid;
 }
 
 export async function scheduleInvoiceAutoEmail(
@@ -92,6 +266,87 @@ export async function scheduleInvoiceAutoEmailOnPaid(
   invoiceId: string,
 ): Promise<void> {
   await scheduleInvoiceAutoEmailOnPaidImpl(shopDomain, invoiceId);
+}
+
+/**
+ * Auto-send credit note and/or refund document after credit-note create.
+ * Each document type uses only its own auto-send flag (master `enabled` ignored).
+ */
+export async function scheduleCreditNoteAutoEmails(
+  shopDomain: string,
+  creditNoteId: string,
+): Promise<void> {
+  try {
+    const settings = await getDeliverySettings(shopDomain);
+    if (!settings) return;
+
+    const wantsCn = shouldAutoSendCreditNote(settings);
+    const wantsRefund = shouldAutoSendRefundDocument(settings);
+    if (!wantsCn && !wantsRefund) return;
+
+    const creditNote = await prisma.creditNote.findUnique({
+      where: { id: creditNoteId },
+      select: { id: true, invoiceId: true },
+    });
+    if (!creditNote) return;
+    const invoiceId = creditNote.invoiceId;
+
+    if (!isResendConfigured()) {
+      console.warn(
+        `[email] credit-note auto-send blocked for ${creditNoteId}: RESEND_API_KEY or EMAIL_FROM not configured`,
+      );
+      if (wantsCn) {
+        await recordProviderMissingFailure(invoiceId, "credit_note", creditNoteId);
+      }
+      if (wantsRefund) {
+        await recordProviderMissingFailure(
+          invoiceId,
+          "refund_document",
+          creditNoteId,
+        );
+      }
+      return;
+    }
+
+    if (
+      wantsCn &&
+      !(await hasEmailSentEvent(invoiceId, "credit_note", creditNoteId))
+    ) {
+      console.log(`[email] auto-sending credit note ${creditNoteId}`);
+      const result = await sendCreditNoteEmail({
+        shop: shopDomain,
+        creditNoteId,
+        trigger: "auto",
+      });
+      if (!result.ok) {
+        console.warn(
+          `[email] credit note auto-send failed for ${creditNoteId}: ${result.error}`,
+        );
+      }
+    }
+
+    if (
+      wantsRefund &&
+      !(await hasEmailSentEvent(invoiceId, "refund_document", creditNoteId))
+    ) {
+      console.log(`[email] auto-sending refund document ${creditNoteId}`);
+      const result = await sendRefundDocumentEmail({
+        shop: shopDomain,
+        creditNoteId,
+        trigger: "auto",
+      });
+      if (!result.ok) {
+        console.warn(
+          `[email] refund document auto-send failed for ${creditNoteId}: ${result.error}`,
+        );
+      }
+    }
+  } catch (error) {
+    console.error(
+      `[email] credit note auto-send error for ${creditNoteId}:`,
+      error,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +378,10 @@ export function setDocumentEmailLinkResolver(
 // ---------------------------------------------------------------------------
 
 export interface DeliverySettings {
+  /**
+   * Legacy master automation flag. Still accepted/persisted for UI/API
+   * compatibility; ignored when deciding whether to auto-send.
+   */
   enabled: boolean;
   invoiceAutoSend: boolean;
   invoiceWhen: EmailInvoiceWhen;

@@ -2,6 +2,7 @@ import { Prisma, type CreditNote, type Invoice } from "@prisma/client";
 import type { InvoiceLineItem, InvoiceTotals } from "../types/index";
 import { DEFAULT_CURRENCY } from "../constants/app";
 import prisma from "../db.server";
+import { scheduleCreditNoteAutoEmails } from "./document-email.server";
 import { nextCreditNoteNumber } from "./document-number.server";
 
 export interface ShopifyRefundLineItem {
@@ -448,6 +449,8 @@ export async function createCreditNoteFromRefund(
     console.log(
       `[credit-notes] created ${creditNoteNumber} for invoice ${invoice.invoiceNumber} via ${source}`,
     );
+
+    await scheduleCreditNoteAutoEmails(shopDomain, creditNote.id);
 
     return creditNote;
   } catch (error) {

@@ -12,11 +12,18 @@ import {
   previewDocumentEmail,
   restoreDocumentEmailHooks,
   saveDeliverySettings,
+  scheduleCreditNoteAutoEmails,
+  scheduleInvoiceAutoEmail,
+  scheduleInvoiceAutoEmailOnPaid,
   sendCreditNoteEmail,
   sendDocumentEmail,
   sendDocumentTestEmail,
   sendInvoiceEmail,
   sendRefundDocumentEmail,
+  shouldAutoSendCreditNote,
+  shouldAutoSendInvoice,
+  shouldAutoSendInvoiceOnPaid,
+  shouldAutoSendRefundDocument,
 } from "../app/models/document-email.server";
 import {
   DEFAULT_INVOICE_EMAIL_BODY,
@@ -181,6 +188,206 @@ async function seedCreditNoteForStore(storeId: string) {
   assert.ok(note);
   return note!;
 }
+
+describe("auto-send decisions ignore master enabled", () => {
+  it("gates only on per-document auto-send and invoiceWhen", () => {
+    assert.equal(
+      shouldAutoSendInvoice(
+        { invoiceAutoSend: true, invoiceWhen: "paid" },
+        true,
+      ),
+      true,
+    );
+    assert.equal(
+      shouldAutoSendInvoice(
+        { invoiceAutoSend: true, invoiceWhen: "paid" },
+        false,
+      ),
+      false,
+    );
+    assert.equal(
+      shouldAutoSendInvoice(
+        { invoiceAutoSend: true, invoiceWhen: "created" },
+        false,
+      ),
+      true,
+    );
+    assert.equal(
+      shouldAutoSendInvoice(
+        { invoiceAutoSend: false, invoiceWhen: "paid" },
+        true,
+      ),
+      false,
+    );
+
+    assert.equal(
+      shouldAutoSendInvoiceOnPaid({
+        invoiceAutoSend: true,
+        invoiceWhen: "paid",
+      }),
+      true,
+    );
+    assert.equal(
+      shouldAutoSendInvoiceOnPaid({
+        invoiceAutoSend: true,
+        invoiceWhen: "created",
+      }),
+      false,
+    );
+    assert.equal(
+      shouldAutoSendInvoiceOnPaid({
+        invoiceAutoSend: false,
+        invoiceWhen: "paid",
+      }),
+      false,
+    );
+
+    assert.equal(shouldAutoSendCreditNote({ creditNoteAutoSend: true }), true);
+    assert.equal(shouldAutoSendCreditNote({ creditNoteAutoSend: false }), false);
+    assert.equal(
+      shouldAutoSendRefundDocument({ refundDocumentAutoSend: true }),
+      true,
+    );
+    assert.equal(
+      shouldAutoSendRefundDocument({ refundDocumentAutoSend: false }),
+      false,
+    );
+
+    // Master flag is not an input to these helpers — document-type flags alone decide.
+    const withMasterOff = normalizeDeliverySettings({
+      enabled: false,
+      invoiceAutoSend: true,
+      invoiceWhen: "paid",
+      creditNoteAutoSend: true,
+      refundDocumentAutoSend: true,
+    });
+    assert.equal(withMasterOff.enabled, false);
+    assert.equal(shouldAutoSendInvoice(withMasterOff, true), true);
+    assert.equal(shouldAutoSendCreditNote(withMasterOff), true);
+    assert.equal(shouldAutoSendRefundDocument(withMasterOff), true);
+
+    const withMasterOn = normalizeDeliverySettings({
+      enabled: true,
+      invoiceAutoSend: false,
+      creditNoteAutoSend: false,
+      refundDocumentAutoSend: false,
+    });
+    assert.equal(withMasterOn.enabled, true);
+    assert.equal(shouldAutoSendInvoice(withMasterOn, true), false);
+    assert.equal(shouldAutoSendCreditNote(withMasterOn), false);
+    assert.equal(shouldAutoSendRefundDocument(withMasterOn), false);
+  });
+
+  it("still accepts and stores master enabled when saving settings", async () => {
+    const { store } = await seedStoreWithInvoice();
+    const saved = await saveDeliverySettings(store.shopifyDomain, {
+      enabled: false,
+      invoiceAutoSend: true,
+      creditNoteAutoSend: true,
+    });
+    assert.ok(saved);
+    assert.equal(saved!.enabled, false);
+    assert.equal(saved!.invoiceAutoSend, true);
+    assert.equal(saved!.creditNoteAutoSend, true);
+
+    const again = await getDeliverySettings(store.shopifyDomain);
+    assert.equal(again!.enabled, false);
+    assert.equal(again!.invoiceAutoSend, true);
+  });
+
+  it("does not auto-send when document auto-send is off even if master is on", async () => {
+    const { store, invoice } = await seedStoreWithInvoice();
+    await saveDeliverySettings(store.shopifyDomain, {
+      enabled: true,
+      invoiceAutoSend: false,
+      creditNoteAutoSend: false,
+      refundDocumentAutoSend: false,
+    });
+
+    let sends = 0;
+    setResendTransportForTests(async () => {
+      sends += 1;
+      return { ok: true, id: "re_skip", from: "from@test.com" };
+    });
+
+    await scheduleInvoiceAutoEmail(store.shopifyDomain, invoice.id, true);
+    await scheduleInvoiceAutoEmailOnPaid(store.shopifyDomain, invoice.id);
+    assert.equal(sends, 0);
+  });
+
+  it(
+    "auto-sends invoice when invoiceAutoSend is on even if master is off",
+    { skip: !hasChromium },
+    async () => {
+      const { store, invoice } = await seedStoreWithInvoice();
+      await saveDeliverySettings(store.shopifyDomain, {
+        enabled: false,
+        invoiceAutoSend: true,
+        invoiceWhen: "paid",
+      });
+
+      let sends = 0;
+      setResendTransportForTests(async (input) => {
+        sends += 1;
+        assert.ok(input.pdf);
+        return { ok: true, id: "re_auto", from: "from@test.com" };
+      });
+
+      await scheduleInvoiceAutoEmail(store.shopifyDomain, invoice.id, true);
+      assert.equal(sends, 1);
+      assert.equal(await hasEmailSentEvent(invoice.id, "tax_invoice"), true);
+    },
+  );
+
+  it("skips invoice auto-send when waiting for paid trigger", async () => {
+    const { store, invoice } = await seedStoreWithInvoice();
+    await saveDeliverySettings(store.shopifyDomain, {
+      enabled: false,
+      invoiceAutoSend: true,
+      invoiceWhen: "paid",
+    });
+
+    let sends = 0;
+    setResendTransportForTests(async () => {
+      sends += 1;
+      return { ok: true, id: "re_wait", from: "from@test.com" };
+    });
+
+    await scheduleInvoiceAutoEmail(store.shopifyDomain, invoice.id, false);
+    assert.equal(sends, 0);
+  });
+
+  it(
+    "auto-sends credit note / refund by their own flags with master off",
+    { skip: !hasChromium },
+    async () => {
+      const { store, invoice } = await seedStoreWithInvoice();
+      const note = await seedCreditNoteForStore(store.id);
+      await saveDeliverySettings(store.shopifyDomain, {
+        enabled: false,
+        creditNoteAutoSend: true,
+        refundDocumentAutoSend: false,
+      });
+
+      const kinds: string[] = [];
+      setResendTransportForTests(async (input) => {
+        kinds.push(input.filename || input.subject);
+        return { ok: true, id: `re_${kinds.length}`, from: "from@test.com" };
+      });
+
+      await scheduleCreditNoteAutoEmails(store.shopifyDomain, note.id);
+      assert.equal(kinds.length, 1);
+      assert.equal(
+        await hasEmailSentEvent(invoice.id, "credit_note", note.id),
+        true,
+      );
+      assert.equal(
+        await hasEmailSentEvent(invoice.id, "refund_document", note.id),
+        false,
+      );
+    },
+  );
+});
 
 describe("normalizeDeliverySettings", () => {
   it("applies old defaults for empty input", () => {
