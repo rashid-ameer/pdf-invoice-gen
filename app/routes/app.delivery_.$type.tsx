@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -36,8 +42,6 @@ import { authenticate } from "../shopify.server";
  * Edit email template content for one document type.
  * showViewButton is store-wide (shared across all email types).
  */
-
-const SAVE_BAR_ID = "email-template-save-bar";
 
 const TYPE_META = {
   invoice: {
@@ -367,6 +371,7 @@ function EmailTemplateEditor({
   const [testError, setTestError] = useState("");
   const [testTo, setTestTo] = useState(() => serverSettings.replyTo || "");
   const richTextRef = useRef<EmailBodyRichTextEditorHandle | null>(null);
+  const dirtySignalRef = useRef<HTMLInputElement | null>(null);
 
   const awaitingSave = useRef(false);
   const dataAtSubmit = useRef(saveFetcher.data);
@@ -378,6 +383,19 @@ function EmailTemplateEditor({
     testFetcher.state === "submitting" || testFetcher.state === "loading";
   const previewing =
     previewFetcher.state === "submitting" || previewFetcher.state === "loading";
+
+  const syncDirtyBaseline = useCallback((fingerprint: string) => {
+    const input = dirtySignalRef.current;
+    if (!input) return;
+    input.defaultValue = fingerprint;
+    input.value = fingerprint;
+  }, []);
+
+  const markFormDirty = useCallback(() => {
+    const input = dirtySignalRef.current;
+    if (!input) return;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, []);
 
   useEffect(() => {
     const next = templateFormFromSettings(serverSettings, meta.kind);
@@ -396,6 +414,7 @@ function EmailTemplateEditor({
       setConnectionError(true);
       setSaveError("");
       shopify.toast.show("Couldn't save", { isError: true });
+      markFormDirty();
       return;
     }
 
@@ -403,14 +422,26 @@ function EmailTemplateEditor({
     if (saveFetcher.data.ok && saveFetcher.data.intent === "save") {
       setSaveError("");
       shopify.toast.show(saveFetcher.data.message);
-      shopify.saveBar.hide(SAVE_BAR_ID);
+      syncDirtyBaseline(
+        JSON.stringify(
+          templateFormFromSettings(saveFetcher.data.settings, meta.kind),
+        ),
+      );
       return;
     }
     if (!saveFetcher.data.ok && saveFetcher.data.intent === "save") {
       setSaveError(saveFetcher.data.error);
       shopify.toast.show(saveFetcher.data.error, { isError: true });
+      markFormDirty();
     }
-  }, [saveFetcher.data, saveFetcher.state, shopify]);
+  }, [
+    saveFetcher.data,
+    saveFetcher.state,
+    shopify,
+    meta.kind,
+    markFormDirty,
+    syncDirtyBaseline,
+  ]);
 
   useEffect(() => {
     if (testFetcher.state !== "idle" || !testFetcher.data) return;
@@ -439,18 +470,22 @@ function EmailTemplateEditor({
     };
   }, [saving, testing, shopify]);
 
-  const dirty = useMemo(
-    () => JSON.stringify(form) !== JSON.stringify(baseline),
-    [form, baseline],
-  );
+  // Bridge React-controlled state (incl. Quill) into data-save-bar dirty tracking.
+  useEffect(() => {
+    const input = dirtySignalRef.current;
+    if (!input) return;
+    const fingerprint = JSON.stringify(form);
+    if (!input.defaultValue) {
+      input.defaultValue = JSON.stringify(baseline);
+    }
+    if (input.value === fingerprint) return;
+    input.value = fingerprint;
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }, [form, baseline]);
 
   useEffect(() => {
-    if (dirty) shopify.saveBar.show(SAVE_BAR_ID);
-    else shopify.saveBar.hide(SAVE_BAR_ID);
-    return () => {
-      shopify.saveBar.hide(SAVE_BAR_ID);
-    };
-  }, [dirty, shopify]);
+    syncDirtyBaseline(JSON.stringify(baseline));
+  }, [baseline, syncDirtyBaseline]);
 
   const patch = useCallback(<K extends keyof TemplateForm>(key: K, value: TemplateForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -495,7 +530,6 @@ function EmailTemplateEditor({
     setForm(baseline);
     setSaveError("");
     setConnectionError(false);
-    shopify.saveBar.hide(SAVE_BAR_ID);
   };
 
   const saveForm = () => {
@@ -503,6 +537,16 @@ function EmailTemplateEditor({
     dataAtSubmit.current = saveFetcher.data;
     awaitingSave.current = true;
     saveFetcher.submit(buildFormData("save"), { method: "post" });
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    saveForm();
+  };
+
+  const handleReset = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    discardChanges();
   };
 
   const sendTest = () => {
@@ -514,30 +558,55 @@ function EmailTemplateEditor({
   };
 
   const placeholders = [...FIELD_PLACEHOLDERS, meta.linkPlaceholder];
+  const subjectError = saveError.toLowerCase().includes("subject")
+    ? saveError
+    : "";
+  const bannerSaveError = subjectError ? "" : saveError;
+  const templateLabel =
+    form.bodyMode === "custom_html" ? "Custom HTML" : "Designed";
+
+  const placeholderChips = (
+    <s-stack gap="small-100">
+      <s-stack gap="none">
+        <s-text type="strong">Placeholders</s-text>
+        <s-paragraph color="subdued">
+          Click a placeholder to insert it into the message.
+        </s-paragraph>
+      </s-stack>
+      <s-stack direction="inline" gap="small-200">
+        {placeholders.map((ph) => (
+          <s-clickable-chip
+            key={ph}
+            accessibilityLabel={`Insert ${ph}`}
+            onClick={() => insertPlaceholder(ph)}
+          >
+            {ph}
+          </s-clickable-chip>
+        ))}
+      </s-stack>
+    </s-stack>
+  );
 
   return (
-    <s-page heading={meta.title}>
-      <s-link slot="breadcrumb-actions" href="/app/delivery">
-        Email
-      </s-link>
+    <form data-save-bar onSubmit={handleSubmit} onReset={handleReset}>
+      {/* Tracks dirty state for Quill and other React-controlled values. */}
+      <input
+        ref={dirtySignalRef}
+        type="hidden"
+        name="_templateDirty"
+        defaultValue={JSON.stringify(baseline)}
+        aria-hidden="true"
+      />
 
-      <ui-save-bar id={SAVE_BAR_ID}>
-        <button
-          variant="primary"
-          onClick={saveForm}
-          {...(saving ? { disabled: true, loading: true } : {})}
-        >
-          Save
-        </button>
-        <button
-          onClick={discardChanges}
-          {...(saving ? { disabled: true } : {})}
-        >
-          Discard
-        </button>
-      </ui-save-bar>
+      {/*
+        inlineSize defaults to "base" so the aside column renders.
+        Docs: aside is only rendered when inlineSize is "base" (not "large").
+      */}
+      <s-page heading={meta.title}>
+        <s-link slot="breadcrumb-actions" href="/app/delivery">
+          Email
+        </s-link>
 
-      <s-stack gap="base">
         {connectionError ? (
           <s-banner
             tone="critical"
@@ -548,54 +617,106 @@ function EmailTemplateEditor({
             Check your connection and try again.
           </s-banner>
         ) : null}
-        {saveError ? (
+        {bannerSaveError ? (
           <s-banner tone="critical" heading="Couldn't save">
-            {saveError}
+            {bannerSaveError}
           </s-banner>
         ) : null}
 
-        <s-section heading="Template">
-          <s-stack gap="base">
-            <s-text-field
-              label="Subject line"
-              name="subject"
-              value={form.subject}
-              disabled={saving || undefined}
-              onInput={(event: Event) => patch("subject", fieldValue(event))}
-              onChange={(event: Event) => patch("subject", fieldValue(event))}
-            />
+        <s-section heading="Email template">
+          <s-choice-list
+            label="Which template is sent?"
+            name="bodyMode"
+            values={[form.bodyMode]}
+            disabled={saving || undefined}
+            onChange={(event: Event) => {
+              const values = (
+                event.currentTarget as unknown as { values?: string[] }
+              ).values;
+              patch(
+                "bodyMode",
+                values?.[0] === "custom_html" ? "custom_html" : "designed",
+              );
+            }}
+          >
+            <s-choice value="designed">
+              Designed
+              <s-text slot="details">
+                Write the message and we wrap it in your branded layout.
+              </s-text>
+            </s-choice>
+            <s-choice value="custom_html">
+              Custom HTML
+              <s-text slot="details">
+                Write the full email in HTML. Full HTML documents skip the
+                branded wrapper.
+              </s-text>
+            </s-choice>
+          </s-choice-list>
+        </s-section>
 
-            <s-stack gap="small">
-              <s-text type="strong">Placeholders</s-text>
-              <s-stack direction="inline" gap="small">
-                {placeholders.map((ph) => (
-                  <s-clickable-chip
-                    key={ph}
-                    accessibilityLabel={`Insert ${ph}`}
-                    onClick={() => insertPlaceholder(ph)}
-                  >
-                    {ph}
-                  </s-clickable-chip>
-                ))}
-              </s-stack>
-            </s-stack>
+        {form.bodyMode === "designed" ? (
+          <s-section heading="Message">
+            <s-stack gap="base">
+              <s-text-field
+                label="Subject"
+                name="subject"
+                value={form.subject}
+                error={subjectError || undefined}
+                disabled={saving || undefined}
+                onInput={(event: Event) => patch("subject", fieldValue(event))}
+                onChange={(event: Event) => patch("subject", fieldValue(event))}
+              />
 
-            {form.bodyMode === "designed" ? (
+              {placeholderChips}
+
               <EmailBodyRichTextEditor
                 ref={richTextRef}
                 label="Message"
                 value={form.body}
                 disabled={saving}
-                details="Rich text inside your branded email layout. Use placeholder chips above to insert fields."
                 onChange={(html) => patch("body", html)}
               />
-            ) : (
+
+              <s-checkbox
+                label='Show "View document" button'
+                details="Appears when a secure link is available. Links expire after 30 days."
+                checked={form.showViewButton}
+                disabled={saving || undefined}
+                onChange={(event: Event) => {
+                  patch(
+                    "showViewButton",
+                    Boolean((event.currentTarget as HTMLInputElement).checked),
+                  );
+                }}
+              />
+            </s-stack>
+          </s-section>
+        ) : (
+          <s-section heading="Custom HTML">
+            <s-stack gap="base">
+              <s-banner tone="warning" heading="Your HTML is sent as written">
+                Full HTML documents are sent without the branded wrapper. Add{" "}
+                {meta.linkPlaceholder} yourself if you want a document link.
+              </s-banner>
+
+              <s-text-field
+                label="Subject"
+                name="subject"
+                value={form.subject}
+                error={subjectError || undefined}
+                disabled={saving || undefined}
+                onInput={(event: Event) => patch("subject", fieldValue(event))}
+                onChange={(event: Event) => patch("subject", fieldValue(event))}
+              />
+
+              {placeholderChips}
+
               <s-text-area
-                label="Custom HTML"
+                label="HTML"
                 name="bodyCustom"
                 value={form.bodyCustom}
                 rows={14}
-                details="Write your own HTML with {{placeholders}}. A full <html> document skips the branded wrapper."
                 disabled={saving || undefined}
                 onInput={(event: Event) =>
                   patch("bodyCustom", fieldValue(event))
@@ -604,122 +725,69 @@ function EmailTemplateEditor({
                   patch("bodyCustom", fieldValue(event))
                 }
               />
-            )}
+            </s-stack>
+          </s-section>
+        )}
 
-            <s-checkbox
-              label='Show "View document" button when a secure link is available'
-              checked={form.showViewButton}
-              disabled={saving || undefined}
-              onChange={(event: Event) => {
-                patch(
-                  "showViewButton",
-                  Boolean((event.currentTarget as HTMLInputElement).checked),
-                );
-              }}
-            />
-
-            <s-paragraph color="subdued">
-              Secure link placeholders: view · print · download · 30-day expiry.
-            </s-paragraph>
-
-            <details>
-              <summary>Advanced</summary>
-              <s-box paddingBlockStart="base">
-                <s-choice-list
-                  label="Which template is sent?"
-                  name="bodyMode"
-                  values={[form.bodyMode]}
-                  onChange={(event: Event) => {
-                    const values = (
-                      event.currentTarget as unknown as { values?: string[] }
-                    ).values;
-                    patch(
-                      "bodyMode",
-                      values?.[0] === "custom_html"
-                        ? "custom_html"
-                        : "designed",
-                    );
+        <s-section slot="aside" heading="Live preview">
+          <s-stack gap="base">
+            <s-badge>{templateLabel}</s-badge>
+            <s-box
+              padding="none"
+              background="subdued"
+              borderRadius="base"
+              borderWidth="base"
+              overflow="hidden"
+            >
+              {previewHtml ? (
+                <iframe
+                  title="Email preview"
+                  srcDoc={previewHtml}
+                  sandbox=""
+                  style={{
+                    width: "100%",
+                    minHeight: "360px",
+                    border: "0",
+                    display: "block",
                   }}
-                >
-                  <s-choice value="designed">
-                    Designed: rich-text message wrapped in your branded layout
-                  </s-choice>
-                  <s-choice value="custom_html">
-                    Custom HTML: your own HTML. Full HTML documents skip the
-                    branded wrapper.
-                  </s-choice>
-                </s-choice-list>
-              </s-box>
-            </details>
+                />
+              ) : (
+                <s-box padding="base">
+                  <s-text>
+                    {previewing ? "Loading preview…" : "Preview unavailable"}
+                  </s-text>
+                </s-box>
+              )}
+            </s-box>
           </s-stack>
         </s-section>
-      </s-stack>
 
-      <s-section
-        slot="aside"
-        heading="Live preview"
-        subheading="Sample data. Updates as you edit."
-      >
-        <s-stack gap="base">
-          {testError ? (
-            <s-banner tone="critical" heading="Test email failed">
-              {testError}
-            </s-banner>
-          ) : null}
-
-          <s-box
-            padding="none"
-            border="base"
-            borderRadius="base"
-            overflow="hidden"
-            background="base"
-          >
-            {previewHtml ? (
-              <iframe
-                title="Email preview"
-                srcDoc={previewHtml}
-                sandbox=""
-                style={{
-                  width: "100%",
-                  minHeight: "360px",
-                  border: "0",
-                  display: "block",
-                }}
-              />
-            ) : (
-              <s-box padding="base">
-                <s-text>
-                  {previewing ? "Loading preview…" : "Preview unavailable"}
-                </s-text>
-              </s-box>
-            )}
-          </s-box>
-
-          <s-paragraph color="subdued">
-            Uses current edits · no PDF · not saved until you click Save
-          </s-paragraph>
-
-          <s-text-field
-            label="Test recipient"
-            name="testTo"
-            value={testTo}
-            placeholder="you@store.com"
-            disabled={!emailConfigured || testing || undefined}
-            onInput={(event: Event) => setTestTo(fieldValue(event))}
-            onChange={(event: Event) => setTestTo(fieldValue(event))}
-          />
-          <s-button
-            variant="secondary"
-            onClick={sendTest}
-            {...(testing || !emailConfigured
-              ? { loading: testing || undefined, disabled: true }
-              : {})}
-          >
-            Send test
-          </s-button>
-        </s-stack>
-      </s-section>
-    </s-page>
+        <s-section slot="aside" heading="Send a test">
+          <s-stack gap="base">
+            <s-email-field
+              label="Test recipient"
+              value={testTo}
+              details="Sends your current edits without a PDF."
+              error={testError || undefined}
+              disabled={!emailConfigured || testing || undefined}
+              autocomplete="off"
+              onInput={(event: Event) => setTestTo(fieldValue(event))}
+              onChange={(event: Event) => setTestTo(fieldValue(event))}
+            />
+            <s-button
+              type="button"
+              variant="secondary"
+              onClick={sendTest}
+              {...(testing || !emailConfigured
+                ? { loading: testing || undefined, disabled: true }
+                : {})}
+            >
+              Send test
+            </s-button>
+          </s-stack>
+        </s-section>
+      </s-page>
+    </form>
   );
 }
 

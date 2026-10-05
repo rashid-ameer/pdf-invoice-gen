@@ -357,6 +357,7 @@ export default function EmailConfigPage() {
         slot="aside"
         heading="Sender"
         subheading="How your store appears in the inbox."
+        
       >
         <s-stack gap="base">
           <s-text-field

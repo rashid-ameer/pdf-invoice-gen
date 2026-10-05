@@ -90,6 +90,7 @@ describe("Email config page UI wiring", () => {
     assert.match(page, /EmailBodyRichTextEditor/);
     assert.match(page, /s-clickable-chip/);
     assert.match(page, /Live preview/);
+    assert.match(page, /Send a test/);
     assert.match(page, /Send test/);
     assert.match(page, /showViewButton/);
     assert.match(page, /Unknown template type/);
@@ -98,6 +99,12 @@ describe("Email config page UI wiring", () => {
     assert.match(page, /sendDocumentTestEmail/);
     assert.match(page, /insertPlaceholder/);
     assert.match(page, /Custom HTML/);
+    assert.match(page, /data-save-bar/);
+    assert.match(page, /Email template/);
+    assert.match(page, /Which template is sent\?/);
+    assert.match(page, /s-email-field/);
+    assert.doesNotMatch(page, /ui-save-bar/);
+    assert.doesNotMatch(page, /<details>/);
     assert.doesNotMatch(
       page,
       /bodyMode === "designed"[\s\S]*?<s-text-area[\s\S]*?label="Message"/,
