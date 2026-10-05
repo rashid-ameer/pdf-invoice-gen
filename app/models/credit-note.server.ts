@@ -469,6 +469,18 @@ export async function createCreditNoteFromRefund(
   }
 }
 
+/**
+ * Webhook entrypoint for refunds/create.
+ * Idempotent via CreditNote uniqueness on (storeId, shopifyRefundId) — no WebhookEvent.
+ */
+export async function handleRefundCreated(
+  shopDomain: string,
+  refund: ShopifyRefund,
+  _topic = "refunds/create",
+) {
+  return createCreditNoteFromRefund(shopDomain, refund, "webhook");
+}
+
 /** Test helper — parse stored JSON line items. */
 export function parseCreditNoteLineItems(note: CreditNote): InvoiceLineItem[] {
   return parseLineItems(note.lineItems);

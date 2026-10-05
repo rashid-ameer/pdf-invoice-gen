@@ -20,6 +20,9 @@ type Pages = {
   "/webhooks/app/uninstalled": {
     params: {};
   };
+  "/webhooks/refunds/create": {
+    params: {};
+  };
   "/webhooks/orders/create": {
     params: {};
   };
@@ -99,7 +102,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/packing-slips/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/packing-slips/:id" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/packing-slips/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/packing-slips/:id" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
   };
   "routes/webhooks.app.scopes_update.tsx": {
     id: "routes/webhooks.app.scopes_update";
@@ -108,6 +111,10 @@ type RouteFiles = {
   "routes/webhooks.app.uninstalled.tsx": {
     id: "routes/webhooks.app.uninstalled";
     page: "/webhooks/app/uninstalled";
+  };
+  "routes/webhooks.refunds.create.tsx": {
+    id: "routes/webhooks.refunds.create";
+    page: "/webhooks/refunds/create";
   };
   "routes/webhooks.orders.create.tsx": {
     id: "routes/webhooks.orders.create";
@@ -203,6 +210,7 @@ type RouteModules = {
   "root": typeof import("./app/root.tsx");
   "routes/webhooks.app.scopes_update": typeof import("./app/routes/webhooks.app.scopes_update.tsx");
   "routes/webhooks.app.uninstalled": typeof import("./app/routes/webhooks.app.uninstalled.tsx");
+  "routes/webhooks.refunds.create": typeof import("./app/routes/webhooks.refunds.create.tsx");
   "routes/webhooks.orders.create": typeof import("./app/routes/webhooks.orders.create.tsx");
   "routes/webhooks.orders.paid": typeof import("./app/routes/webhooks.orders.paid.tsx");
   "routes/_index": typeof import("./app/routes/_index/route.tsx");

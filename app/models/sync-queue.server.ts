@@ -1,4 +1,5 @@
 import { runSyncOrdersJob } from "./order-sync.server";
+import { runSyncRefundsJob } from "./refund-sync.server";
 
 /**
  * Sync enqueue modes.
@@ -18,6 +19,19 @@ export async function enqueueSyncOrders(
   // Intentionally not awaited — fire-and-forget (old parity without Redis).
   void runSyncOrdersJob(shopDomain).catch((error) => {
     console.error("[sync-queue] background order sync failed:", error);
+  });
+  return "background";
+}
+
+/**
+ * Enqueue refund sync without awaiting the full run in the HTTP request.
+ * Same fire-and-forget pattern as enqueueSyncOrders (no Redis/BullMQ).
+ */
+export async function enqueueSyncRefunds(
+  shopDomain: string,
+): Promise<SyncEnqueueMode> {
+  void runSyncRefundsJob(shopDomain).catch((error) => {
+    console.error("[sync-queue] background refund sync failed:", error);
   });
   return "background";
 }

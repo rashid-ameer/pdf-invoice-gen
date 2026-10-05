@@ -44,7 +44,8 @@ async function defaultDeps(): Promise<WebhookRegisterDeps> {
  * Shopify app helper (reads topics/URIs from shopify.app.toml).
  *
  * Does NOT register the old monolithic `/webhooks/shopify` endpoint.
- * Topics: app/uninstalled, app/scopes_update, orders/create, orders/paid.
+ * Topics: app/uninstalled, app/scopes_update, orders/create, orders/paid,
+ * refunds/create (when present in shopify.app.toml).
  */
 export async function reregisterWebhooksForShop(
   shopDomain: string,
@@ -88,7 +89,7 @@ export async function reregisterWebhooksForShop(
       needsReauth: false,
       failures: [],
       message:
-        "Webhooks registered (orders/create, orders/paid, app/uninstalled, app/scopes_update).",
+        "Webhooks registered (orders/create, orders/paid, refunds/create, app/uninstalled, app/scopes_update).",
     };
   } catch (error) {
     console.error("[webhooks] re-register error:", error);

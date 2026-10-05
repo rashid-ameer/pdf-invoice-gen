@@ -1,4 +1,5 @@
 import type { ShopifyOrder } from "./invoice-create.server";
+import type { ShopifyRefund } from "./credit-note.server";
 import { getOfflineAccessTokenForShop } from "./shopify-offline-session.server";
 
 type MoneySet = {
@@ -35,6 +36,34 @@ type GqlLineItem = {
   taxLines?: Array<{ rate?: number | null; priceSet?: MoneySet } | null> | null;
 };
 
+type GqlRefund = {
+  id?: string | null;
+  createdAt?: string | null;
+  note?: string | null;
+  refundLineItems?: {
+    nodes?: Array<{
+      quantity?: number | null;
+      restockType?: string | null;
+      subtotalSet?: MoneySet;
+      totalTaxSet?: MoneySet;
+      lineItem?: GqlLineItem | null;
+    } | null> | null;
+  } | null;
+  transactions?: {
+    nodes?: Array<{
+      amountSet?: MoneySet;
+      status?: string | null;
+    } | null> | null;
+  } | null;
+  orderAdjustments?: {
+    nodes?: Array<{
+      amountSet?: MoneySet;
+      taxAmountSet?: MoneySet;
+      reason?: string | null;
+    } | null> | null;
+  } | null;
+};
+
 export type GraphqlOrder = {
   id?: string | null;
   legacyResourceId?: string | null;
@@ -66,6 +95,7 @@ export type GraphqlOrder = {
     nodes?: Array<{ title?: string | null; code?: string | null } | null> | null;
   } | null;
   lineItems?: { nodes?: Array<GqlLineItem | null> | null } | null;
+  refunds?: Array<GqlRefund | null> | null;
 };
 
 const ORDER_INVOICE_FIELDS = `
@@ -121,6 +151,51 @@ const ORDERS_SYNC_QUERY = `#graphql
   }
 `;
 
+const ORDER_BY_ID_WITH_REFUNDS_QUERY = `#graphql
+  query OrderByIdWithRefunds($id: ID!) {
+    order(id: $id) {
+      id
+      legacyResourceId
+      refunds {
+        id
+        createdAt
+        note
+        refundLineItems(first: 100) {
+          nodes {
+            quantity
+            restockType
+            subtotalSet { shopMoney { amount } }
+            totalTaxSet { shopMoney { amount } }
+            lineItem {
+              id
+              title
+              name
+              sku
+              quantity
+              variantTitle
+              originalUnitPriceSet { shopMoney { amount } }
+              taxLines { rate priceSet { shopMoney { amount } } }
+            }
+          }
+        }
+        transactions(first: 20) {
+          nodes {
+            amountSet { shopMoney { amount currencyCode } }
+            status
+          }
+        }
+        orderAdjustments(first: 20) {
+          nodes {
+            amountSet { shopMoney { amount } }
+            taxAmountSet { shopMoney { amount } }
+            reason
+          }
+        }
+      }
+    }
+  }
+`;
+
 export function numericIdFromGid(
   gidOrId: string | number | null | undefined,
 ): string {
@@ -128,6 +203,13 @@ export function numericIdFromGid(
   if (!raw) return "";
   if (raw.includes("/")) return raw.split("/").pop() || raw;
   return raw;
+}
+
+export function orderGid(id: string | number): string {
+  const raw = String(id || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("gid://")) return raw;
+  return `gid://shopify/Order/${raw}`;
 }
 
 function moneyAmount(set?: MoneySet): string {
@@ -243,6 +325,64 @@ export function mapGraphqlOrderToShopifyOrder(order: GraphqlOrder): ShopifyOrder
   };
 }
 
+/** Map GraphQL order.refunds → Phase 1 ShopifyRefund shape (old mapGraphqlRefunds). */
+export function mapGraphqlRefunds(order: GraphqlOrder): ShopifyRefund[] {
+  const orderId = Number(numericIdFromGid(order.legacyResourceId || order.id));
+  return (order.refunds ?? [])
+    .filter((refund): refund is GqlRefund => Boolean(refund?.id))
+    .map((refund) => {
+      const restock = (refund.refundLineItems?.nodes ?? []).some(
+        (item) => item?.restockType && item.restockType !== "NO_RESTOCK",
+      );
+      return {
+        id: Number(numericIdFromGid(refund.id)),
+        order_id: orderId,
+        created_at: refund.createdAt ?? undefined,
+        note: refund.note ?? null,
+        restock,
+        refund_line_items: (refund.refundLineItems?.nodes ?? [])
+          .filter((item): item is NonNullable<typeof item> => Boolean(item))
+          .map((item) => ({
+            quantity: item.quantity ?? 1,
+            subtotal: moneyAmount(item.subtotalSet),
+            total_tax: moneyAmount(item.totalTaxSet),
+            line_item_id: item.lineItem?.id
+              ? Number(numericIdFromGid(item.lineItem.id))
+              : undefined,
+            line_item: item.lineItem
+              ? {
+                  id: Number(numericIdFromGid(item.lineItem.id)),
+                  title: item.lineItem.title ?? undefined,
+                  name: item.lineItem.name ?? undefined,
+                  sku: item.lineItem.sku ?? null,
+                  quantity: item.lineItem.quantity ?? undefined,
+                  price: moneyAmount(item.lineItem.originalUnitPriceSet),
+                  variant_title: item.lineItem.variantTitle ?? null,
+                  tax_lines: (item.lineItem.taxLines ?? []).map((tax) => ({
+                    rate: tax?.rate ?? undefined,
+                    price: moneyAmount(tax?.priceSet),
+                  })),
+                }
+              : undefined,
+          })),
+        transactions: (refund.transactions?.nodes ?? [])
+          .filter((tx): tx is NonNullable<typeof tx> => Boolean(tx))
+          .map((tx) => ({
+            amount: moneyAmount(tx.amountSet),
+            currency: tx.amountSet?.shopMoney?.currencyCode ?? undefined,
+            status: tx.status ? String(tx.status).toLowerCase() : undefined,
+          })),
+        order_adjustments: (refund.orderAdjustments?.nodes ?? [])
+          .filter((adj): adj is NonNullable<typeof adj> => Boolean(adj))
+          .map((adj) => ({
+            amount: moneyAmount(adj.amountSet),
+            tax_amount: moneyAmount(adj.taxAmountSet),
+            reason: adj.reason ?? undefined,
+          })),
+      };
+    });
+}
+
 async function graphqlRequest<T>(
   shopDomain: string,
   accessToken: string,
@@ -297,4 +437,29 @@ export async function fetchRecentOrders(
   return (data.orders?.nodes ?? [])
     .filter((order): order is GraphqlOrder => Boolean(order?.id))
     .map(mapGraphqlOrderToShopifyOrder);
+}
+
+/**
+ * Fetch refunds for one order via Admin GraphQL (old fetchOrderRefunds).
+ * Returns Phase 1–compatible ShopifyRefund[] — no invoice create.
+ */
+export async function fetchOrderRefunds(
+  shopDomain: string,
+  shopifyOrderId: string,
+): Promise<ShopifyRefund[]> {
+  const accessToken = await getOfflineAccessTokenForShop(shopDomain);
+  if (!accessToken) {
+    throw new Error(
+      "Shopify session missing. Re-authorize the app from Shopify Admin.",
+    );
+  }
+
+  const data = await graphqlRequest<{ order?: GraphqlOrder | null }>(
+    shopDomain,
+    accessToken,
+    ORDER_BY_ID_WITH_REFUNDS_QUERY,
+    { id: orderGid(shopifyOrderId) },
+  );
+  if (!data.order?.id) return [];
+  return mapGraphqlRefunds(data.order);
 }
