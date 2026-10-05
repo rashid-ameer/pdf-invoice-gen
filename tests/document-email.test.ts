@@ -27,8 +27,11 @@ import {
 } from "../app/models/document-email.server";
 import {
   DEFAULT_INVOICE_EMAIL_BODY,
+  normalizeEmailBodyContent,
   normalizeEmailLayout,
+  normalizeQuillLists,
   renderBrandedEmail,
+  sanitizeEmailBodyHtml,
 } from "../app/models/email-template.server";
 import { pdfFilename } from "../app/models/pdf-cache.server";
 import {
@@ -484,6 +487,36 @@ describe("placeholders and CC", () => {
     assert.equal(normalizeEmailLayout("card"), "card");
     assert.equal(normalizeEmailLayout("classic"), "classic");
     assert.equal(normalizeEmailLayout("other"), "classic");
+  });
+});
+
+describe("designed body Quill HTML pipeline", () => {
+  it("keeps placeholders intact through sanitize/normalize", () => {
+    const html =
+      "<p>Hello {{customer_name}}, invoice {{invoice_number}} from {{shop_name}}.</p>";
+    const out = normalizeEmailBodyContent(html);
+    assert.match(out, /\{\{customer_name\}\}/);
+    assert.match(out, /\{\{invoice_number\}\}/);
+    assert.match(out, /\{\{shop_name\}\}/);
+  });
+
+  it("strips scripts and unsafe links like the old sanitizer", () => {
+    const dirty =
+      '<p>Hi</p><script>alert(1)</script><a href="javascript:alert(1)">x</a><a href="https://ok.example">ok</a>';
+    const out = sanitizeEmailBodyHtml(dirty);
+    assert.doesNotMatch(out, /<script/i);
+    assert.doesNotMatch(out, /javascript:/i);
+    assert.match(out, /https:\/\/ok\.example/);
+  });
+
+  it("converts Quill 2 bullet lists to email-safe ul", () => {
+    const quillOl =
+      '<ol><li data-list="bullet">One</li><li data-list="bullet">Two</li></ol>';
+    const out = normalizeQuillLists(quillOl);
+    assert.match(out, /<ul[\s>]/i);
+    assert.match(out, /list-style-type:disc/);
+    assert.match(out, /One/);
+    assert.match(out, /Two/);
   });
 });
 

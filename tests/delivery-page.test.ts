@@ -87,6 +87,7 @@ describe("Email config page UI wiring", () => {
     assert.match(page, /Tax invoice email/);
     assert.match(page, /Credit note email/);
     assert.match(page, /Refund document email/);
+    assert.match(page, /EmailBodyRichTextEditor/);
     assert.match(page, /s-clickable-chip/);
     assert.match(page, /Live preview/);
     assert.match(page, /Send test/);
@@ -95,6 +96,29 @@ describe("Email config page UI wiring", () => {
     assert.match(page, /breadcrumb-actions/);
     assert.match(page, /previewDocumentEmail/);
     assert.match(page, /sendDocumentTestEmail/);
+    assert.match(page, /insertPlaceholder/);
+    assert.match(page, /Custom HTML/);
+    assert.doesNotMatch(
+      page,
+      /bodyMode === "designed"[\s\S]*?<s-text-area[\s\S]*?label="Message"/,
+    );
+  });
+
+  it("uses Quill 2 snow toolbar matching the old Delivery editor", () => {
+    const editor = readFileSync(
+      join(process.cwd(), "app/components/email-body-rich-text-editor.tsx"),
+      "utf8",
+    );
+    assert.match(editor, /from "quill"/);
+    assert.match(editor, /quill\.snow\.css/);
+    assert.match(editor, /\["bold", "italic", "underline"\]/);
+    assert.match(editor, /\["link"\]/);
+    assert.match(editor, /list: "ordered"/);
+    assert.match(editor, /list: "bullet"/);
+    assert.match(editor, /align: \[\]/);
+    assert.match(editor, /dangerouslyPasteHTML/);
+    assert.match(editor, /insertText/);
+    assert.doesNotMatch(editor, /image/);
   });
 
   it("moves email layout to Branding page", () => {

@@ -14,6 +14,10 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import {
+  EmailBodyRichTextEditor,
+  type EmailBodyRichTextEditorHandle,
+} from "../components/email-body-rich-text-editor";
+import {
   getDeliverySettings,
   isEmailProviderConfigured,
   normalizeDeliverySettings,
@@ -362,6 +366,7 @@ function EmailTemplateEditor({
   const [saveError, setSaveError] = useState("");
   const [testError, setTestError] = useState("");
   const [testTo, setTestTo] = useState(() => serverSettings.replyTo || "");
+  const richTextRef = useRef<EmailBodyRichTextEditorHandle | null>(null);
 
   const awaitingSave = useRef(false);
   const dataAtSubmit = useRef(saveFetcher.data);
@@ -454,9 +459,9 @@ function EmailTemplateEditor({
   const insertPlaceholder = (placeholder: string) => {
     if (form.bodyMode === "custom_html") {
       patch("bodyCustom", appendPlaceholder(form.bodyCustom, placeholder));
-    } else {
-      patch("body", appendPlaceholder(form.body, placeholder));
+      return;
     }
+    richTextRef.current?.insertPlaceholder(placeholder);
   };
 
   const buildFormData = (intent: string) => {
@@ -576,15 +581,13 @@ function EmailTemplateEditor({
             </s-stack>
 
             {form.bodyMode === "designed" ? (
-              <s-text-area
+              <EmailBodyRichTextEditor
+                ref={richTextRef}
                 label="Message"
-                name="body"
                 value={form.body}
-                rows={10}
-                details="HTML inside your branded email layout. Use placeholder chips above to insert fields."
-                disabled={saving || undefined}
-                onInput={(event: Event) => patch("body", fieldValue(event))}
-                onChange={(event: Event) => patch("body", fieldValue(event))}
+                disabled={saving}
+                details="Rich text inside your branded email layout. Use placeholder chips above to insert fields."
+                onChange={(html) => patch("body", html)}
               />
             ) : (
               <s-text-area
