@@ -159,6 +159,12 @@ describe("Invoices page wiring", () => {
     assert.match(source, /Print selected/);
     assert.match(source, /Send email/);
     assert.match(source, /disabled/);
+    assert.match(source, /isInvoicesListPath/);
+    assert.match(source, /navigation\.location/);
+    assert.doesNotMatch(
+      source,
+      /const loading = navigation\.state === "loading";/,
+    );
     assert.doesNotMatch(source, /packing.?slip|credit.?note|QR code|public link/i);
     assert.doesNotMatch(source, /white-space:\s*nowrap|@media/);
   });

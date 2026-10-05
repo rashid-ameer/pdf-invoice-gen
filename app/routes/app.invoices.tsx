@@ -38,6 +38,11 @@ import {
 } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
+/** List route only — not invoice details. */
+function isInvoicesListPath(pathname: string): boolean {
+  return /^\/app\/invoices\/?$/.test(pathname);
+}
+
 /** Filters: stacked (small) → 2 cols (medium) → single row (large).
  * Larger breakpoints must come last so they win when multiple queries match.
  */
@@ -143,7 +148,11 @@ export default function InvoicesPage() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
-  const loading = navigation.state === "loading";
+  // Table spinner only for list query changes — not when leaving to details.
+  const loading =
+    navigation.state === "loading" &&
+    navigation.location != null &&
+    isInvoicesListPath(navigation.location.pathname);
   const syncBusy = syncFetcher.state !== "idle";
   const webhookBusy = webhookFetcher.state !== "idle";
 

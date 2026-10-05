@@ -291,6 +291,12 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /fetchAndPrintRefundDocument/);
     assert.match(page, /downloadRefundDocumentPdf/);
     assert.match(page, /Download PDF/);
+    assert.match(page, /isCreditNotesListPath/);
+    assert.match(page, /navigation\.location/);
+    assert.doesNotMatch(
+      page,
+      /const loading = navigation\.state === "loading";/,
+    );
     assert.doesNotMatch(page, /numberColumnLabel|>\s*Reference\s*</);
     assert.doesNotMatch(page, /DOCUMENT_PAGE_SIZE_OPTIONS|Per page|Items per page/);
     assert.doesNotMatch(page, /buyerEmail/);

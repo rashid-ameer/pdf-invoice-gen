@@ -45,6 +45,11 @@ import { authenticate } from "../shopify.server";
  * packing-slip G5/G7 routes (default packing_slip template; no bulk PDF).
  */
 
+/** List route only — not packing-slip details. */
+function isPackingSlipsListPath(pathname: string): boolean {
+  return /^\/app\/packing-slips\/?$/.test(pathname);
+}
+
 /** Filters: stacked (small) → 2 cols (medium) → single row (large).
  * Larger breakpoints must come last so they win when multiple queries match.
  */
@@ -150,7 +155,11 @@ export default function PackingSlipsPage() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
-  const loading = navigation.state === "loading";
+  // Table spinner only for list query changes — not when leaving to details.
+  const loading =
+    navigation.state === "loading" &&
+    navigation.location != null &&
+    isPackingSlipsListPath(navigation.location.pathname);
   const syncBusy = syncFetcher.state !== "idle";
   const webhookBusy = webhookFetcher.state !== "idle";
 

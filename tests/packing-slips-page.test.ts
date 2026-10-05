@@ -172,6 +172,12 @@ describe("packing slips Phase 1 — list + CSV", () => {
     assert.match(packingSrc, /fetchAndPrintPackingSlipDocument/);
     assert.match(packingSrc, /fetchAndPrintPackingSlipDocuments/);
     assert.match(packingSrc, /Print selected/);
+    assert.match(packingSrc, /isPackingSlipsListPath/);
+    assert.match(packingSrc, /navigation\.location/);
+    assert.doesNotMatch(
+      packingSrc,
+      /const loading = navigation\.state === "loading";/,
+    );
     assert.doesNotMatch(packingSrc, /Download selected/);
     assert.doesNotMatch(packingSrc, />\s*Copy\s*</);
     assert.doesNotMatch(packingSrc, />\s*Send email\s*</);

@@ -53,6 +53,11 @@ import { authenticate } from "../shopify.server";
  */
 const BULK_PRINT_LIMIT = 50;
 
+/** List route only — not credit-note / refund details. */
+function isCreditNotesListPath(pathname: string): boolean {
+  return /^\/app\/credit-notes\/?$/.test(pathname);
+}
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const url = new URL(request.url);
@@ -143,7 +148,11 @@ export default function CreditNotesPage() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
-  const loading = navigation.state === "loading";
+  // Table spinner only for list query changes — not when leaving to details.
+  const loading =
+    navigation.state === "loading" &&
+    navigation.location != null &&
+    isCreditNotesListPath(navigation.location.pathname);
   const syncBusy = syncFetcher.state !== "idle";
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
