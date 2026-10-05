@@ -311,37 +311,27 @@ export default function PackingSlipDetailsPage() {
         </s-stack>
       </s-section>
 
-      <s-section slot="aside" heading="Customer">
+      <s-section slot="aside" heading="Summary">
         {sideLoading ? (
           <s-stack gap="small" alignItems="start">
-            <s-spinner accessibilityLabel="Loading customer" />
-          </s-stack>
-        ) : (
-          <s-text>{packingSlip.buyerName}</s-text>
-        )}
-      </s-section>
-
-      <s-section slot="aside" heading="Order">
-        {sideLoading ? (
-          <s-stack gap="small" alignItems="start">
-            <s-spinner accessibilityLabel="Loading order" />
-          </s-stack>
-        ) : packingSlip.orderAdminUrl ? (
-          <s-link href={packingSlip.orderAdminUrl} target="_blank">
-            {packingSlip.shopifyOrderNumber}
-          </s-link>
-        ) : (
-          <s-text>{packingSlip.shopifyOrderNumber}</s-text>
-        )}
-      </s-section>
-
-      <s-section slot="aside" heading="Details">
-        {sideLoading ? (
-          <s-stack gap="small" alignItems="start">
-            <s-spinner accessibilityLabel="Loading details" />
+            <s-spinner accessibilityLabel="Loading summary" />
           </s-stack>
         ) : (
           <s-stack gap="small">
+            <s-stack gap="none">
+              <s-text color="subdued">Customer</s-text>
+              <s-text>{packingSlip.buyerName}</s-text>
+            </s-stack>
+            <s-stack gap="none">
+              <s-text color="subdued">Order</s-text>
+              {packingSlip.orderAdminUrl ? (
+                <s-link href={packingSlip.orderAdminUrl} target="_blank">
+                  {packingSlip.shopifyOrderNumber}
+                </s-link>
+              ) : (
+                <s-text>{packingSlip.shopifyOrderNumber}</s-text>
+              )}
+            </s-stack>
             <s-stack gap="none">
               <s-text color="subdued">Invoice date</s-text>
               <s-text>{formatIssueDate(packingSlip.issueDateIso)}</s-text>

@@ -32,7 +32,10 @@ import {
 } from "../utils/invoice-status-badges";
 import { hasActiveInvoiceUiFilters } from "../utils/invoice-ui-filters";
 import { downloadPackingSlipPdf } from "../utils/download-packing-slip-pdf";
-import { fetchAndPrintPackingSlipDocument } from "../utils/print-invoice-document";
+import {
+  fetchAndPrintPackingSlipDocument,
+  fetchAndPrintPackingSlipDocuments,
+} from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
 /**
@@ -152,6 +155,7 @@ export default function PackingSlipsPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchDraft, setSearchDraft] = useState(data.query.q);
+  const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -321,6 +325,15 @@ export default function PackingSlipsPage() {
     }
   };
 
+  const printSelected = () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0 || printSelectedBusy) return;
+    setPrintSelectedBusy(true);
+    void fetchAndPrintPackingSlipDocuments(ids).finally(() => {
+      setPrintSelectedBusy(false);
+    });
+  };
+
   return (
     <s-page heading="Packing slips" inlineSize="large">
       <s-button
@@ -394,6 +407,14 @@ export default function PackingSlipsPage() {
                   justifyContent="space-between"
                 >
                   <s-text type="strong">{selectedIds.size} selected</s-text>
+                  <s-button
+                    onClick={printSelected}
+                    {...(printSelectedBusy
+                      ? { loading: true, disabled: true }
+                      : {})}
+                  >
+                    Print selected
+                  </s-button>
                 </s-stack>
               </s-box>
             ) : (
@@ -474,13 +495,12 @@ export default function PackingSlipsPage() {
                         );
                       }}
                     />
-                    <s-text>Invoice</s-text>
+                    <s-text>Order</s-text>
                   </s-grid>
                 ) : (
-                  <s-text>Invoice</s-text>
+                  <s-text>Order</s-text>
                 )}
               </s-table-header>
-              <s-table-header listSlot="labeled">Order</s-table-header>
               <s-table-header listSlot="labeled">Customer</s-table-header>
               <s-table-header listSlot="labeled">Date</s-table-header>
               <s-table-header listSlot="labeled" format="currency">
@@ -515,6 +535,8 @@ export default function PackingSlipsPage() {
                 data.items.map((invoice: InvoiceListItem) => {
                   const checkboxId = `packing-select-${invoice.id}`;
                   const menuId = `packing-actions-${invoice.id}`;
+                  const orderLabel =
+                    invoice.shopifyOrderNumber || invoice.invoiceNumber;
                   const paymentLabel = formatPaymentStatus(
                     invoice.financialStatus,
                   );
@@ -529,7 +551,7 @@ export default function PackingSlipsPage() {
                           <s-checkbox
                             id={checkboxId}
                             checked={selectedIds.has(invoice.id)}
-                            accessibilityLabel={`Select ${invoice.invoiceNumber}`}
+                            accessibilityLabel={`Select ${orderLabel}`}
                             onChange={(event: Event) => {
                               toggleRow(
                                 invoice.id,
@@ -538,10 +560,9 @@ export default function PackingSlipsPage() {
                               );
                             }}
                           />
-                          <s-text>{invoice.invoiceNumber}</s-text>
+                          <s-text>{invoice.shopifyOrderNumber}</s-text>
                         </s-grid>
                       </s-table-cell>
-                      <s-table-cell>{invoice.shopifyOrderNumber}</s-table-cell>
                       <s-table-cell>{invoice.buyerName}</s-table-cell>
                       <s-table-cell>
                         {formatIssueDate(invoice.issueDate)}
@@ -571,12 +592,12 @@ export default function PackingSlipsPage() {
                         <s-button
                           icon="menu-horizontal"
                           variant="tertiary"
-                          accessibilityLabel={`More actions for ${invoice.invoiceNumber}`}
+                          accessibilityLabel={`More actions for ${orderLabel}`}
                           commandFor={menuId}
                         />
                         <s-menu
                           id={menuId}
-                          accessibilityLabel={`Actions for ${invoice.invoiceNumber}`}
+                          accessibilityLabel={`Actions for ${orderLabel}`}
                         >
                           <s-button
                             icon="view"

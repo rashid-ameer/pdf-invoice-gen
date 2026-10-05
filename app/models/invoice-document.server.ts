@@ -296,6 +296,59 @@ export async function renderPackingSlipDocumentPdf(
   return { pdf, doc };
 }
 
+export async function renderPackingSlipsBulk(
+  shopDomain: string,
+  invoiceIds: string[],
+  templateId?: string,
+): Promise<{
+  html: string;
+  count: number;
+  invoiceNumbers: string[];
+  templateId: string;
+  templateName: string;
+  templateCode: string;
+} | null> {
+  const uniqueIds = [
+    ...new Set(invoiceIds.map((id) => String(id).trim()).filter(Boolean)),
+  ].slice(0, BULK_INVOICE_LIMIT);
+  if (uniqueIds.length === 0) return null;
+
+  const rendered = await mapWithConcurrency(
+    uniqueIds,
+    BULK_RENDER_CONCURRENCY,
+    (id) => renderPackingSlipDocument(shopDomain, id, templateId),
+  );
+
+  const docs: Array<{ html: string; invoiceNumber: string }> = [];
+  let templateMeta: {
+    templateId: string;
+    templateName: string;
+    templateCode: string;
+  } | null = null;
+
+  for (const doc of rendered) {
+    if (!doc) continue;
+    docs.push({ html: doc.html, invoiceNumber: doc.invoiceNumber });
+    templateMeta = {
+      templateId: doc.templateId,
+      templateName: doc.templateName,
+      templateCode: doc.templateCode,
+    };
+  }
+
+  if (!docs.length || !templateMeta) return null;
+
+  return {
+    html: mergeDocumentHtml(
+      docs.map((d) => d.html),
+      "Packing Slips",
+    ),
+    count: docs.length,
+    invoiceNumbers: docs.map((d) => d.invoiceNumber),
+    ...templateMeta,
+  };
+}
+
 export async function renderInvoicesBulk(
   shopDomain: string,
   invoiceIds: string[],

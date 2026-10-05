@@ -11,6 +11,8 @@ import {
   recordPackingSlipDownload,
   renderPackingSlipDocument,
   renderPackingSlipDocumentPdf,
+  renderPackingSlipsBulk,
+  BULK_INVOICE_LIMIT,
 } from "../app/models/invoice-document.server";
 import { ensureSystemTemplates } from "../app/models/template.server";
 import { pdfDownloadResponse } from "../app/utils/document-response.server";
@@ -230,6 +232,73 @@ describe("packing slip PDF filename", () => {
   });
 });
 
+describe("renderPackingSlipsBulk", () => {
+  it("merges packing slips for print and skips missing ids", async () => {
+    const a = await seedStoreWithInvoice({ shopifyOrderNumber: "#B1" });
+    const b = await prisma.invoice.create({
+      data: {
+        merchantId: a.merchant.id,
+        storeId: a.store.id,
+        legalEntityId: a.merchant.id,
+        shopifyOrderId: String(Math.floor(Math.random() * 1e9)),
+        shopifyOrderNumber: "#B2",
+        invoiceNumber: `INV-PS-B-${randomUUID().slice(0, 6)}`,
+        status: "generated",
+        financialStatus: "paid",
+        issueDate: new Date("2024-06-16T10:00:00Z"),
+        currency: "AED",
+        seller: { legalName: "Acme LLC" },
+        buyer: { name: "Buyer 2", email: "b2@example.com" },
+        shippingAddress: { line1: "Dock 2", city: "Dubai", country: "AE" },
+        lineItems: [
+          {
+            description: "Item",
+            quantity: 1,
+            unitPrice: 10,
+            discount: 0,
+            vatRate: 5,
+            vatAmount: 0.5,
+            lineTotal: 10.5,
+          },
+        ],
+        totals: {
+          subtotal: 10,
+          discount: 0,
+          vatTotal: 0.5,
+          shipping: 0,
+          grandTotal: 10.5,
+        },
+        mode: "standard",
+      },
+    });
+
+    const bulk = await renderPackingSlipsBulk(a.store.shopifyDomain, [
+      a.invoice.id,
+      "missing-id",
+      b.id,
+    ]);
+    assert.ok(bulk);
+    assert.equal(bulk!.count, 2);
+    assert.match(bulk!.html, /doc-page/);
+    assert.match(bulk!.html, /PACKING SLIP/i);
+    assert.doesNotMatch(bulk!.html, /Grand Total|Total due/i);
+    assert.equal(BULK_INVOICE_LIMIT, 50);
+  });
+
+  it("bulk route is preview/print HTML only (no download recording)", () => {
+    const src = readFileSync(
+      join(process.cwd(), "app/routes/app.packing-slips_.bulk.tsx"),
+      "utf8",
+    );
+    assert.match(src, /renderPackingSlipsBulk/);
+    assert.match(src, /mode=preview/);
+    assert.match(src, /Select at least one order/);
+    assert.match(src, /You can print up to 50 packing slips at once/);
+    assert.doesNotMatch(src, /recordPackingSlipDownload/);
+    assert.doesNotMatch(src, /pdfDownloadResponse|mode === "download"/);
+  });
+});
+
 describe("packing slip routes wiring", () => {
   it("view route does not record download; download route records", () => {
     const viewSrc = readFileSync(
@@ -261,13 +330,15 @@ describe("packing slip routes wiring", () => {
     );
     assert.match(src, /\/app\/packing-slips\/\$\{/);
     assert.match(src, /fetchAndPrintPackingSlipDocument/);
+    assert.match(src, /fetchAndPrintPackingSlipDocuments/);
     assert.match(src, /downloadPackingSlipPdf/);
     assert.match(src, />\s*View\s*</);
     assert.match(src, />\s*Print\s*</);
     assert.match(src, />\s*Download\s*</);
+    assert.match(src, /Print selected/);
+    assert.doesNotMatch(src, /Download selected/);
     assert.doesNotMatch(src, />\s*Copy\s*</);
     assert.doesNotMatch(src, />\s*Send email\s*</);
-    assert.doesNotMatch(src, /Print selected/);
     assert.doesNotMatch(src, /templateId|template picker/i);
   });
 });
@@ -293,12 +364,15 @@ describe("packing slip details page", () => {
     assert.match(source, /printInvoiceHtml/);
     assert.match(source, /downloadPackingSlipPdf/);
     assert.match(source, /heading="Packing slip"/);
-    assert.match(source, /heading="Customer"/);
-    assert.match(source, /heading="Order"/);
-    assert.match(source, /heading="Details"/);
+    assert.match(source, /heading="Summary"/);
+    assert.match(source, /Customer/);
+    assert.match(source, /Order/);
     assert.match(source, /Payment status/);
     assert.match(source, /Invoice date/);
     assert.match(source, /Total/);
+    assert.doesNotMatch(source, /heading="Customer"/);
+    assert.doesNotMatch(source, /heading="Order"/);
+    assert.doesNotMatch(source, /heading="Details"/);
     assert.match(source, /srcDoc=\{previewHtml\}/);
     assert.match(source, /Packing slip not found/);
     assert.match(source, /Back to Packing slips/);

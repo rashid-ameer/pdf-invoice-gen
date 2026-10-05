@@ -220,14 +220,29 @@ export async function fetchAndPrintInvoiceDocuments(
 }
 
 /**
- * Fetch packing-slip embed HTML (view?embed=1) and print via a dedicated tab.
- * Does not record packing_slip_downloaded (view path).
+ * Fetch packing-slip embed HTML and print via a dedicated tab.
+ * Single: view?embed=1. Bulk: /app/packing-slips/bulk?mode=preview&embed=1.
+ * Does not record packing_slip_downloaded.
  */
 export async function fetchAndPrintPackingSlipDocument(
   invoiceId: string,
 ): Promise<void> {
   const id = String(invoiceId ?? "").trim();
   if (!id) return;
+  await fetchAndPrintPackingSlipDocuments([id]);
+}
+
+/**
+ * Bulk packing-slip print. Dedicated print tab only — never injects HTML into
+ * the Packing Slips page. Always pass mode=preview&embed=1 for HTML.
+ */
+export async function fetchAndPrintPackingSlipDocuments(
+  invoiceIds: string[],
+): Promise<void> {
+  const ids = [
+    ...new Set(invoiceIds.map((id) => String(id ?? "").trim()).filter(Boolean)),
+  ];
+  if (ids.length === 0) return;
 
   const tab = window.open("about:blank", "_blank");
   if (!tab) return;
@@ -235,11 +250,15 @@ export async function fetchAndPrintPackingSlipDocument(
   try {
     writeTabMessage(
       tab,
-      "Preparing packing slip…",
-      "Preparing packing slip for print…",
+      "Preparing packing slips…",
+      "Preparing packing slips for print…",
     );
 
-    const url = `/app/invoices/${encodeURIComponent(id)}/packing-slip/view?embed=1`;
+    const url =
+      ids.length === 1
+        ? `/app/invoices/${encodeURIComponent(ids[0])}/packing-slip/view?embed=1`
+        : `/app/packing-slips/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=preview&embed=1`;
+
     const response = await fetch(url, {
       credentials: "same-origin",
       headers: { Accept: "text/html" },
@@ -248,7 +267,7 @@ export async function fetchAndPrintPackingSlipDocument(
       writeTabMessage(
         tab,
         "Print failed",
-        `Could not prepare packing slip (HTTP ${response.status}).`,
+        `Could not prepare packing slips (HTTP ${response.status}).`,
       );
       return;
     }
@@ -278,7 +297,7 @@ export async function fetchAndPrintPackingSlipDocument(
     writeTabMessage(
       tab,
       "Print failed",
-      "Could not prepare packing slip. Check your connection and try again.",
+      "Could not prepare packing slips. Check your connection and try again.",
     );
   }
 }

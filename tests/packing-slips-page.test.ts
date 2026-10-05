@@ -151,11 +151,16 @@ describe("packing slips Phase 1 — list + CSV", () => {
     assert.match(packingSrc, /\/app\/packing-slips\/export\/csv/);
     assert.match(packingSrc, /No packing slips yet/);
     assert.match(packingSrc, /No packing slips found/);
+    // Order is primary; no Invoice table column
+    assert.match(packingSrc, /<s-text>Order<\/s-text>/);
+    assert.doesNotMatch(packingSrc, /<s-text>Invoice<\/s-text>/);
     // Phase 2/3: View opens details; Print / Download on list
     assert.match(packingSrc, /\/app\/packing-slips\/\$\{/);
     assert.match(packingSrc, /downloadPackingSlipPdf/);
     assert.match(packingSrc, /fetchAndPrintPackingSlipDocument/);
-    assert.doesNotMatch(packingSrc, /Print selected/);
+    assert.match(packingSrc, /fetchAndPrintPackingSlipDocuments/);
+    assert.match(packingSrc, /Print selected/);
+    assert.doesNotMatch(packingSrc, /Download selected/);
     assert.doesNotMatch(packingSrc, />\s*Copy\s*</);
     assert.doesNotMatch(packingSrc, />\s*Send email\s*</);
 
