@@ -147,7 +147,33 @@ describe("document numbering", () => {
         },
       },
     });
-    await prisma.creditNote.create({ data: { storeId: store.id } });
+    const invoice = await prisma.invoice.findFirst({
+      where: { storeId: store.id },
+    });
+    assert.ok(invoice);
+    await prisma.creditNote.create({
+      data: {
+        merchantId: merchant.id,
+        storeId: store.id,
+        invoiceId: invoice!.id,
+        shopifyRefundId: `refund-${randomUUID()}`,
+        shopifyOrderId: invoice!.shopifyOrderId,
+        creditNoteNumber: "CN-00001",
+        status: "generated",
+        issueDate: new Date(),
+        currency: "AED",
+        seller: invoice!.seller as object,
+        buyer: invoice!.buyer as object,
+        lineItems: [],
+        totals: {
+          subtotal: 0,
+          discount: 0,
+          vatTotal: 0,
+          shipping: 0,
+          grandTotal: 0,
+        },
+      },
+    });
 
     assert.equal(await nextInvoiceNumber(store.id, merchant.id), "INV-00002");
     assert.equal(await nextCreditNoteNumber(store.id, merchant.id), "CN-00002");

@@ -61,6 +61,7 @@ model Merchant {
   settings         Setting[]
   invoiceTemplates InvoiceTemplate[]
   invoices         Invoice[]
+  creditNotes      CreditNote[]
 }
 
 model Store {
@@ -204,6 +205,7 @@ model Invoice {
   store        Store                 @relation(fields: [storeId], references: [id], onDelete: Cascade)
   merchant     Merchant              @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   statusEvents InvoiceStatusEvent[]
+  creditNotes  CreditNote[]
 
   @@unique([storeId, shopifyOrderId])
   @@unique([legalEntityId, invoiceNumber])
@@ -232,16 +234,40 @@ model InvoiceStatusEvent {
   @@index([invoiceId, occurredAt])
 }
 
-/// Minimal stub for document numbering counts; full fields land in Group 11.
+/// Credit note created from a Shopify refund (Group 11), linked to the tax invoice.
 model CreditNote {
-  id        String   @id @default(cuid())
-  storeId   String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default(cuid())
+  merchantId       String
+  storeId          String
+  invoiceId        String
+  shopifyRefundId  String
+  shopifyOrderId   String
+  creditNoteNumber String
+  status           String   @default("generated")
+  reason           String?
+  issueDate        DateTime
+  currency         String   @default("USD")
+  /// SellerInfo JSON snapshot from the linked invoice
+  seller           Json
+  /// BuyerInfo JSON snapshot from the linked invoice
+  buyer            Json
+  /// InvoiceLineItem[] JSON
+  lineItems        Json
+  /// InvoiceTotals JSON
+  totals           Json
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store    Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  invoice  Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
+  @@unique([storeId, shopifyRefundId])
+  @@unique([storeId, creditNoteNumber])
   @@index([storeId])
+  @@index([merchantId])
+  @@index([invoiceId])
+  @@index([storeId, createdAt])
 }
 
 /// System + future custom templates (Group 5 seed/resolve; Group 14 editor).
