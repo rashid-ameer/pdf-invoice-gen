@@ -367,17 +367,9 @@ export default function PackingSlipsPage() {
           <s-empty-state heading="No packing slips yet">
             <s-icon slot="graphic" type="order" size="base" color="subdued" />
             <s-text slot="subheading">
-              Packing slips use the same orders as invoices. Sync Shopify
-              orders first, then print for the warehouse.
+              Packing slips are created from your orders. Sync your orders to
+              start generating packing slips.
             </s-text>
-            <s-button
-              slot="primary-action"
-              variant="primary"
-              onClick={startSyncOrders}
-              {...(syncBusy ? { loading: true } : {})}
-            >
-              Sync orders
-            </s-button>
           </s-empty-state>
         </s-section>
       ) : (

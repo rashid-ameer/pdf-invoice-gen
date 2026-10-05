@@ -150,6 +150,16 @@ describe("packing slips Phase 1 — list + CSV", () => {
     assert.match(packingSrc, /listInvoicesForShop/);
     assert.match(packingSrc, /\/app\/packing-slips\/export\/csv/);
     assert.match(packingSrc, /No packing slips yet/);
+    assert.match(
+      packingSrc,
+      /Packing slips are created from your orders\. Sync your orders to\s+start generating packing slips\./,
+    );
+    // First-time empty state has no Sync button — page header already has it
+    assert.doesNotMatch(
+      packingSrc,
+      /heading="No packing slips yet"[\s\S]*?slot="primary-action"[\s\S]*?Sync orders/,
+    );
+    assert.match(packingSrc, /No packing slips found/);
     assert.match(packingSrc, /No packing slips found/);
     // Same columns as Invoices: Invoice (linked) primary, then Order…
     assert.match(packingSrc, /<s-text>Invoice<\/s-text>/);
