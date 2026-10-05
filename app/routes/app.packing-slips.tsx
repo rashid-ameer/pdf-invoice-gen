@@ -39,9 +39,10 @@ import {
 import { authenticate } from "../shopify.server";
 
 /**
- * Group 10 Phase 1 — Packing Slips list page.
- * Same invoice rows / list infrastructure as Invoices; sibling UI only.
- * Packing-slip view/download/print/bulk are Phase 2.
+ * Group 10 — Packing Slips list page.
+ * Sibling of Invoices: same invoice rows / list infrastructure.
+ * Row View → Packing Slip Details; Print / Download / Print selected use
+ * packing-slip G5/G7 routes (default packing_slip template; no bulk PDF).
  */
 
 /** Filters: stacked (small) → 2 cols (medium) → single row (large).
