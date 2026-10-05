@@ -81,7 +81,7 @@ describe("Email config page UI wiring", () => {
 
   it("wires edit-template route for all three types and invalid type", () => {
     const page = readFileSync(
-      join(process.cwd(), "app/routes/app.delivery.$type.tsx"),
+      join(process.cwd(), "app/routes/app.delivery_.$type.tsx"),
       "utf8",
     );
     assert.match(page, /Tax invoice email/);
