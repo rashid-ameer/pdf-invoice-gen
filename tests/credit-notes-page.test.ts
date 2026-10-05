@@ -257,8 +257,8 @@ describe("creditNotesToCsv / export", () => {
   });
 });
 
-describe("Phase 3 routes and UI source", () => {
-  it("wires nav, page, sync, csv download without document actions", () => {
+describe("Credit notes page UI wiring", () => {
+  it("wires nav, sync, csv, table selection, and document actions", () => {
     const page = readFileSync(
       join(process.cwd(), "app/routes/app.credit-notes.tsx"),
       "utf8",
@@ -267,12 +267,20 @@ describe("Phase 3 routes and UI source", () => {
     assert.match(page, /Sync refunds/);
     assert.match(page, /Export CSV/);
     assert.match(page, /\/app\/credit-notes\/export\/csv/);
-    assert.match(page, /s-button-group/);
-    assert.match(page, /gap="none"/);
     assert.match(page, /s-empty-state/);
     assert.match(page, /s-table/);
-    assert.doesNotMatch(page, /Print selected|Copy link|Send email|templateId/);
-    assert.doesNotMatch(page, /downloadCreditNote|printCreditNote|View document/);
+    assert.match(page, /Print selected/);
+    assert.match(page, /downloadCreditNotePdf/);
+    assert.match(page, /fetchAndPrintCreditNoteDocuments/);
+    assert.match(page, /s-menu/);
+    assert.match(page, /menu-horizontal/);
+    assert.match(page, /formatIssueDate/);
+    assert.match(page, /month: "short"/);
+    assert.match(page, /hasSelection/);
+    assert.match(page, /slot="filters"/);
+    assert.doesNotMatch(page, /DOCUMENT_PAGE_SIZE_OPTIONS|Per page|Items per page/);
+    assert.doesNotMatch(page, /buyerEmail/);
+    assert.doesNotMatch(page, /listCreditNoteTemplatesForShop/);
 
     const nav = readFileSync(join(process.cwd(), "app/routes/app.tsx"), "utf8");
     assert.match(nav, /href="\/app\/credit-notes"/);
@@ -283,5 +291,22 @@ describe("Phase 3 routes and UI source", () => {
     );
     assert.match(csvRoute, /\\\\uFEFF|\\uFEFF/);
     assert.match(csvRoute, /creditNotesToCsv/);
+  });
+
+  it("uses Invoices-style row action menu: View, Copy, Print, Download", () => {
+    const page = readFileSync(
+      join(process.cwd(), "app/routes/app.credit-notes.tsx"),
+      "utf8",
+    );
+    assert.match(page, /icon="view"/);
+    assert.match(page, /icon="clipboard"/);
+    assert.match(page, /icon="print"/);
+    assert.match(page, /icon="download"/);
+    assert.match(page, />\s*View\s*</);
+    assert.match(page, />\s*Copy\s*</);
+    assert.match(page, />\s*Print\s*</);
+    assert.match(page, />\s*Download\s*</);
+    assert.match(page, /copyCreditNoteNumber/);
+    assert.doesNotMatch(page, /icon="email"/);
   });
 });

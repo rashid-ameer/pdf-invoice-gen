@@ -301,3 +301,95 @@ export async function fetchAndPrintPackingSlipDocuments(
     );
   }
 }
+
+/**
+ * Fetch credit-note embed HTML and print via a dedicated tab.
+ * Single: /view?embed=1&templateId=…. Bulk: /bulk?mode=print&embed=1.
+ * Bulk print records download status (old credit-notes bulk route).
+ */
+export async function fetchAndPrintCreditNoteDocument(
+  creditNoteId: string,
+  templateId?: string,
+): Promise<void> {
+  const id = String(creditNoteId ?? "").trim();
+  if (!id) return;
+  await fetchAndPrintCreditNoteDocuments([id], templateId);
+}
+
+/**
+ * Bulk credit-note print. Dedicated print tab only.
+ * Always pass mode=print&embed=1 for HTML (bulk default is print, not PDF).
+ */
+export async function fetchAndPrintCreditNoteDocuments(
+  creditNoteIds: string[],
+  templateId?: string,
+): Promise<void> {
+  const ids = [
+    ...new Set(
+      creditNoteIds.map((id) => String(id ?? "").trim()).filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) return;
+
+  const tab = window.open("about:blank", "_blank");
+  if (!tab) return;
+
+  try {
+    writeTabMessage(
+      tab,
+      "Preparing credit notes…",
+      "Preparing credit notes for print…",
+    );
+
+    const templateQs = templateId
+      ? `&templateId=${encodeURIComponent(templateId)}`
+      : "";
+    const url =
+      ids.length === 1
+        ? `/app/credit-notes/${encodeURIComponent(ids[0])}/view?embed=1${templateQs}`
+        : `/app/credit-notes/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=print&embed=1${templateQs}`;
+
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+    });
+    if (!response.ok) {
+      writeTabMessage(
+        tab,
+        "Print failed",
+        response.status === 400
+          ? "You can print up to 50 credit notes at once."
+          : `Could not prepare credit notes (HTTP ${response.status}).`,
+      );
+      return;
+    }
+
+    const contentType = response.headers.get("Content-Type") ?? "";
+    if (!contentType.includes("text/html")) {
+      writeTabMessage(
+        tab,
+        "Print failed",
+        "Server returned a non-HTML document. Close this tab and try again.",
+      );
+      return;
+    }
+
+    const html = await response.text();
+    if (!html.trim() || !/<body[\s>]/i.test(html)) {
+      writeTabMessage(
+        tab,
+        "Print failed",
+        "Credit note HTML was empty or incomplete.",
+      );
+      return;
+    }
+
+    printHtmlInDedicatedTab(html, tab);
+  } catch {
+    writeTabMessage(
+      tab,
+      "Print failed",
+      "Could not prepare credit notes. Check your connection and try again.",
+    );
+  }
+}

@@ -49,7 +49,25 @@ type Pages = {
   "/app/packing-slips/bulk": {
     params: {};
   };
+  "/app/credit-notes/bulk": {
+    params: {};
+  };
   "/app/packing-slips/:id": {
+    params: {
+      "id": string;
+    };
+  };
+  "/app/credit-notes/:id": {
+    params: {
+      "id": string;
+    };
+  };
+  "/app/credit-notes/:id/download": {
+    params: {
+      "id": string;
+    };
+  };
+  "/app/credit-notes/:id/view": {
     params: {
       "id": string;
     };
@@ -108,7 +126,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/packing-slips/:id" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
   };
   "routes/webhooks.app.scopes_update.tsx": {
     id: "routes/webhooks.app.scopes_update";
@@ -140,7 +158,7 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/packing-slips/:id" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/app" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/invoices/bulk" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
   };
   "routes/app.packing-slips_.export.csv.tsx": {
     id: "routes/app.packing-slips_.export.csv";
@@ -158,9 +176,25 @@ type RouteFiles = {
     id: "routes/app.packing-slips_.bulk";
     page: "/app/packing-slips/bulk";
   };
+  "routes/app.credit-notes_.bulk.tsx": {
+    id: "routes/app.credit-notes_.bulk";
+    page: "/app/credit-notes/bulk";
+  };
   "routes/app.packing-slips_.$id.tsx": {
     id: "routes/app.packing-slips_.$id";
     page: "/app/packing-slips/:id";
+  };
+  "routes/app.credit-notes_.$id.tsx": {
+    id: "routes/app.credit-notes_.$id";
+    page: "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view";
+  };
+  "routes/app.credit-notes_.$id.download.tsx": {
+    id: "routes/app.credit-notes_.$id.download";
+    page: "/app/credit-notes/:id/download";
+  };
+  "routes/app.credit-notes_.$id.view.tsx": {
+    id: "routes/app.credit-notes_.$id.view";
+    page: "/app/credit-notes/:id/view";
   };
   "routes/app.invoices_.bulk.tsx": {
     id: "routes/app.invoices_.bulk";
@@ -234,7 +268,11 @@ type RouteModules = {
   "routes/app.credit-notes_.export.csv": typeof import("./app/routes/app.credit-notes_.export.csv.tsx");
   "routes/app.invoices_.export.csv": typeof import("./app/routes/app.invoices_.export.csv.tsx");
   "routes/app.packing-slips_.bulk": typeof import("./app/routes/app.packing-slips_.bulk.tsx");
+  "routes/app.credit-notes_.bulk": typeof import("./app/routes/app.credit-notes_.bulk.tsx");
   "routes/app.packing-slips_.$id": typeof import("./app/routes/app.packing-slips_.$id.tsx");
+  "routes/app.credit-notes_.$id": typeof import("./app/routes/app.credit-notes_.$id.tsx");
+  "routes/app.credit-notes_.$id.download": typeof import("./app/routes/app.credit-notes_.$id.download.tsx");
+  "routes/app.credit-notes_.$id.view": typeof import("./app/routes/app.credit-notes_.$id.view.tsx");
   "routes/app.invoices_.bulk": typeof import("./app/routes/app.invoices_.bulk.tsx");
   "routes/app.invoices_.$id": typeof import("./app/routes/app.invoices_.$id.tsx");
   "routes/app.invoices_.$id.packing-slip": typeof import("./app/routes/app.invoices_.$id.packing-slip.tsx");

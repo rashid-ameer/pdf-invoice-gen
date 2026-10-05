@@ -1,0 +1,406 @@
+import { useEffect, useRef, useState } from "react";
+import type {
+  HeadersFunction,
+  LoaderFunctionArgs,
+} from "react-router";
+import {
+  useLoaderData,
+  useNavigation,
+  useRouteError,
+} from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
+import { boundary } from "@shopify/shopify-app-react-router/server";
+
+import { APP_LOCALE } from "../constants/app";
+import { wrapA4EmbedHtml } from "../models/document-preview.server";
+import {
+  getCreditNoteDetailsForShop,
+  listCreditNoteTemplatesForShop,
+  renderCreditNoteDocument,
+} from "../models/credit-note-document.server";
+import { formatPaymentStatus } from "../utils/csv";
+import { downloadCreditNotePdf } from "../utils/download-credit-note-pdf";
+import {
+  formatInvoiceStatusLabel,
+  invoiceStatusBadgeTone,
+  paymentStatusBadgeTone,
+} from "../utils/invoice-status-badges";
+import { printInvoiceHtml } from "../utils/print-invoice-document";
+import { authenticate } from "../shopify.server";
+
+/** `/app/credit-notes/:id` only — not list, view, download, export, or bulk. */
+function isCreditNoteDetailsPath(pathname: string): boolean {
+  return /^\/app\/credit-notes\/[^/]+$/.test(pathname);
+}
+
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const creditNoteId = String(params.id ?? "").trim();
+  const url = new URL(request.url);
+  const templateId =
+    url.searchParams.get("templateId") ??
+    url.searchParams.get("template") ??
+    undefined;
+
+  type TemplateOption = NonNullable<
+    Awaited<ReturnType<typeof listCreditNoteTemplatesForShop>>
+  >;
+
+  if (!creditNoteId) {
+    return {
+      creditNote: null as Awaited<
+        ReturnType<typeof getCreditNoteDetailsForShop>
+      >,
+      previewHtml: null as string | null,
+      templates: [] as TemplateOption,
+      selectedTemplateId: null as string | null,
+    };
+  }
+
+  const [creditNote, templatesResult] = await Promise.all([
+    getCreditNoteDetailsForShop(session.shop, creditNoteId),
+    listCreditNoteTemplatesForShop(session.shop),
+  ]);
+  const templates: TemplateOption = templatesResult ?? [];
+  if (!creditNote) {
+    return {
+      creditNote: null,
+      previewHtml: null,
+      templates,
+      selectedTemplateId: null,
+    };
+  }
+
+  const defaultTemplateId =
+    templates.find((t) => t.isDefault)?.id ?? templates[0]?.id ?? null;
+  const resolvedTemplateId = templateId || defaultTemplateId || undefined;
+
+  const doc = await renderCreditNoteDocument(
+    session.shop,
+    creditNote.id,
+    resolvedTemplateId,
+  );
+  const previewHtml = doc ? wrapA4EmbedHtml(doc.html) : null;
+
+  return {
+    creditNote,
+    previewHtml,
+    templates,
+    selectedTemplateId: doc?.templateId ?? resolvedTemplateId ?? null,
+  };
+};
+
+function formatMoney(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat(APP_LOCALE, {
+      style: "currency",
+      currency: currency || "AED",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch {
+    return `${amount} ${currency}`;
+  }
+}
+
+function formatIssueDate(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString(APP_LOCALE, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+export default function CreditNoteDetailsPage() {
+  const { creditNote, previewHtml, selectedTemplateId } =
+    useLoaderData<typeof loader>();
+  const shopify = useAppBridge();
+  const navigation = useNavigation();
+  const loadingDetailsContent =
+    navigation.state !== "idle" &&
+    navigation.location != null &&
+    isCreditNoteDetailsPath(navigation.location.pathname);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    if (!loadingDetailsContent) return;
+    shopify.loading(true);
+    return () => {
+      shopify.loading(false);
+    };
+  }, [loadingDetailsContent, shopify]);
+
+  useEffect(() => {
+    if (!previewHtml) {
+      setPreviewLoaded(true);
+      return;
+    }
+
+    setPreviewLoaded(false);
+    let cancelled = false;
+    let finished = false;
+
+    const finish = () => {
+      if (cancelled || finished) return;
+      finished = true;
+      const iframe = iframeRef.current;
+      const doc = iframe?.contentDocument;
+      if (iframe && doc?.body) {
+        const contentWidth = Math.max(doc.body.scrollWidth, 1);
+        const frameWidth = Math.max(iframe.clientWidth, 1);
+        const scale = Math.min(1, frameWidth / contentWidth);
+        doc.body.style.transformOrigin = "top left";
+        doc.body.style.transform = scale < 1 ? `scale(${scale})` : "";
+        const scaledHeight = Math.ceil(doc.body.scrollHeight * scale) + 24;
+        iframe.height = String(Math.max(scaledHeight, 320));
+      }
+      setPreviewLoaded(true);
+    };
+
+    const iframe = iframeRef.current;
+    if (!iframe) {
+      let el: HTMLIFrameElement | null = null;
+      const raf = requestAnimationFrame(() => {
+        el = iframeRef.current;
+        if (!el) {
+          finish();
+          return;
+        }
+        el.addEventListener("load", finish);
+        try {
+          if (el.contentDocument?.readyState === "complete") finish();
+        } catch {
+          // ignore
+        }
+      });
+      const timer = window.setTimeout(finish, 2000);
+      return () => {
+        cancelled = true;
+        cancelAnimationFrame(raf);
+        window.clearTimeout(timer);
+        el?.removeEventListener("load", finish);
+      };
+    }
+
+    iframe.addEventListener("load", finish);
+    try {
+      if (iframe.contentDocument?.readyState === "complete") {
+        finish();
+      }
+    } catch {
+      // ignore
+    }
+    const timer = window.setTimeout(finish, 2000);
+
+    return () => {
+      cancelled = true;
+      iframe.removeEventListener("load", finish);
+      window.clearTimeout(timer);
+    };
+  }, [creditNote?.id, previewHtml]);
+
+  if (!creditNote) {
+    return (
+      <s-page heading="Credit note not found">
+        <s-link slot="breadcrumb-actions" href="/app/credit-notes">
+          Credit notes
+        </s-link>
+        <s-section accessibilityLabel="Credit note not found">
+          <s-stack gap="base">
+            <s-banner tone="critical" heading="Credit note not found">
+              This credit note could not be loaded. It may have been deleted or
+              does not belong to this store.
+            </s-banner>
+            <s-button variant="primary" href="/app/credit-notes">
+              Back to Credit notes
+            </s-button>
+          </s-stack>
+        </s-section>
+      </s-page>
+    );
+  }
+
+  const paymentLabel = formatPaymentStatus(creditNote.financialStatus);
+  const actionsReady = !loadingDetailsContent;
+  const sideLoading = loadingDetailsContent;
+  const previewLoading = loadingDetailsContent || !previewLoaded;
+  const previewMissing = !previewHtml;
+
+  const copyCreditNoteNumber = async () => {
+    try {
+      await navigator.clipboard.writeText(creditNote.creditNoteNumber);
+      shopify.toast.show(`Copied ${creditNote.creditNoteNumber}`);
+    } catch {
+      shopify.toast.show("Could not copy credit note number", {
+        isError: true,
+      });
+    }
+  };
+
+  const printCreditNote = () => {
+    if (!previewHtml) return;
+    printInvoiceHtml(previewHtml, {
+      iframe: iframeRef.current,
+      iframeReady: previewLoaded,
+    });
+  };
+
+  const openDownload = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      await downloadCreditNotePdf({
+        creditNoteId: creditNote.id,
+        creditNoteNumber: creditNote.creditNoteNumber,
+        templateId: selectedTemplateId ?? undefined,
+        onError: (message) => {
+          shopify.toast.show(message, { isError: true });
+        },
+      });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <s-page heading={creditNote.creditNoteNumber}>
+      <s-link slot="breadcrumb-actions" href="/app/credit-notes">
+        Credit notes
+      </s-link>
+
+      <s-button
+        slot="secondary-actions"
+        variant="secondary"
+        icon="clipboard"
+        onClick={() => void copyCreditNoteNumber()}
+        {...(!actionsReady ? { disabled: true } : {})}
+      >
+        Copy
+      </s-button>
+      <s-button
+        slot="secondary-actions"
+        variant="secondary"
+        icon="download"
+        onClick={() => void openDownload()}
+        {...(downloading
+          ? { loading: true, disabled: true }
+          : !actionsReady
+            ? { disabled: true }
+            : {})}
+      >
+        Download
+      </s-button>
+      <s-button
+        slot="primary-action"
+        variant="primary"
+        icon="print"
+        onClick={printCreditNote}
+        {...(!actionsReady || previewMissing ? { disabled: true } : {})}
+      >
+        Print
+      </s-button>
+
+      <s-section
+        heading="Credit note"
+        accessibilityLabel="Credit note document preview"
+      >
+        <s-stack gap="small">
+          {previewLoading && !previewMissing ? (
+            <s-stack gap="small" alignItems="center">
+              <s-spinner accessibilityLabel="Loading credit note document" />
+              <s-text color="subdued">Loading credit note document…</s-text>
+            </s-stack>
+          ) : null}
+          {previewMissing ? (
+            <s-banner tone="critical" heading="Preview unavailable">
+              The credit note document could not be rendered. Try Print or
+              Download, or return to the credit notes list.
+            </s-banner>
+          ) : (
+            <s-box
+              border="base"
+              borderRadius="base"
+              overflow="hidden"
+              background="subdued"
+            >
+              <iframe
+                ref={iframeRef}
+                title={`Credit note ${creditNote.creditNoteNumber}`}
+                srcDoc={previewHtml}
+                width="100%"
+                height="640"
+              />
+            </s-box>
+          )}
+        </s-stack>
+      </s-section>
+
+      <s-section slot="aside" heading="Summary">
+        {sideLoading ? (
+          <s-stack gap="small" alignItems="start">
+            <s-spinner accessibilityLabel="Loading summary" />
+          </s-stack>
+        ) : (
+          <s-stack gap="small">
+            <s-stack gap="none">
+              <s-text color="subdued">Customer</s-text>
+              <s-text>{creditNote.buyerName}</s-text>
+            </s-stack>
+            <s-stack gap="none">
+              <s-text color="subdued">Invoice</s-text>
+              <s-text>{creditNote.originalInvoiceNumber}</s-text>
+            </s-stack>
+            <s-stack gap="none">
+              <s-text color="subdued">Order</s-text>
+              <s-text>{creditNote.shopifyOrderNumber}</s-text>
+            </s-stack>
+            <s-stack gap="none">
+              <s-text color="subdued">Issue date</s-text>
+              <s-text>{formatIssueDate(creditNote.issueDateIso)}</s-text>
+            </s-stack>
+            <s-stack gap="none">
+              <s-text color="subdued">Reason</s-text>
+              <s-text>{creditNote.reason || "—"}</s-text>
+            </s-stack>
+            <s-stack gap="none">
+              <s-text color="subdued">Status</s-text>
+              <s-badge tone={invoiceStatusBadgeTone(creditNote.status)}>
+                {formatInvoiceStatusLabel(creditNote.status)}
+              </s-badge>
+            </s-stack>
+            <s-stack gap="none">
+              <s-text color="subdued">Payment status</s-text>
+              {paymentLabel ? (
+                <s-badge
+                  tone={paymentStatusBadgeTone(creditNote.financialStatus)}
+                >
+                  {paymentLabel}
+                </s-badge>
+              ) : (
+                <s-text>—</s-text>
+              )}
+            </s-stack>
+            <s-stack gap="none">
+              <s-text color="subdued">Total</s-text>
+              <s-text type="strong">
+                {formatMoney(creditNote.grandTotal, creditNote.currency)}
+              </s-text>
+            </s-stack>
+          </s-stack>
+        )}
+      </s-section>
+    </s-page>
+  );
+}
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers: HeadersFunction = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
