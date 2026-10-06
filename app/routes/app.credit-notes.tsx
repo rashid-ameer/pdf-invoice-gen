@@ -632,7 +632,7 @@ export default function CreditNotesPage() {
           accessibilityLabel="Show credit notes"
           onClick={() => switchTab("credit-notes")}
         >
-          <s-text type="strong" color="strong">
+          <s-text type="strong">
             Credit notes
           </s-text>
         </s-clickable>
@@ -645,7 +645,7 @@ export default function CreditNotesPage() {
           accessibilityLabel="Show document refunds"
           onClick={() => switchTab("refund-documents")}
         >
-          <s-text type="strong" color="strong">
+          <s-text type="strong">
             Document refunds
           </s-text>
         </s-clickable>

@@ -217,6 +217,7 @@ export default function TemplatesPage() {
     null,
   );
   const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const awaiting = useRef(false);
   const dataAtSubmit = useRef(fetcher.data);
 
@@ -226,6 +227,7 @@ export default function TemplatesPage() {
     isTemplatesListPath(navigation.location.pathname);
   const busy =
     fetcher.state === "submitting" || fetcher.state === "loading";
+  const createBusy = busy && !selectingId && !deletingId;
 
   useEffect(() => {
     if (fetcher.state === "idle") {
@@ -239,6 +241,7 @@ export default function TemplatesPage() {
 
     if (!fetcher.data || fetcher.data === dataAtSubmit.current) {
       shopify.toast.show("Couldn't update templates", { isError: true });
+      setDeletingId(null);
       return;
     }
 
@@ -247,6 +250,7 @@ export default function TemplatesPage() {
         ("error" in fetcher.data && fetcher.data.error) || "Request failed",
         { isError: true },
       );
+      setDeletingId(null);
       return;
     }
 
@@ -260,6 +264,19 @@ export default function TemplatesPage() {
       navigate(
         `/app/templates/${encodeURIComponent(fetcher.data.templateId)}?new=1`,
       );
+      return;
+    }
+
+    if (fetcher.data.intent === "delete") {
+      shopify.toast.show(
+        "message" in fetcher.data ? fetcher.data.message : "Done",
+      );
+      setDeletingId(null);
+      setDeleteTarget(null);
+      const modal = document.getElementById(DELETE_MODAL_ID) as
+        | (HTMLElement & { hideOverlay?: () => void })
+        | null;
+      modal?.hideOverlay?.();
       return;
     }
 
@@ -346,9 +363,7 @@ export default function TemplatesPage() {
         slot="primary-action"
         variant="primary"
         onClick={createNewTemplate}
-        {...(busy && !selectingId
-          ? { loading: true, disabled: true }
-          : {})}
+        {...(createBusy ? { loading: true, disabled: true } : {})}
       >
         Create new template
       </s-button>
@@ -437,7 +452,7 @@ export default function TemplatesPage() {
                 slot="primary-action"
                 variant="primary"
                 onClick={createNewTemplate}
-                {...(busy ? { loading: true, disabled: true } : {})}
+                {...(createBusy ? { loading: true, disabled: true } : {})}
               >
                 Create new template
               </s-button>
@@ -498,7 +513,11 @@ export default function TemplatesPage() {
           variant="secondary"
           commandFor={DELETE_MODAL_ID}
           command="--hide"
-          onClick={() => setDeleteTarget(null)}
+          onClick={() => {
+            if (deletingId) return;
+            setDeleteTarget(null);
+          }}
+          {...(deletingId ? { disabled: true } : {})}
         >
           Cancel
         </s-button>
@@ -506,14 +525,12 @@ export default function TemplatesPage() {
           slot="primary-action"
           variant="primary"
           tone="critical"
-          commandFor={DELETE_MODAL_ID}
-          command="--hide"
           onClick={() => {
-            if (!deleteTarget) return;
+            if (!deleteTarget || deletingId) return;
+            setDeletingId(deleteTarget.id);
             submitIntent("delete", { templateId: deleteTarget.id });
-            setDeleteTarget(null);
           }}
-          {...(busy ? { loading: true, disabled: true } : {})}
+          {...(deletingId ? { loading: true } : {})}
         >
           Delete
         </s-button>
