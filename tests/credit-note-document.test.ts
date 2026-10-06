@@ -436,7 +436,7 @@ describe("getCreditNoteDetailsForShop", () => {
 });
 
 describe("Credit note document routes / UI wiring", () => {
-  it("wires details page to G5/G7 preview and Print / Download / Copy / Email", () => {
+  it("wires details page to G5/G7 preview and Send email / More actions", () => {
     const source = readFileSync(
       join(process.cwd(), "app/routes/app.credit-notes_.$id.tsx"),
       "utf8",
@@ -446,12 +446,19 @@ describe("Credit note document routes / UI wiring", () => {
     assert.match(source, /renderCreditNoteDocument/);
     assert.match(source, /slot="breadcrumb-actions"/);
     assert.match(source, /href="\/app\/credit-notes"/);
-    assert.match(
-      source,
-      /slot="secondary-actions"[\s\S]*?>\s*Copy\s*<[\s\S]*?slot="secondary-actions"[\s\S]*?>\s*Download\s*<[\s\S]*?slot="secondary-actions"[\s\S]*?>\s*Send email\s*<[\s\S]*?slot="primary-action"[\s\S]*?>\s*Print\s*</,
-    );
+    assert.match(source, /slot="primary-action"/);
+    assert.match(source, />\s*Send email\s*</);
+    assert.match(source, /commandFor=\{MORE_MENU_ID\}/);
+    assert.match(source, />\s*More actions\s*</);
     assert.match(source, /icon="clipboard"/);
+    assert.match(source, /icon="print"/);
+    assert.match(source, /icon="download"/);
     assert.match(source, /icon="email"/);
+    assert.equal(
+      [...source.matchAll(/slot="secondary-actions"/g)].length,
+      1,
+      "Copy/Print/Download should only live under More actions",
+    );
     assert.match(source, /copyCreditNoteNumber/);
     assert.match(source, /openDownload/);
     assert.match(source, /downloadCreditNotePdf/);

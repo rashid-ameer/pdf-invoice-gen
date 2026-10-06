@@ -343,7 +343,7 @@ describe("Refund document route wiring", () => {
     assert.match(bulkSrc, /Bulk PDF download is not supported/);
   });
 
-  it("wires details page to refund_document preview with Email and without template modal", () => {
+  it("wires details page to refund_document preview with Email primary and More actions", () => {
     const source = readFileSync(
       join(process.cwd(), "app/routes/app.credit-notes_.$id_.refund.tsx"),
       "utf8",
@@ -356,7 +356,19 @@ describe("Refund document route wiring", () => {
     assert.match(source, /sendRefundDocumentEmail/);
     assert.match(source, /trigger: "manual"/);
     assert.match(source, /const sendEmail = /);
+    assert.match(source, /slot="primary-action"/);
     assert.match(source, />\s*Send email\s*</);
+    assert.match(source, /commandFor=\{MORE_MENU_ID\}/);
+    assert.match(source, />\s*More actions\s*</);
+    assert.match(source, /icon="email"/);
+    assert.match(source, /icon="clipboard"/);
+    assert.match(source, /icon="print"/);
+    assert.match(source, /icon="download"/);
+    assert.equal(
+      [...source.matchAll(/slot="secondary-actions"/g)].length,
+      1,
+      "Copy/Print/Download should only live under More actions",
+    );
     assert.match(source, /Refund document/);
     assert.doesNotMatch(source, /s-modal|s-choice-list/);
     assert.doesNotMatch(source, /Copy link|QR code/i);

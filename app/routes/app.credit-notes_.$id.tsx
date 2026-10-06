@@ -160,6 +160,8 @@ function formatIssueDate(iso: string): string {
   });
 }
 
+const MORE_MENU_ID = "credit-note-details-more-actions";
+
 export default function CreditNoteDetailsPage() {
   const { creditNote, previewHtml, selectedTemplateId } =
     useLoaderData<typeof loader>();
@@ -356,30 +358,8 @@ export default function CreditNoteDetailsPage() {
       </s-link>
 
       <s-button
-        slot="secondary-actions"
-        variant="secondary"
-        icon="clipboard"
-        onClick={() => void copyCreditNoteNumber()}
-        {...(!actionsReady ? { disabled: true } : {})}
-      >
-        Copy
-      </s-button>
-      <s-button
-        slot="secondary-actions"
-        variant="secondary"
-        icon="download"
-        onClick={() => void openDownload()}
-        {...(downloading
-          ? { loading: true, disabled: true }
-          : !actionsReady
-            ? { disabled: true }
-            : {})}
-      >
-        Download
-      </s-button>
-      <s-button
-        slot="secondary-actions"
-        variant="secondary"
+        slot="primary-action"
+        variant="primary"
         icon="email"
         onClick={sendEmail}
         {...(emailSending
@@ -391,14 +371,35 @@ export default function CreditNoteDetailsPage() {
         Send email
       </s-button>
       <s-button
-        slot="primary-action"
-        variant="primary"
-        icon="print"
-        onClick={printCreditNote}
-        {...(!actionsReady || previewMissing ? { disabled: true } : {})}
+        slot="secondary-actions"
+        variant="secondary"
+        commandFor={MORE_MENU_ID}
+        {...(!actionsReady ? { disabled: true } : {})}
       >
-        Print
+        More actions
       </s-button>
+      <s-menu
+        id={MORE_MENU_ID}
+        accessibilityLabel={`More actions for ${creditNote.creditNoteNumber}`}
+      >
+        <s-button icon="clipboard" onClick={() => void copyCreditNoteNumber()}>
+          Copy
+        </s-button>
+        <s-button
+          icon="print"
+          onClick={printCreditNote}
+          {...(previewMissing ? { disabled: true } : {})}
+        >
+          Print
+        </s-button>
+        <s-button
+          icon="download"
+          onClick={() => void openDownload()}
+          {...(downloading ? { loading: true, disabled: true } : {})}
+        >
+          Download
+        </s-button>
+      </s-menu>
 
       <s-section
         heading="Credit note"

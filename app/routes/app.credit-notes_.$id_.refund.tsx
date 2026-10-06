@@ -162,6 +162,8 @@ function formatIssueDate(iso: string): string {
   });
 }
 
+const MORE_MENU_ID = "refund-document-details-more-actions";
+
 export default function RefundDocumentDetailsPage() {
   const { creditNote, previewHtml, selectedTemplateId } =
     useLoaderData<typeof loader>();
@@ -356,30 +358,8 @@ export default function RefundDocumentDetailsPage() {
       </s-link>
 
       <s-button
-        slot="secondary-actions"
-        variant="secondary"
-        icon="clipboard"
-        onClick={() => void copyReference()}
-        {...(!actionsReady ? { disabled: true } : {})}
-      >
-        Copy
-      </s-button>
-      <s-button
-        slot="secondary-actions"
-        variant="secondary"
-        icon="download"
-        onClick={() => void openDownload()}
-        {...(downloading
-          ? { loading: true, disabled: true }
-          : !actionsReady
-            ? { disabled: true }
-            : {})}
-      >
-        Download
-      </s-button>
-      <s-button
-        slot="secondary-actions"
-        variant="secondary"
+        slot="primary-action"
+        variant="primary"
         icon="email"
         onClick={sendEmail}
         {...(emailSending
@@ -391,14 +371,35 @@ export default function RefundDocumentDetailsPage() {
         Send email
       </s-button>
       <s-button
-        slot="primary-action"
-        variant="primary"
-        icon="print"
-        onClick={printRefundDocument}
-        {...(!actionsReady || previewMissing ? { disabled: true } : {})}
+        slot="secondary-actions"
+        variant="secondary"
+        commandFor={MORE_MENU_ID}
+        {...(!actionsReady ? { disabled: true } : {})}
       >
-        Print
+        More actions
       </s-button>
+      <s-menu
+        id={MORE_MENU_ID}
+        accessibilityLabel={`More actions for ${creditNote.creditNoteNumber}`}
+      >
+        <s-button icon="clipboard" onClick={() => void copyReference()}>
+          Copy
+        </s-button>
+        <s-button
+          icon="print"
+          onClick={printRefundDocument}
+          {...(previewMissing ? { disabled: true } : {})}
+        >
+          Print
+        </s-button>
+        <s-button
+          icon="download"
+          onClick={() => void openDownload()}
+          {...(downloading ? { loading: true, disabled: true } : {})}
+        >
+          Download
+        </s-button>
+      </s-menu>
 
       <s-section
         heading="Refund document"
