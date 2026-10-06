@@ -1,9 +1,9 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
-  type FormEvent,
 } from "react";
 import type {
   ActionFunctionArgs,
@@ -42,6 +42,8 @@ import { authenticate } from "../shopify.server";
  * Edit email template content for one document type.
  * showViewButton is store-wide (shared across all email types).
  */
+
+const SAVE_BAR_ID = "email-template-save-bar";
 
 const TYPE_META = {
   invoice: {
@@ -375,7 +377,6 @@ function EmailTemplateEditor({
   const [testError, setTestError] = useState("");
   const [testTo, setTestTo] = useState(() => serverSettings.replyTo || "");
   const richTextRef = useRef<EmailBodyRichTextEditorHandle | null>(null);
-  const dirtySignalRef = useRef<HTMLInputElement | null>(null);
 
   const awaitingSave = useRef(false);
   const dataAtSubmit = useRef(saveFetcher.data);
@@ -388,18 +389,10 @@ function EmailTemplateEditor({
   const previewing =
     previewFetcher.state === "submitting" || previewFetcher.state === "loading";
 
-  const syncDirtyBaseline = useCallback((fingerprint: string) => {
-    const input = dirtySignalRef.current;
-    if (!input) return;
-    input.defaultValue = fingerprint;
-    input.value = fingerprint;
-  }, []);
-
-  const markFormDirty = useCallback(() => {
-    const input = dirtySignalRef.current;
-    if (!input) return;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  }, []);
+  const dirty = useMemo(
+    () => JSON.stringify(form) !== JSON.stringify(baseline),
+    [form, baseline],
+  );
 
   useEffect(() => {
     const next = templateFormFromSettings(serverSettings, meta.kind);
@@ -418,7 +411,6 @@ function EmailTemplateEditor({
       setConnectionError(true);
       setSaveError("");
       shopify.toast.show("Couldn't save", { isError: true });
-      markFormDirty();
       return;
     }
 
@@ -426,26 +418,14 @@ function EmailTemplateEditor({
     if (saveFetcher.data.ok && saveFetcher.data.intent === "save") {
       setSaveError("");
       shopify.toast.show(saveFetcher.data.message);
-      syncDirtyBaseline(
-        JSON.stringify(
-          templateFormFromSettings(saveFetcher.data.settings, meta.kind),
-        ),
-      );
+      shopify.saveBar.hide(SAVE_BAR_ID);
       return;
     }
     if (!saveFetcher.data.ok && saveFetcher.data.intent === "save") {
       setSaveError(saveFetcher.data.error);
       shopify.toast.show(saveFetcher.data.error, { isError: true });
-      markFormDirty();
     }
-  }, [
-    saveFetcher.data,
-    saveFetcher.state,
-    shopify,
-    meta.kind,
-    markFormDirty,
-    syncDirtyBaseline,
-  ]);
+  }, [saveFetcher.data, saveFetcher.state, shopify]);
 
   useEffect(() => {
     if (testFetcher.state !== "idle" || !testFetcher.data) return;
@@ -474,22 +454,13 @@ function EmailTemplateEditor({
     };
   }, [saving, testing, shopify]);
 
-  // Bridge React-controlled state (incl. Quill) into data-save-bar dirty tracking.
   useEffect(() => {
-    const input = dirtySignalRef.current;
-    if (!input) return;
-    const fingerprint = JSON.stringify(form);
-    if (!input.defaultValue) {
-      input.defaultValue = JSON.stringify(baseline);
-    }
-    if (input.value === fingerprint) return;
-    input.value = fingerprint;
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  }, [form, baseline]);
-
-  useEffect(() => {
-    syncDirtyBaseline(JSON.stringify(baseline));
-  }, [baseline, syncDirtyBaseline]);
+    if (dirty) shopify.saveBar.show(SAVE_BAR_ID);
+    else shopify.saveBar.hide(SAVE_BAR_ID);
+    return () => {
+      shopify.saveBar.hide(SAVE_BAR_ID);
+    };
+  }, [dirty, shopify]);
 
   const patch = useCallback(<K extends keyof TemplateForm>(key: K, value: TemplateForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -534,6 +505,7 @@ function EmailTemplateEditor({
     setForm(baseline);
     setSaveError("");
     setConnectionError(false);
+    shopify.saveBar.hide(SAVE_BAR_ID);
   };
 
   const saveForm = () => {
@@ -541,16 +513,6 @@ function EmailTemplateEditor({
     dataAtSubmit.current = saveFetcher.data;
     awaitingSave.current = true;
     saveFetcher.submit(buildFormData("save"), { method: "post" });
-  };
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    saveForm();
-  };
-
-  const handleReset = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    discardChanges();
   };
 
   const sendTest = () => {
@@ -592,43 +554,49 @@ function EmailTemplateEditor({
   );
 
   return (
-    <form data-save-bar onSubmit={handleSubmit} onReset={handleReset}>
-      {/* Tracks dirty state for Quill and other React-controlled values. */}
-      <input
-        ref={dirtySignalRef}
-        type="hidden"
-        name="_templateDirty"
-        defaultValue={JSON.stringify(baseline)}
-        aria-hidden="true"
-      />
+    <s-page heading={meta.title} inlineSize="large">
+      <s-link slot="breadcrumb-actions" href="/app/delivery">
+        Email
+      </s-link>
 
-      <s-page heading={meta.title} inlineSize="large">
-        <s-link slot="breadcrumb-actions" href="/app/delivery">
-          Email
-        </s-link>
+      <ui-save-bar id={SAVE_BAR_ID}>
+        <button
+          variant="primary"
+          onClick={saveForm}
+          {...(saving ? { disabled: true, loading: true } : {})}
+        >
+          Save
+        </button>
+        <button
+          onClick={discardChanges}
+          {...(saving ? { disabled: true } : {})}
+        >
+          Discard
+        </button>
+      </ui-save-bar>
 
-        {connectionError ? (
-          <s-banner
-            tone="critical"
-            heading="Couldn't save"
-            dismissible
-            onDismiss={() => setConnectionError(false)}
-          >
-            Check your connection and try again.
-          </s-banner>
-        ) : null}
-        {bannerSaveError ? (
-          <s-banner tone="critical" heading="Couldn't save">
-            {bannerSaveError}
-          </s-banner>
-        ) : null}
+      {connectionError ? (
+        <s-banner
+          tone="critical"
+          heading="Couldn't save"
+          dismissible
+          onDismiss={() => setConnectionError(false)}
+        >
+          Check your connection and try again.
+        </s-banner>
+      ) : null}
+      {bannerSaveError ? (
+        <s-banner tone="critical" heading="Couldn't save">
+          {bannerSaveError}
+        </s-banner>
+      ) : null}
 
-        <s-query-container>
-          <s-grid
-            gridTemplateColumns={EDITOR_LAYOUT_COLS}
-            gap="base"
-            alignItems="start"
-          >
+      <s-query-container>
+        <s-grid
+          gridTemplateColumns={EDITOR_LAYOUT_COLS}
+          gap="base"
+          alignItems="start"
+        >
             <s-stack gap="base">
               <s-section heading="Email template">
                 <s-choice-list
@@ -791,8 +759,7 @@ function EmailTemplateEditor({
             </s-stack>
           </s-grid>
         </s-query-container>
-      </s-page>
-    </form>
+    </s-page>
   );
 }
 

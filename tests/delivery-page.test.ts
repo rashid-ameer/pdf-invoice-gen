@@ -99,7 +99,7 @@ describe("Email config page UI wiring", () => {
     assert.match(page, /sendDocumentTestEmail/);
     assert.match(page, /insertPlaceholder/);
     assert.match(page, /Custom HTML/);
-    assert.match(page, /data-save-bar/);
+    assert.match(page, /ui-save-bar/);
     assert.match(page, /Email template/);
     assert.match(page, /Which template is sent\?/);
     assert.match(page, /s-email-field/);
@@ -107,7 +107,7 @@ describe("Email config page UI wiring", () => {
     assert.match(page, /s-query-container/);
     assert.match(page, /s-grid/);
     assert.match(page, /3fr 2fr/);
-    assert.doesNotMatch(page, /ui-save-bar/);
+    assert.doesNotMatch(page, /data-save-bar/);
     assert.doesNotMatch(page, /slot="aside"/);
     assert.doesNotMatch(page, /<details>/);
     assert.doesNotMatch(
