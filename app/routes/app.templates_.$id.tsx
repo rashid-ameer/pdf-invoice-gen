@@ -674,6 +674,9 @@ export default function TemplateDetailsPage() {
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const extractTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Bumped on discard so in-flight config→liquid sync cannot re-dirty the form. */
+  const syncEpochRef = useRef(0);
+  const syncSubmitEpochRef = useRef(0);
   const applyingCode = useRef(false);
   const applyingForm = useRef(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -838,8 +841,20 @@ export default function TemplateDetailsPage() {
     if (!result || !config || !codeEditorAllowed) return;
     if (sourceType === "layout" || sourceType === "imported") return;
     if (applyingCode.current || applyingForm.current) return;
+    // At last-saved baseline — do not sync (prevents discard → sync → dirty loop).
+    if (
+      baselineConfig &&
+      stableConfigKey(config) === stableConfigKey(baselineConfig) &&
+      liquidHtml === baselineLiquid &&
+      customCss === baselineCss &&
+      sourceType === baselineSourceType
+    ) {
+      return;
+    }
     if (syncTimer.current) clearTimeout(syncTimer.current);
+    const epoch = syncEpochRef.current;
     syncTimer.current = setTimeout(() => {
+      syncSubmitEpochRef.current = epoch;
       const body = new FormData();
       body.set("intent", "from-config");
       body.set("templateId", result.id);
@@ -854,13 +869,23 @@ export default function TemplateDetailsPage() {
     return () => {
       if (syncTimer.current) clearTimeout(syncTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncFetcher identity churns
-  }, [result?.id, config, sourceType, codeEditorAllowed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncFetcher identity churns; liquidHtml read for skip/submit only
+  }, [
+    result?.id,
+    config,
+    sourceType,
+    codeEditorAllowed,
+    baselineConfig,
+    baselineLiquid,
+    baselineCss,
+    baselineSourceType,
+  ]);
 
   useEffect(() => {
     if (syncFetcher.state !== "idle" || !syncFetcher.data) return;
     if (syncFetcher.data.intent !== "from-config" || !syncFetcher.data.ok) return;
     if (!("liquidHtml" in syncFetcher.data)) return;
+    if (syncSubmitEpochRef.current !== syncEpochRef.current) return;
     applyingForm.current = true;
     setLiquidHtml(syncFetcher.data.liquidHtml);
     if (config) setSyncedConfig(structuredClone(config));
@@ -1078,6 +1103,12 @@ export default function TemplateDetailsPage() {
 
   const discardChanges = () => {
     if (!baselineConfig) return;
+    syncEpochRef.current += 1;
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    if (extractTimer.current) clearTimeout(extractTimer.current);
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    applyingCode.current = false;
+    applyingForm.current = false;
     setName(baselineName);
     setConfig(structuredClone(baselineConfig));
     setSyncedConfig(structuredClone(baselineConfig));
