@@ -33,6 +33,13 @@ import {
   paymentStatusBadgeTone,
 } from "../utils/invoice-status-badges";
 import { hasActiveInvoiceUiFilters } from "../utils/invoice-ui-filters";
+import {
+  formatInvoiceDateRangeLabel,
+  invoiceDatePickerAllowThroughToday,
+  invoiceDatePickerTodayIso,
+  invoiceDateRangePickerValue,
+  parseInvoiceDateRangePickerValue,
+} from "../utils/invoice-date-range";
 import { downloadInvoicePdf } from "../utils/download-invoice-pdf";
 import {
   fetchAndPrintInvoiceDocument,
@@ -45,11 +52,8 @@ function isInvoicesListPath(pathname: string): boolean {
   return /^\/app\/invoices\/?$/.test(pathname);
 }
 
-/** Filters: stacked (small) → 2 cols (medium) → single row (large).
- * Larger breakpoints must come last so they win when multiple queries match.
- */
-const FILTER_GRID_COLS =
-  '@container (inline-size > 600px) "1fr 1fr", (inline-size > 900px) "1fr 1fr 1fr 1fr", 1fr';
+const INVOICE_FILTERS_POPOVER_ID = "invoice-filters-popover";
+const INVOICE_FILTERS_TOOLTIP_ID = "invoice-filters-tooltip";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -222,6 +226,9 @@ export default function InvoicesPage() {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchDraft, setSearchDraft] = useState(data.query.q);
+  const [dateRangeDraft, setDateRangeDraft] = useState(() =>
+    invoiceDateRangePickerValue(data.query.from, data.query.to),
+  );
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
@@ -235,6 +242,12 @@ export default function InvoicesPage() {
   useEffect(() => {
     setSearchDraft(data.query.q);
   }, [data.query.q]);
+
+  useEffect(() => {
+    setDateRangeDraft(
+      invoiceDateRangePickerValue(data.query.from, data.query.to),
+    );
+  }, [data.query.from, data.query.to]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -333,8 +346,14 @@ export default function InvoicesPage() {
 
   const clearSearchAndFilters = () => {
     setSearchDraft("");
+    setDateRangeDraft("");
     if (searchTimer.current) clearTimeout(searchTimer.current);
     navigate("/app/invoices");
+  };
+
+  const clearPopoverFilters = () => {
+    setDateRangeDraft("");
+    updateFilters({ status: null, from: null, to: null });
   };
 
   const scheduleSearch = (value: string) => {
@@ -343,6 +362,21 @@ export default function InvoicesPage() {
     searchTimer.current = setTimeout(() => {
       updateFilters({ q: value.trim() || null });
     }, 250);
+  };
+
+  const onDateRangeChange = (event: Event) => {
+    const value = String(
+      (event.currentTarget as HTMLInputElement & { value: string }).value ?? "",
+    );
+    setDateRangeDraft(value);
+    if (!value) {
+      updateFilters({ from: null, to: null });
+      return;
+    }
+    const parsed = parseInvoiceDateRangePickerValue(value);
+    if (parsed.from && parsed.to) {
+      updateFilters({ from: parsed.from, to: parsed.to });
+    }
   };
 
   const startSyncOrders = () => {
@@ -396,6 +430,18 @@ export default function InvoicesPage() {
   const hasSelection = selectedIds.size > 0 && data.items.length > 0;
 
   const hasActiveFilters = hasActiveInvoiceUiFilters(data.query);
+  const statusFilterActive =
+    Boolean(data.query.status) && data.query.status !== "all";
+  const dateRangeLabel = formatInvoiceDateRangeLabel(
+    data.query.from,
+    data.query.to,
+  );
+  const hasAppliedPopoverFilters = statusFilterActive || Boolean(dateRangeLabel);
+  const datePickerAllow = invoiceDatePickerAllowThroughToday();
+  const datePickerView = (data.query.from || invoiceDatePickerTodayIso()).slice(
+    0,
+    7,
+  );
   const showEmptyContent = !loading && data.items.length === 0;
   const showFilteredEmpty = showEmptyContent && hasActiveFilters;
   const showFirstTimeEmpty = showEmptyContent && !hasActiveFilters;
@@ -567,17 +613,17 @@ export default function InvoicesPage() {
                 </s-stack>
               </s-box>
             ) : (
-              <s-query-container slot="filters">
+              <s-stack slot="filters" gap="small-200">
                 <s-grid
-                  gap="small"
-                  alignItems="end"
-                  gridTemplateColumns={FILTER_GRID_COLS}
+                  gap="small-200"
+                  gridTemplateColumns="1fr auto"
+                  alignItems="center"
                 >
                   <s-text-field
                     label="Search"
                     labelAccessibilityVisibility="exclusive"
                     icon="search"
-                    placeholder="Invoice, order, customer, email"
+                    placeholder="Search by invoice, order, customer, email"
                     value={searchDraft}
                     autocomplete="off"
                     onInput={(event: Event) => {
@@ -586,44 +632,105 @@ export default function InvoicesPage() {
                       scheduleSearch(value);
                     }}
                   />
-                  <s-select
-                    label="Invoice status"
-                    value={data.query.status || "all"}
-                    onChange={(event: Event) => {
-                      const value = (event.currentTarget as HTMLSelectElement)
-                        .value;
-                      updateFilters({
-                        status: value === "all" ? null : value,
-                      });
-                    }}
-                  >
-                    <s-option value="all">All statuses</s-option>
-                    {INVOICE_DOCUMENT_STATUSES.map((status) => (
-                      <s-option key={status} value={status}>
-                        {formatInvoiceStatusLabel(status)}
-                      </s-option>
-                    ))}
-                  </s-select>
-                  <s-date-field
-                    label="From"
-                    value={data.query.from}
-                    onChange={(event: Event) => {
-                      const value = (event.currentTarget as HTMLInputElement)
-                        .value;
-                      updateFilters({ from: value || null });
-                    }}
-                  />
-                  <s-date-field
-                    label="To"
-                    value={data.query.to}
-                    onChange={(event: Event) => {
-                      const value = (event.currentTarget as HTMLInputElement)
-                        .value;
-                      updateFilters({ to: value || null });
-                    }}
+                  <s-button
+                    icon={
+                      hasAppliedPopoverFilters ? "filter-active" : "filter"
+                    }
+                    variant="secondary"
+                    accessibilityLabel="Filters"
+                    interestFor={INVOICE_FILTERS_TOOLTIP_ID}
+                    commandFor={INVOICE_FILTERS_POPOVER_ID}
                   />
                 </s-grid>
-              </s-query-container>
+                <s-tooltip id={INVOICE_FILTERS_TOOLTIP_ID}>
+                  <s-text>Filters</s-text>
+                </s-tooltip>
+                <s-popover
+                  id={INVOICE_FILTERS_POPOVER_ID}
+                  inlineSize="320px"
+                >
+                  <s-box padding="base">
+                    <s-stack gap="base">
+                      <s-select
+                        label="Invoice status"
+                        value={data.query.status || "all"}
+                        onChange={(event: Event) => {
+                          const value = (
+                            event.currentTarget as HTMLSelectElement
+                          ).value;
+                          updateFilters({
+                            status: value === "all" ? null : value,
+                          });
+                        }}
+                      >
+                        <s-option value="all">All statuses</s-option>
+                        {INVOICE_DOCUMENT_STATUSES.map((status) => (
+                          <s-option key={status} value={status}>
+                            {formatInvoiceStatusLabel(status)}
+                          </s-option>
+                        ))}
+                      </s-select>
+                      <s-divider />
+                      <s-stack gap="small-200">
+                        <s-text type="strong">Date range</s-text>
+                        {dateRangeLabel ? (
+                          <s-text color="subdued">{dateRangeLabel}</s-text>
+                        ) : null}
+                        <s-date-picker
+                          type="range"
+                          name="invoice-date-range"
+                          value={dateRangeDraft}
+                          view={datePickerView}
+                          allow={datePickerAllow}
+                          onChange={onDateRangeChange}
+                        />
+                      </s-stack>
+                      <s-divider />
+                      <s-button
+                        variant="tertiary"
+                        onClick={clearPopoverFilters}
+                        {...(hasAppliedPopoverFilters
+                          ? {}
+                          : { disabled: true })}
+                      >
+                        Clear filters
+                      </s-button>
+                    </s-stack>
+                  </s-box>
+                </s-popover>
+                {hasAppliedPopoverFilters ? (
+                  <s-stack
+                    direction="inline"
+                    gap="small-200"
+                    alignItems="center"
+                  >
+                    {statusFilterActive ? (
+                      <s-clickable-chip
+                        removable
+                        accessibilityLabel={`Remove status filter ${formatInvoiceStatusLabel(data.query.status)}`}
+                        onRemove={() => updateFilters({ status: null })}
+                      >
+                        Status: {formatInvoiceStatusLabel(data.query.status)}
+                      </s-clickable-chip>
+                    ) : null}
+                    {dateRangeLabel ? (
+                      <s-clickable-chip
+                        removable
+                        accessibilityLabel={`Remove date range filter ${dateRangeLabel}`}
+                        onRemove={() => {
+                          setDateRangeDraft("");
+                          updateFilters({ from: null, to: null });
+                        }}
+                      >
+                        {dateRangeLabel}
+                      </s-clickable-chip>
+                    ) : null}
+                    <s-button variant="tertiary" onClick={clearPopoverFilters}>
+                      Clear all
+                    </s-button>
+                  </s-stack>
+                ) : null}
+              </s-stack>
             )}
 
             <s-table-header-row>
