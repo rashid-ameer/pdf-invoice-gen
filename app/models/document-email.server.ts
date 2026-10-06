@@ -2,9 +2,10 @@
  * Group 12 document email — delivery settings, send, events, idempotency.
  * Customer document email uses Resend (not Help SMTP).
  *
- * Auto-send requires master `enabled` plus the per-document flag
- * (invoiceAutoSend / creditNoteAutoSend / refundDocumentAutoSend) and
- * invoiceWhen — same gates as the old application.
+ * Auto-send is gated only by per-document settings (invoiceAutoSend,
+ * creditNoteAutoSend, refundDocumentAutoSend) and invoiceWhen.
+ * The stored `enabled` field is kept for data compatibility but does NOT
+ * control automatic document emails (intentional product decision).
  *
  * Public links are optional (Group 13); send continues without them.
  */
@@ -46,7 +47,7 @@ export { getEmailProviderStatus };
 export { isResendConfigured as isEmailProviderConfigured };
 
 // ---------------------------------------------------------------------------
-// Auto-send schedule (master `enabled` + per-document gates — old parity)
+// Auto-send schedule (per-document gates only — global `enabled` ignored)
 // ---------------------------------------------------------------------------
 
 export type ScheduleInvoiceAutoEmail = (
@@ -62,35 +63,31 @@ export type ScheduleInvoiceAutoEmailOnPaid = (
 
 /** True when invoice auto-send should run for this create/paid context. */
 export function shouldAutoSendInvoice(
-  settings: Pick<DeliverySettings, "enabled" | "invoiceAutoSend" | "invoiceWhen">,
+  settings: Pick<DeliverySettings, "invoiceAutoSend" | "invoiceWhen">,
   orderIsPaid: boolean,
 ): boolean {
-  if (!settings.enabled || !settings.invoiceAutoSend) return false;
+  if (!settings.invoiceAutoSend) return false;
   if (settings.invoiceWhen === "paid" && !orderIsPaid) return false;
   return true;
 }
 
 /** True when orders/paid should trigger invoice auto-send. */
 export function shouldAutoSendInvoiceOnPaid(
-  settings: Pick<DeliverySettings, "enabled" | "invoiceAutoSend" | "invoiceWhen">,
+  settings: Pick<DeliverySettings, "invoiceAutoSend" | "invoiceWhen">,
 ): boolean {
-  return Boolean(
-    settings.enabled &&
-      settings.invoiceAutoSend &&
-      settings.invoiceWhen === "paid",
-  );
+  return Boolean(settings.invoiceAutoSend && settings.invoiceWhen === "paid");
 }
 
 export function shouldAutoSendCreditNote(
-  settings: Pick<DeliverySettings, "enabled" | "creditNoteAutoSend">,
+  settings: Pick<DeliverySettings, "creditNoteAutoSend">,
 ): boolean {
-  return Boolean(settings.enabled && settings.creditNoteAutoSend);
+  return Boolean(settings.creditNoteAutoSend);
 }
 
 export function shouldAutoSendRefundDocument(
-  settings: Pick<DeliverySettings, "enabled" | "refundDocumentAutoSend">,
+  settings: Pick<DeliverySettings, "refundDocumentAutoSend">,
 ): boolean {
-  return Boolean(settings.enabled && settings.refundDocumentAutoSend);
+  return Boolean(settings.refundDocumentAutoSend);
 }
 
 async function recordProviderMissingFailure(
@@ -120,16 +117,18 @@ async function defaultScheduleInvoiceAutoEmail(
 ): Promise<void> {
   try {
     const settings = await getDeliverySettings(shopDomain);
-    if (!settings?.enabled || !settings.invoiceAutoSend) {
-      console.log(
-        `[email] skip invoice auto-send for ${invoiceId}: automated delivery disabled (master=${settings?.enabled}, invoice=${settings?.invoiceAutoSend})`,
-      );
-      return;
-    }
-    if (settings.invoiceWhen === "paid" && !orderIsPaid) {
-      console.log(
-        `[email] skip invoice auto-send for ${invoiceId}: waiting for order paid (invoiceWhen=paid)`,
-      );
+    if (!settings) return;
+
+    if (!shouldAutoSendInvoice(settings, orderIsPaid)) {
+      if (!settings.invoiceAutoSend) {
+        console.log(
+          `[email] skip invoice auto-send for ${invoiceId}: invoiceAutoSend disabled`,
+        );
+      } else {
+        console.log(
+          `[email] skip invoice auto-send for ${invoiceId}: waiting for order paid (invoiceWhen=paid)`,
+        );
+      }
       return;
     }
 
@@ -176,16 +175,18 @@ async function defaultScheduleInvoiceAutoEmailOnPaid(
 ): Promise<void> {
   try {
     const settings = await getDeliverySettings(shopDomain);
-    if (!settings?.enabled || !settings.invoiceAutoSend) {
-      console.log(
-        `[email] skip paid auto-send for ${invoiceId}: automated delivery disabled`,
-      );
-      return;
-    }
-    if (settings.invoiceWhen !== "paid") {
-      console.log(
-        `[email] skip paid auto-send for ${invoiceId}: invoiceWhen=${settings.invoiceWhen}`,
-      );
+    if (!settings) return;
+
+    if (!shouldAutoSendInvoiceOnPaid(settings)) {
+      if (!settings.invoiceAutoSend) {
+        console.log(
+          `[email] skip paid auto-send for ${invoiceId}: invoiceAutoSend disabled`,
+        );
+      } else {
+        console.log(
+          `[email] skip paid auto-send for ${invoiceId}: invoiceWhen=${settings.invoiceWhen}`,
+        );
+      }
       return;
     }
 
@@ -267,8 +268,8 @@ export async function scheduleInvoiceAutoEmailOnPaid(
 
 /**
  * Auto-send credit note and/or refund document after credit-note create.
- * Master `enabled` must be on; each document type uses its own auto-send flag.
- * Both may send on the same CreditNote when both flags are enabled (old parity).
+ * Each document type uses only its own auto-send flag (global `enabled` ignored).
+ * Both may send on the same CreditNote when both flags are enabled.
  */
 export async function scheduleCreditNoteAutoEmails(
   shopDomain: string,
@@ -276,12 +277,7 @@ export async function scheduleCreditNoteAutoEmails(
 ): Promise<void> {
   try {
     const settings = await getDeliverySettings(shopDomain);
-    if (!settings?.enabled) {
-      console.log(
-        `[email] skip credit-note auto-send for ${creditNoteId}: master delivery disabled`,
-      );
-      return;
-    }
+    if (!settings) return;
 
     const wantsCn = shouldAutoSendCreditNote(settings);
     const wantsRefund = shouldAutoSendRefundDocument(settings);
@@ -381,7 +377,10 @@ export function setDocumentEmailLinkResolver(
 // ---------------------------------------------------------------------------
 
 export interface DeliverySettings {
-  /** Master automation flag — required for all automatic document emails. */
+  /**
+   * Legacy field retained for stored-data compatibility.
+   * Does NOT control automatic document emails in the new app.
+   */
   enabled: boolean;
   invoiceAutoSend: boolean;
   invoiceWhen: EmailInvoiceWhen;

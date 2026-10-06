@@ -1,13 +1,13 @@
 /**
- * Audit shops where the master delivery flag is off, but at least one
+ * Audit shops where the legacy master delivery flag is off, but at least one
  * per-document auto-send setting is on.
  *
- * Auto-send requires master `enabled` (old parity / Phase 4). These shops
- * will NOT auto-send until master is enabled — even if per-document flags
- * are on. Useful when migrating settings or debugging "emails not sending".
+ * In the new app, auto-send is controlled only by per-document flags
+ * (invoiceAutoSend / creditNoteAutoSend / refundDocumentAutoSend). The stored
+ * `enabled` field is compatibility-only and does NOT gate automatic emails.
  *
- * DO NOT run against production without review. This script only READS data;
- * it does not update any settings.
+ * This script lists shops where `enabled=false` but document auto-send is on —
+ * useful when auditing migrated settings. It does not update any settings.
  *
  * Run from pdf-invoice-gen (uses DATABASE_URL / Prisma from .env):
  *

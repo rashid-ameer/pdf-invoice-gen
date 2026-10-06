@@ -192,39 +192,32 @@ async function seedCreditNoteForStore(storeId: string) {
   return note!;
 }
 
-describe("auto-send decisions require master enabled", () => {
-  it("gates on master enabled, per-document auto-send, and invoiceWhen", () => {
+describe("auto-send decisions ignore global enabled", () => {
+  it("gates only on per-document auto-send and invoiceWhen", () => {
     assert.equal(
       shouldAutoSendInvoice(
-        { enabled: true, invoiceAutoSend: true, invoiceWhen: "paid" },
+        { invoiceAutoSend: true, invoiceWhen: "paid" },
         true,
       ),
       true,
     );
     assert.equal(
       shouldAutoSendInvoice(
-        { enabled: true, invoiceAutoSend: true, invoiceWhen: "paid" },
+        { invoiceAutoSend: true, invoiceWhen: "paid" },
         false,
       ),
       false,
     );
     assert.equal(
       shouldAutoSendInvoice(
-        { enabled: true, invoiceAutoSend: true, invoiceWhen: "created" },
+        { invoiceAutoSend: true, invoiceWhen: "created" },
         false,
       ),
       true,
     );
     assert.equal(
       shouldAutoSendInvoice(
-        { enabled: true, invoiceAutoSend: false, invoiceWhen: "paid" },
-        true,
-      ),
-      false,
-    );
-    assert.equal(
-      shouldAutoSendInvoice(
-        { enabled: false, invoiceAutoSend: true, invoiceWhen: "paid" },
+        { invoiceAutoSend: false, invoiceWhen: "paid" },
         true,
       ),
       false,
@@ -232,7 +225,6 @@ describe("auto-send decisions require master enabled", () => {
 
     assert.equal(
       shouldAutoSendInvoiceOnPaid({
-        enabled: true,
         invoiceAutoSend: true,
         invoiceWhen: "paid",
       }),
@@ -240,7 +232,6 @@ describe("auto-send decisions require master enabled", () => {
     );
     assert.equal(
       shouldAutoSendInvoiceOnPaid({
-        enabled: true,
         invoiceAutoSend: true,
         invoiceWhen: "created",
       }),
@@ -248,42 +239,49 @@ describe("auto-send decisions require master enabled", () => {
     );
     assert.equal(
       shouldAutoSendInvoiceOnPaid({
-        enabled: false,
-        invoiceAutoSend: true,
+        invoiceAutoSend: false,
         invoiceWhen: "paid",
       }),
       false,
     );
 
+    assert.equal(shouldAutoSendCreditNote({ creditNoteAutoSend: true }), true);
+    assert.equal(shouldAutoSendCreditNote({ creditNoteAutoSend: false }), false);
     assert.equal(
-      shouldAutoSendCreditNote({ enabled: true, creditNoteAutoSend: true }),
+      shouldAutoSendRefundDocument({ refundDocumentAutoSend: true }),
       true,
     );
     assert.equal(
-      shouldAutoSendCreditNote({ enabled: true, creditNoteAutoSend: false }),
+      shouldAutoSendRefundDocument({ refundDocumentAutoSend: false }),
       false,
     );
-    assert.equal(
-      shouldAutoSendCreditNote({ enabled: false, creditNoteAutoSend: true }),
-      false,
-    );
-    assert.equal(
-      shouldAutoSendRefundDocument({
-        enabled: true,
-        refundDocumentAutoSend: true,
-      }),
-      true,
-    );
-    assert.equal(
-      shouldAutoSendRefundDocument({
-        enabled: false,
-        refundDocumentAutoSend: true,
-      }),
-      false,
-    );
+
+    // Stored `enabled` is not an input to these helpers.
+    const withMasterOff = normalizeDeliverySettings({
+      enabled: false,
+      invoiceAutoSend: true,
+      invoiceWhen: "paid",
+      creditNoteAutoSend: true,
+      refundDocumentAutoSend: true,
+    });
+    assert.equal(withMasterOff.enabled, false);
+    assert.equal(shouldAutoSendInvoice(withMasterOff, true), true);
+    assert.equal(shouldAutoSendCreditNote(withMasterOff), true);
+    assert.equal(shouldAutoSendRefundDocument(withMasterOff), true);
+
+    const withMasterOn = normalizeDeliverySettings({
+      enabled: true,
+      invoiceAutoSend: false,
+      creditNoteAutoSend: false,
+      refundDocumentAutoSend: false,
+    });
+    assert.equal(withMasterOn.enabled, true);
+    assert.equal(shouldAutoSendInvoice(withMasterOn, true), false);
+    assert.equal(shouldAutoSendCreditNote(withMasterOn), false);
+    assert.equal(shouldAutoSendRefundDocument(withMasterOn), false);
   });
 
-  it("still accepts and stores master enabled when saving settings", async () => {
+  it("still accepts and stores enabled when saving settings (compatibility only)", async () => {
     const { store } = await seedStoreWithInvoice();
     const saved = await saveDeliverySettings(store.shopifyDomain, {
       enabled: false,
@@ -300,7 +298,7 @@ describe("auto-send decisions require master enabled", () => {
     assert.equal(again!.invoiceAutoSend, true);
   });
 
-  it("does not auto-send when document auto-send is off even if master is on", async () => {
+  it("does not auto-send when document auto-send is off even if enabled is on", async () => {
     const { store, invoice } = await seedStoreWithInvoice();
     await saveDeliverySettings(store.shopifyDomain, {
       enabled: true,
@@ -320,37 +318,13 @@ describe("auto-send decisions require master enabled", () => {
     assert.equal(sends, 0);
   });
 
-  it("does not auto-send when master enabled is off even if document auto-send is on", async () => {
-    const { store, invoice } = await seedStoreWithInvoice();
-    await saveDeliverySettings(store.shopifyDomain, {
-      enabled: false,
-      invoiceAutoSend: true,
-      invoiceWhen: "paid",
-      creditNoteAutoSend: true,
-      refundDocumentAutoSend: true,
-    });
-
-    let sends = 0;
-    setResendTransportForTests(async () => {
-      sends += 1;
-      return { ok: true, id: "re_master_off", from: "from@test.com" };
-    });
-
-    await scheduleInvoiceAutoEmail(store.shopifyDomain, invoice.id, true);
-    await scheduleInvoiceAutoEmailOnPaid(store.shopifyDomain, invoice.id);
-    const note = await seedCreditNoteForStore(store.id);
-    await scheduleCreditNoteAutoEmails(store.shopifyDomain, note.id);
-    assert.equal(sends, 0);
-    assert.equal(await hasEmailSentEvent(invoice.id, "tax_invoice"), false);
-  });
-
   it(
-    "auto-sends invoice when master and invoiceAutoSend are on",
+    "auto-sends invoice when invoiceAutoSend is on even if enabled is off",
     { skip: !hasChromium },
     async () => {
       const { store, invoice } = await seedStoreWithInvoice();
       await saveDeliverySettings(store.shopifyDomain, {
-        enabled: true,
+        enabled: false,
         invoiceAutoSend: true,
         invoiceWhen: "paid",
       });
@@ -371,7 +345,7 @@ describe("auto-send decisions require master enabled", () => {
   it("skips invoice auto-send when waiting for paid trigger", async () => {
     const { store, invoice } = await seedStoreWithInvoice();
     await saveDeliverySettings(store.shopifyDomain, {
-      enabled: true,
+      enabled: false,
       invoiceAutoSend: true,
       invoiceWhen: "paid",
     });
@@ -387,13 +361,13 @@ describe("auto-send decisions require master enabled", () => {
   });
 
   it(
-    "auto-sends credit note / refund by their own flags when master is on",
+    "auto-sends credit note / refund by their own flags independently of enabled",
     { skip: !hasChromium },
     async () => {
       const { store, invoice } = await seedStoreWithInvoice();
       const note = await seedCreditNoteForStore(store.id);
       await saveDeliverySettings(store.shopifyDomain, {
-        enabled: true,
+        enabled: false,
         creditNoteAutoSend: true,
         refundDocumentAutoSend: false,
       });
@@ -416,6 +390,56 @@ describe("auto-send decisions require master enabled", () => {
       );
     },
   );
+
+  it("automations are independent across document types", async () => {
+    assert.equal(
+      shouldAutoSendInvoice(
+        { invoiceAutoSend: false, invoiceWhen: "paid" },
+        true,
+      ),
+      false,
+    );
+    assert.equal(
+      shouldAutoSendCreditNote({ creditNoteAutoSend: true }),
+      true,
+    );
+    assert.equal(
+      shouldAutoSendRefundDocument({ refundDocumentAutoSend: true }),
+      true,
+    );
+
+    assert.equal(
+      shouldAutoSendInvoice(
+        { invoiceAutoSend: true, invoiceWhen: "created" },
+        false,
+      ),
+      true,
+    );
+    assert.equal(
+      shouldAutoSendCreditNote({ creditNoteAutoSend: false }),
+      false,
+    );
+    assert.equal(
+      shouldAutoSendRefundDocument({ refundDocumentAutoSend: false }),
+      false,
+    );
+
+    assert.equal(
+      shouldAutoSendInvoice(
+        { invoiceAutoSend: false, invoiceWhen: "paid" },
+        true,
+      ),
+      false,
+    );
+    assert.equal(
+      shouldAutoSendCreditNote({ creditNoteAutoSend: false }),
+      false,
+    );
+    assert.equal(
+      shouldAutoSendRefundDocument({ refundDocumentAutoSend: true }),
+      true,
+    );
+  });
 });
 
 describe("normalizeDeliverySettings", () => {
