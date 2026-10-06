@@ -616,27 +616,40 @@ export default function CreditNotesPage() {
 
   const documentTypeSwitcher = (
     <s-box paddingBlock="base">
-      <s-stack
-        direction="inline"
+      <s-grid
+        gridTemplateColumns="auto auto"
         gap="small-200"
         alignItems="center"
+        justifyContent="start"
         accessibilityLabel="Document type"
       >
-        <s-button
-          variant={activeTab === "credit-notes" ? "primary" : "secondary"}
-          aria-pressed={activeTab === "credit-notes"}
+        <s-clickable
+          paddingBlock="small-200"
+          paddingInline="base"
+          border="none"
+          borderRadius="base"
+          background={activeTab === "credit-notes" ? "subdued" : "transparent"}
+          accessibilityLabel="Show credit notes"
           onClick={() => switchTab("credit-notes")}
         >
-          Credit notes
-        </s-button>
-        <s-button
-          variant={isRefundTab ? "primary" : "secondary"}
-          aria-pressed={isRefundTab}
+          <s-text {...(activeTab === "credit-notes" ? { type: "strong" } : {})}>
+            Credit notes
+          </s-text>
+        </s-clickable>
+        <s-clickable
+          paddingBlock="small-200"
+          paddingInline="base"
+          border="none"
+          borderRadius="base"
+          background={isRefundTab ? "subdued" : "transparent"}
+          accessibilityLabel="Show document refunds"
           onClick={() => switchTab("refund-documents")}
         >
-          Document refunds
-        </s-button>
-      </s-stack>
+          <s-text {...(isRefundTab ? { type: "strong" } : {})}>
+            Document refunds
+          </s-text>
+        </s-clickable>
+      </s-grid>
     </s-box>
   );
 
