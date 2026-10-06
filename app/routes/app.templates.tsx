@@ -35,6 +35,16 @@ const DOC_TYPES: Array<{ value: DocumentType; label: string }> = [
   { value: "packing_slip", label: "Packing slips" },
 ];
 
+const DELETE_MODAL_ID = "delete-template-modal";
+const DELETE_DISABLED_TOOLTIP_ID = "delete-selected-template-tooltip";
+
+/** 1 col mobile → 2 tablet → 4 desktop (container-query range syntax). */
+const CARD_GRID_COLUMNS =
+  "@container (inline-size < 560px) 1fr, (560px <= inline-size < 768px) 1fr 1fr, 1fr 1fr 1fr 1fr";
+
+const FILTER_ROW_COLUMNS =
+  "@container (inline-size > 480px) 1fr auto, 1fr";
+
 function documentTypeLabel(type: DocumentType): string {
   return DOC_TYPES.find((t) => t.value === type)?.label ?? type;
 }
@@ -203,6 +213,10 @@ export default function TemplatesPage() {
     "all",
   );
   const [searchDraft, setSearchDraft] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<TemplateListItem | null>(
+    null,
+  );
+  const [selectingId, setSelectingId] = useState<string | null>(null);
   const awaiting = useRef(false);
   const dataAtSubmit = useRef(fetcher.data);
 
@@ -212,6 +226,12 @@ export default function TemplatesPage() {
     isTemplatesListPath(navigation.location.pathname);
   const busy =
     fetcher.state === "submitting" || fetcher.state === "loading";
+
+  useEffect(() => {
+    if (fetcher.state === "idle") {
+      setSelectingId(null);
+    }
+  }, [fetcher.state]);
 
   useEffect(() => {
     if (!awaiting.current || fetcher.state !== "idle") return;
@@ -274,10 +294,20 @@ export default function TemplatesPage() {
     fetcher.submit(body, { method: "post" });
   };
 
+  const createNewTemplate = () => {
+    submitIntent("create-code", { documentType: data.documentType });
+  };
+
+  const clearSearchAndFilters = () => {
+    setSearchDraft("");
+    setKindFilter("all");
+  };
+
   const matchesSearch = (item: TemplateListItem) => {
     const q = searchDraft.trim().toLowerCase();
     if (!q) return true;
-    const haystack = `${item.name} ${item.description} ${item.tags.join(" ")}`.toLowerCase();
+    const haystack =
+      `${item.name} ${item.description} ${item.tags.join(" ")}`.toLowerCase();
     return haystack.includes(q);
   };
 
@@ -295,235 +325,301 @@ export default function TemplatesPage() {
   const showCustom = kindFilter === "all" || kindFilter === "custom";
   const showSystem = kindFilter === "all" || kindFilter === "system";
 
-  const typeSwitcher = (
-    <s-button-group accessibilityLabel="Document type">
-      {DOC_TYPES.map((type) => (
-        <s-button
-          key={type.value}
-          slot="secondary-actions"
-          variant="secondary"
-          icon={data.documentType === type.value ? "check" : undefined}
-          aria-pressed={data.documentType === type.value}
-          onClick={() => switchType(type.value)}
-        >
-          {type.label}
-        </s-button>
-      ))}
-    </s-button-group>
+  const visibleItems = useMemo(
+    () => [
+      ...(showCustom ? customItems : []),
+      ...(showSystem ? systemItems : []),
+    ],
+    [showCustom, showSystem, customItems, systemItems],
   );
 
-  const renderRow = (item: TemplateListItem) => {
-    const menuId = `template-actions-${item.id}`;
-    return (
-      <s-table-row key={item.id}>
-        <s-table-cell>
-          <s-stack direction="inline" gap="base" alignItems="center">
-            <TemplateThumb
-              dataUrl={item.thumbnailDataUrl}
-              fetchUrl={item.thumbnailUrl}
-              theme={item.theme}
-              alt=""
-              name={item.name}
-            />
-            <s-stack gap="none">
-              <s-link href={`/app/templates/${encodeURIComponent(item.id)}`}>
-                {item.name}
-              </s-link>
-              <s-text color="subdued">{item.description || item.code}</s-text>
-            </s-stack>
-          </s-stack>
-        </s-table-cell>
-        <s-table-cell>
-          <s-badge>{item.isSystem ? "System" : "Custom"}</s-badge>
-        </s-table-cell>
-        <s-table-cell>
-          {item.isDefault ? (
-            <s-badge tone="success">Default</s-badge>
-          ) : (
-            <s-text color="subdued">—</s-text>
-          )}
-        </s-table-cell>
-        <s-table-cell>
-          <s-stack direction="inline" gap="small">
-            {item.tags.map((tag) => (
-              <s-badge key={`${item.id}-${tag}`}>{tag}</s-badge>
-            ))}
-          </s-stack>
-        </s-table-cell>
-        <s-table-cell>
-          <s-button
-            icon="menu-horizontal"
-            variant="tertiary"
-            accessibilityLabel={`More actions for ${item.name}`}
-            commandFor={menuId}
-          />
-          <s-menu
-            id={menuId}
-            accessibilityLabel={`Actions for ${item.name}`}
-          >
-            <s-button
-              icon={item.isSystem ? "duplicate" : "edit"}
-              onClick={() =>
-                navigate(`/app/templates/${encodeURIComponent(item.id)}`)
-              }
-            >
-              {item.isSystem ? "Customize" : "Edit"}
-            </s-button>
-            {!item.isDefault ? (
-              <s-button
-                icon="check"
-                onClick={() =>
-                  submitIntent("set-default", { templateId: item.id })
-                }
-                {...(busy ? { disabled: true } : {})}
-              >
-                Set as default
-              </s-button>
-            ) : (
-              <s-button icon="check" disabled>
-                Applied
-              </s-button>
-            )}
-            {item.isCustom && !item.isDefault ? (
-              <s-button
-                icon="delete"
-                tone="critical"
-                onClick={() => {
-                  if (!window.confirm("Delete this template?")) return;
-                  submitIntent("delete", { templateId: item.id });
-                }}
-                {...(busy ? { disabled: true } : {})}
-              >
-                Delete
-              </s-button>
-            ) : null}
-          </s-menu>
-        </s-table-cell>
-      </s-table-row>
-    );
-  };
+  const hasSearchQuery = Boolean(searchDraft.trim());
+  const showCustomEmpty =
+    kindFilter === "custom" &&
+    !hasSearchQuery &&
+    data.customItems.length === 0;
+  const showNoResults = !showCustomEmpty && visibleItems.length === 0;
 
   return (
-    <s-page heading="Templates" inlineSize="large">
+    <s-page heading="Templates">
       <s-button
         slot="primary-action"
         variant="primary"
-        onClick={() =>
-          submitIntent("create-code", { documentType: data.documentType })
-        }
-        {...(busy ? { loading: true, disabled: true } : {})}
+        onClick={createNewTemplate}
+        {...(busy && !selectingId
+          ? { loading: true, disabled: true }
+          : {})}
       >
         Create new template
       </s-button>
 
-      <s-section padding="none" accessibilityLabel="Templates">
-        <s-box padding="base">
-          <s-stack gap="base">
-            {typeSwitcher}
-            <s-stack direction="inline" gap="base" alignItems="end">
-              <s-text-field
-                label="Search"
-                labelAccessibilityVisibility="exclusive"
-                placeholder="Search templates"
-                value={searchDraft}
-                onInput={(event: Event) => {
-                  setSearchDraft(
-                    (event.currentTarget as HTMLInputElement).value,
-                  );
-                }}
-              />
-              <s-button-group accessibilityLabel="Template kind">
-                {(
-                  [
-                    ["all", "All"],
-                    ["custom", "Custom"],
-                    ["system", "System"],
-                  ] as const
-                ).map(([value, label]) => (
-                  <s-button
-                    key={value}
-                    slot="secondary-actions"
-                    variant="secondary"
-                    icon={kindFilter === value ? "check" : undefined}
-                    aria-pressed={kindFilter === value}
-                    onClick={() => setKindFilter(value)}
-                  >
-                    {label}
-                  </s-button>
-                ))}
-              </s-button-group>
-            </s-stack>
-          </s-stack>
-        </s-box>
-
-        {showCustom ? (
-          <s-box padding="base">
-            <s-stack gap="small">
-              <s-heading>My templates</s-heading>
-              {customItems.length === 0 ? (
-                <s-text color="subdued">
-                  No custom {documentTypeLabel(data.documentType).toLowerCase()}{" "}
-                  templates yet. Customize a system template or create a new
-                  one.
+      <s-stack gap="base">
+        <s-grid
+          gridTemplateColumns="repeat(4, auto)"
+          gap="small-200"
+          alignItems="center"
+          justifyContent="start"
+          accessibilityLabel="Document type"
+        >
+          {DOC_TYPES.map((type) => {
+            const selected = data.documentType === type.value;
+            return (
+              <s-clickable
+                key={type.value}
+                paddingBlock="small-200"
+                paddingInline="base"
+                border="none"
+                borderRadius="base"
+                background={selected ? "base" : "transparent"}
+                accessibilityLabel={`${type.label}${selected ? ", selected" : ""}`}
+                onClick={() => switchType(type.value)}
+              >
+                <s-text type="strong">
+                  {type.label}
                 </s-text>
-              ) : (
-                <s-table {...(loading ? { loading: true } : {})}>
-                  <s-table-header-row>
-                    <s-table-header listSlot="primary">Template</s-table-header>
-                    <s-table-header listSlot="labeled">Kind</s-table-header>
-                    <s-table-header listSlot="labeled">Default</s-table-header>
-                    <s-table-header listSlot="labeled">Tags</s-table-header>
-                    <s-table-header listSlot="labeled">Actions</s-table-header>
-                  </s-table-header-row>
-                  <s-table-body>{customItems.map(renderRow)}</s-table-body>
-                </s-table>
-              )}
-            </s-stack>
-          </s-box>
-        ) : null}
+              </s-clickable>
+            );
+          })}
+        </s-grid>
 
-        {showSystem ? (
-          <s-box padding="base">
-            <s-stack gap="small">
-              <s-heading>System templates</s-heading>
-              {systemItems.length === 0 ? (
-                <s-text color="subdued">No system templates found.</s-text>
-              ) : (
-                <s-table {...(loading ? { loading: true } : {})}>
-                  <s-table-header-row>
-                    <s-table-header listSlot="primary">Template</s-table-header>
-                    <s-table-header listSlot="labeled">Kind</s-table-header>
-                    <s-table-header listSlot="labeled">Default</s-table-header>
-                    <s-table-header listSlot="labeled">Tags</s-table-header>
-                    <s-table-header listSlot="labeled">Actions</s-table-header>
-                  </s-table-header-row>
-                  <s-table-body>{systemItems.map(renderRow)}</s-table-body>
-                </s-table>
-              )}
-            </s-stack>
-          </s-box>
-        ) : null}
-      </s-section>
+        <s-query-container>
+          <s-grid
+            gridTemplateColumns={FILTER_ROW_COLUMNS}
+            gap="small-200"
+            alignItems="end"
+          >
+            <s-text-field
+              label="Search"
+              labelAccessibilityVisibility="exclusive"
+              icon="search"
+              placeholder="Search templates"
+              value={searchDraft}
+              autocomplete="off"
+              onInput={(event: Event) => {
+                setSearchDraft(
+                  (event.currentTarget as HTMLInputElement).value,
+                );
+              }}
+            />
+            <s-select
+              label="Template type"
+              labelAccessibilityVisibility="exclusive"
+              value={kindFilter}
+              onChange={(event: Event) => {
+                const value = (event.currentTarget as HTMLSelectElement).value;
+                if (value === "all" || value === "custom" || value === "system") {
+                  setKindFilter(value);
+                }
+              }}
+            >
+              <s-option value="all">All templates</s-option>
+              <s-option value="custom">Custom</s-option>
+              <s-option value="system">System</s-option>
+            </s-select>
+          </s-grid>
+        </s-query-container>
+
+        {loading ? (
+          <s-stack alignItems="center" gap="base" padding="large">
+            <s-spinner
+              accessibilityLabel="Loading templates"
+              size="large"
+            />
+            <s-text>Loading templates...</s-text>
+          </s-stack>
+        ) : showCustomEmpty ? (
+          <s-section accessibilityLabel="No custom templates">
+            <s-empty-state heading="You don't have any custom templates yet">
+              <s-text slot="subheading" color="subdued">
+                Edit a system template to create your own, or create a new one
+              </s-text>
+              <s-button
+                slot="primary-action"
+                variant="primary"
+                onClick={createNewTemplate}
+                {...(busy ? { loading: true, disabled: true } : {})}
+              >
+                Create new template
+              </s-button>
+            </s-empty-state>
+          </s-section>
+        ) : showNoResults ? (
+          <s-section accessibilityLabel="No templates found">
+            <s-empty-state heading="No templates found">
+              <s-text slot="subheading" color="subdued">
+                Try changing the search or filter
+              </s-text>
+              <s-button
+                slot="primary-action"
+                variant="primary"
+                onClick={clearSearchAndFilters}
+              >
+                Clear search and filters
+              </s-button>
+            </s-empty-state>
+          </s-section>
+        ) : (
+          <s-query-container>
+            <s-grid gridTemplateColumns={CARD_GRID_COLUMNS} gap="base">
+              {visibleItems.map((item) => (
+                <TemplateCard
+                  key={item.id}
+                  item={item}
+                  selectLoading={selectingId === item.id && busy}
+                  onEdit={() =>
+                    navigate(`/app/templates/${encodeURIComponent(item.id)}`)
+                  }
+                  onSelect={() => {
+                    setSelectingId(item.id);
+                    submitIntent("set-default", { templateId: item.id });
+                  }}
+                  onRequestDelete={() => setDeleteTarget(item)}
+                />
+              ))}
+            </s-grid>
+          </s-query-container>
+        )}
+      </s-stack>
+
+      <s-modal
+        id={DELETE_MODAL_ID}
+        heading={
+          deleteTarget
+            ? `Delete "${deleteTarget.name}"?`
+            : "Delete template?"
+        }
+      >
+        <s-text>
+          This can&apos;t be undone. Documents you already created keep their
+          original layout.
+        </s-text>
+        <s-button
+          slot="secondary-actions"
+          variant="secondary"
+          commandFor={DELETE_MODAL_ID}
+          command="--hide"
+          onClick={() => setDeleteTarget(null)}
+        >
+          Cancel
+        </s-button>
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          tone="critical"
+          commandFor={DELETE_MODAL_ID}
+          command="--hide"
+          onClick={() => {
+            if (!deleteTarget) return;
+            submitIntent("delete", { templateId: deleteTarget.id });
+            setDeleteTarget(null);
+          }}
+          {...(busy ? { loading: true, disabled: true } : {})}
+        >
+          Delete
+        </s-button>
+      </s-modal>
+
+      <s-tooltip id={DELETE_DISABLED_TOOLTIP_ID}>
+        <s-text>Select another template before deleting</s-text>
+      </s-tooltip>
     </s-page>
+  );
+}
+
+function TemplateCard({
+  item,
+  selectLoading,
+  onEdit,
+  onSelect,
+  onRequestDelete,
+}: {
+  item: TemplateListItem;
+  selectLoading: boolean;
+  onEdit: () => void;
+  onSelect: () => void;
+  onRequestDelete: () => void;
+}) {
+  const isSelected = item.isDefault;
+  const deleteDisabled = isSelected;
+  const actionColumns = item.isCustom ? "1fr 1fr auto" : "1fr 1fr";
+
+  return (
+    <s-section
+      padding="base"
+      accessibilityLabel={`${item.name}${isSelected ? ", selected" : ""}`}
+    >
+      <s-stack gap="base">
+        <TemplatePreview
+          dataUrl={item.thumbnailDataUrl}
+          fetchUrl={item.thumbnailUrl}
+          name={item.name}
+        />
+
+        <s-stack gap="small-200">
+          <s-heading lineClamp={1}>{item.name}</s-heading>
+          <s-stack direction="inline" gap="small-200" alignItems="center">
+            <s-badge tone="neutral">
+              {item.isSystem ? "System" : "Custom"}
+            </s-badge>
+            {isSelected ? <s-badge tone="success">Selected</s-badge> : null}
+          </s-stack>
+        </s-stack>
+
+        <s-grid gridTemplateColumns={actionColumns} gap="small-200">
+          <s-button variant="secondary" inlineSize="fill" onClick={onEdit}>
+            Edit
+          </s-button>
+          {isSelected ? (
+            <s-button variant="secondary" inlineSize="fill" disabled>
+              Selected
+            </s-button>
+          ) : (
+            <s-button
+              variant="secondary"
+              inlineSize="fill"
+              onClick={onSelect}
+              {...(selectLoading ? { loading: true } : {})}
+            >
+              Select
+            </s-button>
+          )}
+          {item.isCustom ? (
+            <s-button
+              icon="delete"
+              variant="secondary"
+              tone="critical"
+              inlineSize="fill"
+              accessibilityLabel={`Delete ${item.name}`}
+              {...(deleteDisabled
+                ? {
+                    disabled: true,
+                    interestFor: DELETE_DISABLED_TOOLTIP_ID,
+                  }
+                : {
+                    commandFor: DELETE_MODAL_ID,
+                    command: "--show" as const,
+                    onClick: onRequestDelete,
+                  })}
+            />
+          ) : null}
+        </s-grid>
+      </s-stack>
+    </s-section>
   );
 }
 
 /**
  * List thumbnail: prefer cached data URL from the loader (no auth needed).
- * Fall back to a CSS mini-preview (old parity — never a blank box) and optionally
- * fetch JPEG with App Bridge Bearer when cache is still empty.
+ * Fall back to s-image placeholder, then fetch JPEG with App Bridge Bearer
+ * when cache is still empty.
  */
-function TemplateThumb({
+function TemplatePreview({
   dataUrl,
   fetchUrl,
-  theme,
-  alt,
   name,
 }: {
   dataUrl: string | null;
   fetchUrl: string;
-  theme: { primary: string; accent: string; secondary: string };
-  alt: string;
   name: string;
 }) {
   const shopify = useAppBridge();
@@ -550,7 +646,7 @@ function TemplateThumb({
         created = URL.createObjectURL(blob);
         setObjectUrl(created);
       } catch {
-        // Keep CSS mini-preview — never force a blank failed state.
+        // Keep s-image placeholder — never force a blank failed state.
       }
     })();
 
@@ -560,103 +656,19 @@ function TemplateThumb({
     };
   }, [dataUrl, fetchUrl, shopify]);
 
-  const src = dataUrl || objectUrl;
-  if (src) {
-    return (
-      <img
-        src={src}
-        alt={alt || `${name} preview`}
-        loading="lazy"
-        decoding="async"
-        width={48}
-        height={64}
-        style={{
-          width: 48,
-          height: 64,
-          objectFit: "cover",
-          objectPosition: "top center",
-          borderRadius: 4,
-          border: "1px solid #c9cccf",
-          background: "#f1f2f3",
-          display: "block",
-          flexShrink: 0,
-        }}
-      />
-    );
-  }
+  const src = dataUrl || objectUrl || undefined;
 
-  return <MiniPreview theme={theme} name={name} />;
-}
-
-/** Compact CSS stub matching old list mini-preview (always visible). */
-function MiniPreview({
-  theme,
-  name,
-}: {
-  theme: { primary: string; accent: string; secondary: string };
-  name: string;
-}) {
   return (
-    <div
-      aria-label={`${name} preview`}
-      style={{
-        width: 48,
-        height: 64,
-        borderRadius: 4,
-        border: "1px solid #c9cccf",
-        background: "#fff",
-        overflow: "hidden",
-        flexShrink: 0,
-        boxSizing: "border-box",
-      }}
-    >
-      <div style={{ height: 10, background: theme.primary }} />
-      <div style={{ padding: 5 }}>
-        <div
-          style={{
-            height: 3,
-            width: "72%",
-            background: theme.accent,
-            marginBottom: 4,
-            borderRadius: 1,
-          }}
-        />
-        <div
-          style={{
-            height: 2,
-            width: "100%",
-            background: "#e1e3e5",
-            marginBottom: 3,
-          }}
-        />
-        <div
-          style={{
-            height: 2,
-            width: "92%",
-            background: "#e1e3e5",
-            marginBottom: 3,
-          }}
-        />
-        <div
-          style={{
-            height: 2,
-            width: "80%",
-            background: "#e1e3e5",
-            marginBottom: 6,
-          }}
-        />
-        <div
-          style={{
-            height: 4,
-            width: "55%",
-            marginLeft: "auto",
-            background: theme.secondary,
-            borderRadius: 1,
-            opacity: 0.55,
-          }}
-        />
-      </div>
-    </div>
+    <s-image
+      {...(src ? { src } : {})}
+      alt={`${name} preview`}
+      aspectRatio="3/4"
+      objectFit="cover"
+      inlineSize="fill"
+      border="base"
+      borderRadius="base"
+      loading="lazy"
+    />
   );
 }
 
