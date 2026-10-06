@@ -33,10 +33,19 @@ import { formatPaymentStatus } from "../utils/csv";
 import { downloadCreditNotePdf } from "../utils/download-credit-note-pdf";
 import { downloadRefundDocumentPdf } from "../utils/download-refund-document-pdf";
 import {
+  INVOICE_DOCUMENT_STATUSES,
   formatInvoiceStatusLabel,
   invoiceStatusBadgeTone,
   paymentStatusBadgeTone,
 } from "../utils/invoice-status-badges";
+import { hasActiveInvoiceUiFilters } from "../utils/invoice-ui-filters";
+import {
+  formatInvoiceDateRangeLabel,
+  invoiceDatePickerAllowThroughToday,
+  invoiceDatePickerTodayIso,
+  invoiceDateRangePickerValue,
+  parseInvoiceDateRangePickerValue,
+} from "../utils/invoice-date-range";
 import {
   fetchAndPrintCreditNoteDocument,
   fetchAndPrintCreditNoteDocuments,
@@ -54,6 +63,9 @@ import { authenticate } from "../shopify.server";
  * the route component — React Router blocks that and the page fails to load).
  */
 const BULK_PRINT_LIMIT = 50;
+
+const CREDIT_NOTES_FILTERS_POPOVER_ID = "credit-notes-filters-popover";
+const CREDIT_NOTES_FILTERS_TOOLTIP_ID = "credit-notes-filters-tooltip";
 
 /** List route only — not credit-note / refund details. */
 function isCreditNotesListPath(pathname: string): boolean {
@@ -84,6 +96,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     pages: list.pages,
     limit: list.limit,
     query: list.query,
+    hasFilters: list.hasFilters,
     refundTemplates: refundTemplatesResult ?? [],
   };
 };
@@ -244,15 +257,30 @@ export default function CreditNotesPage() {
     linkFetcher.state === "submitting" || linkFetcher.state === "loading";
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [searchDraft, setSearchDraft] = useState(data.query.q);
+  const [dateRangeDraft, setDateRangeDraft] = useState(() =>
+    invoiceDateRangePickerValue(data.query.from, data.query.to),
+  );
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
   const [linkCopyingId, setLinkCopyingId] = useState<string | null>(null);
   const [csvBusy, setCsvBusy] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailAwaiting = useRef(false);
   const emailDataAtSubmit = useRef(emailFetcher.data);
   const linkAwaiting = useRef(false);
   const linkDataAtSubmit = useRef(linkFetcher.data);
+
+  useEffect(() => {
+    setSearchDraft(data.query.q);
+  }, [data.query.q]);
+
+  useEffect(() => {
+    setDateRangeDraft(
+      invoiceDateRangePickerValue(data.query.from, data.query.to),
+    );
+  }, [data.query.from, data.query.to]);
 
   useEffect(() => {
     if (syncFetcher.state !== "idle" || !syncFetcher.data) return;
@@ -320,7 +348,15 @@ export default function CreditNotesPage() {
 
   useEffect(() => {
     setSelectedIds(new Set());
-  }, [data.page, data.limit, data.query.tab]);
+  }, [
+    data.page,
+    data.limit,
+    data.query.tab,
+    data.query.q,
+    data.query.status,
+    data.query.from,
+    data.query.to,
+  ]);
 
   const activeTab: CreditNoteListTab = data.query.tab;
   const isRefundTab = activeTab === "refund-documents";
@@ -333,7 +369,7 @@ export default function CreditNotesPage() {
     (patch: Record<string, string | null | undefined>) => {
       const next = new URLSearchParams(searchParams);
       for (const [key, value] of Object.entries(patch)) {
-        if (value == null || value === "") next.delete(key);
+        if (value == null || value === "" || value === "all") next.delete(key);
         else next.set(key, value);
       }
       if (!("page" in patch)) next.delete("page");
@@ -349,6 +385,34 @@ export default function CreditNotesPage() {
       tab: tab === "credit-notes" ? null : "refund-documents",
       page: null,
     });
+  };
+
+  const clearPopoverFilters = () => {
+    setDateRangeDraft("");
+    updateQuery({ status: null, from: null, to: null });
+  };
+
+  const scheduleSearch = (value: string) => {
+    setSearchDraft(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      updateQuery({ q: value.trim() || null });
+    }, 250);
+  };
+
+  const onDateRangeChange = (event: Event) => {
+    const value = String(
+      (event.currentTarget as HTMLInputElement & { value: string }).value ?? "",
+    );
+    setDateRangeDraft(value);
+    if (!value) {
+      updateQuery({ from: null, to: null });
+      return;
+    }
+    const parsed = parseInvoiceDateRangePickerValue(value);
+    if (parsed.from && parsed.to) {
+      updateQuery({ from: parsed.from, to: parsed.to });
+    }
   };
 
   const startSyncRefunds = () => {
@@ -403,7 +467,22 @@ export default function CreditNotesPage() {
     visibleIds.some((id) => selectedIds.has(id)) && !allOnPageSelected;
   const hasSelection = selectedIds.size > 0 && data.items.length > 0;
 
+  const hasActiveFilters = hasActiveInvoiceUiFilters(data.query);
+  const statusFilterActive =
+    Boolean(data.query.status) && data.query.status !== "all";
+  const dateRangeLabel = formatInvoiceDateRangeLabel(
+    data.query.from,
+    data.query.to,
+  );
+  const hasAppliedPopoverFilters = statusFilterActive || Boolean(dateRangeLabel);
+  const datePickerAllow = invoiceDatePickerAllowThroughToday();
+  const datePickerView = (data.query.from || invoiceDatePickerTodayIso()).slice(
+    0,
+    7,
+  );
   const showEmptyContent = !loading && data.items.length === 0;
+  const showFilteredEmpty = showEmptyContent && hasActiveFilters;
+  const showFirstTimeEmpty = showEmptyContent && !hasActiveFilters;
   const showTableRows = data.items.length > 0;
   const showPagination = showTableRows;
 
@@ -536,26 +615,29 @@ export default function CreditNotesPage() {
   };
 
   const documentTypeSwitcher = (
-    <s-button-group gap="none" accessibilityLabel="Document type">
-      <s-button
-        slot="secondary-actions"
-        variant="secondary"
-        icon={activeTab === "credit-notes" ? "check" : undefined}
-        aria-pressed={activeTab === "credit-notes"}
-        onClick={() => switchTab("credit-notes")}
+    <s-box paddingBlock="base">
+      <s-stack
+        direction="inline"
+        gap="small-200"
+        alignItems="center"
+        accessibilityLabel="Document type"
       >
-        Credit notes
-      </s-button>
-      <s-button
-        slot="secondary-actions"
-        variant="secondary"
-        icon={isRefundTab ? "check" : undefined}
-        aria-pressed={isRefundTab}
-        onClick={() => switchTab("refund-documents")}
-      >
-        Document refunds
-      </s-button>
-    </s-button-group>
+        <s-button
+          variant={activeTab === "credit-notes" ? "primary" : "secondary"}
+          aria-pressed={activeTab === "credit-notes"}
+          onClick={() => switchTab("credit-notes")}
+        >
+          Credit notes
+        </s-button>
+        <s-button
+          variant={isRefundTab ? "primary" : "secondary"}
+          aria-pressed={isRefundTab}
+          onClick={() => switchTab("refund-documents")}
+        >
+          Document refunds
+        </s-button>
+      </s-stack>
+    </s-box>
   );
 
   return (
@@ -580,10 +662,10 @@ export default function CreditNotesPage() {
       </s-button>
 
       <s-section padding="none" accessibilityLabel="Credit notes">
-        {showEmptyContent ? (
-          <>
-            <s-box padding="base">{documentTypeSwitcher}</s-box>
-            <s-box padding="base">
+        {showFirstTimeEmpty ? (
+          <s-box padding="base">
+            <s-stack gap="base">
+              {documentTypeSwitcher}
               <s-empty-state
                 heading={
                   isRefundTab
@@ -603,8 +685,8 @@ export default function CreditNotesPage() {
                     : "Credit notes appear here when Shopify refunds are issued for orders that already have an invoice. Use Sync refunds if you already have refunds in the store."}
                 </s-text>
               </s-empty-state>
-            </s-box>
-          </>
+            </s-stack>
+          </s-box>
         ) : (
           <s-table
             {...(showPagination
@@ -623,30 +705,136 @@ export default function CreditNotesPage() {
             {...(loading ? { loading: true } : {})}
           >
             {hasSelection ? (
-              <s-box slot="filters" padding="small" background="strong">
-                <s-stack
-                  direction="inline"
-                  gap="base"
+              <s-stack slot="filters" gap="small-200">
+                {documentTypeSwitcher}
+                <s-box padding="small" background="strong">
+                  <s-stack
+                    direction="inline"
+                    gap="base"
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
+                    <s-text type="strong">{selectedIds.size} selected</s-text>
+                    <s-stack direction="inline" gap="small">
+                      <s-button
+                        onClick={printSelected}
+                        {...(printSelectedBusy
+                          ? { loading: true, disabled: true }
+                          : {})}
+                      >
+                        Print selected
+                      </s-button>
+                    </s-stack>
+                  </s-stack>
+                </s-box>
+              </s-stack>
+            ) : (
+              <s-stack slot="filters" gap="small-200">
+                {documentTypeSwitcher}
+                <s-grid
+                  gap="small-200"
+                  gridTemplateColumns="1fr auto"
                   alignItems="center"
-                  justifyContent="space-between"
                 >
-                  <s-text type="strong">{selectedIds.size} selected</s-text>
-                  <s-stack direction="inline" gap="small">
-                    <s-button
-                      onClick={printSelected}
-                      {...(printSelectedBusy
-                        ? { loading: true, disabled: true }
-                        : {})}
-                    >
-                      Print selected
+                  <s-text-field
+                    label="Search"
+                    labelAccessibilityVisibility="exclusive"
+                    icon="search"
+                    placeholder="Search by document, invoice, order, customer, email"
+                    value={searchDraft}
+                    autocomplete="off"
+                    onInput={(event: Event) => {
+                      const value = (event.currentTarget as HTMLInputElement)
+                        .value;
+                      scheduleSearch(value);
+                    }}
+                  />
+                  <s-button
+                    icon={
+                      hasAppliedPopoverFilters ? "filter-active" : "filter"
+                    }
+                    variant="secondary"
+                    accessibilityLabel="Filters"
+                    interestFor={CREDIT_NOTES_FILTERS_TOOLTIP_ID}
+                    commandFor={CREDIT_NOTES_FILTERS_POPOVER_ID}
+                  />
+                </s-grid>
+                <s-tooltip id={CREDIT_NOTES_FILTERS_TOOLTIP_ID}>
+                  <s-text>Filters</s-text>
+                </s-tooltip>
+                <s-popover
+                  id={CREDIT_NOTES_FILTERS_POPOVER_ID}
+                  inlineSize="320px"
+                >
+                  <s-box padding="base">
+                    <s-stack gap="base">
+                      <s-select
+                        label="Document status"
+                        value={data.query.status || "all"}
+                        onChange={(event: Event) => {
+                          const value = (
+                            event.currentTarget as HTMLSelectElement
+                          ).value;
+                          updateQuery({
+                            status: value === "all" ? null : value,
+                          });
+                        }}
+                      >
+                        <s-option value="all">All statuses</s-option>
+                        {INVOICE_DOCUMENT_STATUSES.map((status) => (
+                          <s-option key={status} value={status}>
+                            {formatInvoiceStatusLabel(status)}
+                          </s-option>
+                        ))}
+                      </s-select>
+                      <s-divider />
+                      <s-stack gap="small-200">
+                        <s-text type="strong">Date range</s-text>
+                        <s-date-picker
+                          type="range"
+                          name="credit-note-date-range"
+                          value={dateRangeDraft}
+                          view={datePickerView}
+                          allow={datePickerAllow}
+                          onChange={onDateRangeChange}
+                        />
+                      </s-stack>
+                    </s-stack>
+                  </s-box>
+                </s-popover>
+                {hasAppliedPopoverFilters ? (
+                  <s-stack
+                    direction="inline"
+                    gap="small-200"
+                    alignItems="center"
+                  >
+                    {statusFilterActive ? (
+                      <s-clickable-chip
+                        removable
+                        accessibilityLabel={`Remove status filter ${formatInvoiceStatusLabel(data.query.status)}`}
+                        onRemove={() => updateQuery({ status: null })}
+                      >
+                        Status: {formatInvoiceStatusLabel(data.query.status)}
+                      </s-clickable-chip>
+                    ) : null}
+                    {dateRangeLabel ? (
+                      <s-clickable-chip
+                        removable
+                        accessibilityLabel={`Remove date range filter ${dateRangeLabel}`}
+                        onRemove={() => {
+                          setDateRangeDraft("");
+                          updateQuery({ from: null, to: null });
+                        }}
+                      >
+                        {dateRangeLabel}
+                      </s-clickable-chip>
+                    ) : null}
+                    <s-button variant="tertiary" onClick={clearPopoverFilters}>
+                      Clear all
                     </s-button>
                   </s-stack>
-                </s-stack>
-              </s-box>
-            ) : (
-              <s-box slot="filters" padding="base">
-                {documentTypeSwitcher}
-              </s-box>
+                ) : null}
+              </s-stack>
             )}
 
             <s-table-header-row>
@@ -687,7 +875,25 @@ export default function CreditNotesPage() {
             </s-table-header-row>
 
             <s-table-body>
-              {showTableRows
+              {showFilteredEmpty ? (
+                <s-empty-state
+                  heading={
+                    isRefundTab
+                      ? "No document refunds found"
+                      : "No credit notes found"
+                  }
+                >
+                  <s-icon
+                    slot="graphic"
+                    type="search"
+                    size="base"
+                    color="subdued"
+                  />
+                  <s-text slot="subheading">
+                    Try changing the filters or search terms for this view
+                  </s-text>
+                </s-empty-state>
+              ) : showTableRows
                 ? data.items.map((note: CreditNoteListItem) => {
                     const checkboxId = `credit-note-select-${note.id}`;
                     const linkId = `credit-note-link-${note.id}`;

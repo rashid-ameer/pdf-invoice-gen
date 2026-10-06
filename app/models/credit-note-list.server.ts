@@ -7,6 +7,7 @@ import {
   formatPaymentStatus,
   toCsv,
 } from "../utils/csv";
+import { dubaiDayBounds } from "../utils/date-bounds";
 import {
   DOCUMENT_PAGE_SIZE,
   DOCUMENT_PAGE_SIZE_OPTIONS,
@@ -36,9 +37,17 @@ export interface CreditNoteListItem {
 }
 
 export interface CreditNoteListQuery {
+  q: string;
+  status: string;
+  from: string;
+  to: string;
   page: number;
   limit: number;
   tab: CreditNoteListTab;
+}
+
+function isDay(value: unknown): value is string {
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 export function parseCreditNoteListTab(raw: unknown): CreditNoteListTab {
@@ -49,11 +58,65 @@ export function parseCreditNoteListTab(raw: unknown): CreditNoteListTab {
 export function parseCreditNoteListQuery(
   raw: Record<string, unknown>,
 ): CreditNoteListQuery {
+  const q = typeof raw.q === "string" ? raw.q.trim().slice(0, 80) : "";
+  const status = typeof raw.status === "string" ? raw.status.trim() : "";
+  const from = isDay(raw.from) ? String(raw.from) : "";
+  const to = isDay(raw.to) ? String(raw.to) : "";
   return {
+    q,
+    status,
+    from,
+    to,
     page: parseDocumentPage(raw.page),
     limit: parseDocumentPageSize(raw.limit),
     tab: parseCreditNoteListTab(raw.tab),
   };
+}
+
+export function creditNoteListHasFilters(query: CreditNoteListQuery): boolean {
+  return Boolean(
+    query.q ||
+      (query.status && query.status !== "all") ||
+      query.from ||
+      query.to,
+  );
+}
+
+function escapeLike(value: string): string {
+  return value.replace(/([\\%_])/g, "\\$1");
+}
+
+/**
+ * Search by document number, linked invoice/order, or buyer.
+ * Returns matching ids, or null when search is empty.
+ */
+async function findCreditNoteIdsMatchingSearch(
+  storeId: string,
+  q: string | undefined,
+): Promise<string[] | null> {
+  const trimmed = typeof q === "string" ? q.trim() : "";
+  if (!trimmed) return null;
+
+  const pattern = `%${escapeLike(trimmed)}%`;
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    `SELECT cn.id AS id FROM "CreditNote" cn
+     LEFT JOIN "Invoice" inv ON inv.id = cn."invoiceId"
+     WHERE cn."storeId" = ?
+       AND (
+         cn."creditNoteNumber" LIKE ? ESCAPE '\\' COLLATE NOCASE
+         OR IFNULL(json_extract(cn."buyer", '$.name'), '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+         OR IFNULL(json_extract(cn."buyer", '$.email'), '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+         OR IFNULL(inv."invoiceNumber", '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+         OR IFNULL(inv."shopifyOrderNumber", '') LIKE ? ESCAPE '\\' COLLATE NOCASE
+       )`,
+    storeId,
+    pattern,
+    pattern,
+    pattern,
+    pattern,
+    pattern,
+  );
+  return rows.map((row) => row.id);
 }
 
 type InvoiceLookup = Record<
@@ -172,15 +235,65 @@ const LIST_SELECT = {
 /** Old listCreditNotesForShop: createdAt desc, page/limit, store scoped. */
 export async function listCreditNotesForShop(
   shopDomain: string,
-  query: CreditNoteListQuery = parseCreditNoteListQuery({}),
+  query: Partial<CreditNoteListQuery> = {},
 ) {
   const store = await prisma.store.findFirst({
     where: { shopifyDomain: shopDomain, status: "active" },
   });
   if (!store) return null;
 
+  const defaults = parseCreditNoteListQuery({});
+  const normalized: CreditNoteListQuery = {
+    q: typeof query.q === "string" ? query.q : defaults.q,
+    status: typeof query.status === "string" ? query.status : defaults.status,
+    from: typeof query.from === "string" ? query.from : defaults.from,
+    to: typeof query.to === "string" ? query.to : defaults.to,
+    page:
+      typeof query.page === "number" && query.page > 0
+        ? Math.floor(query.page)
+        : defaults.page,
+    // Preserve explicit numeric limits from callers/tests (may be outside UI page-size options).
+    limit:
+      typeof query.limit === "number" && query.limit > 0
+        ? Math.floor(query.limit)
+        : defaults.limit,
+    tab: query.tab ?? defaults.tab,
+  };
+
   const where: Prisma.CreditNoteWhereInput = { storeId: store.id };
-  const requestedSkip = Math.max(0, (query.page - 1) * query.limit);
+
+  if (normalized.status && normalized.status !== "all") {
+    where.status = normalized.status;
+  }
+
+  const issueDate = dubaiDayBounds(normalized.from, normalized.to);
+  if (issueDate) {
+    where.issueDate = {};
+    if (issueDate.gte) where.issueDate.gte = issueDate.gte;
+    if (issueDate.lte) where.issueDate.lte = issueDate.lte;
+  }
+
+  const searchIds = await findCreditNoteIdsMatchingSearch(
+    store.id,
+    normalized.q,
+  );
+  if (searchIds) {
+    if (searchIds.length === 0) {
+      return {
+        store,
+        items: [] as CreditNoteListItem[],
+        total: 0,
+        page: 1,
+        pages: 1,
+        limit: normalized.limit,
+        query: { ...normalized, page: 1 },
+        hasFilters: creditNoteListHasFilters(normalized),
+      };
+    }
+    where.id = { in: searchIds };
+  }
+
+  const requestedSkip = Math.max(0, (normalized.page - 1) * normalized.limit);
 
   const [total, firstPage] = await Promise.all([
     prisma.creditNote.count({ where }),
@@ -189,20 +302,20 @@ export async function listCreditNotesForShop(
       select: LIST_SELECT,
       orderBy: { createdAt: "desc" },
       skip: requestedSkip,
-      take: query.limit,
+      take: normalized.limit,
     }),
   ]);
 
-  const pages = Math.max(1, Math.ceil(total / query.limit) || 1);
-  const page = Math.min(query.page, pages);
+  const pages = Math.max(1, Math.ceil(total / normalized.limit) || 1);
+  const page = Math.min(normalized.page, pages);
   let notes = firstPage;
-  if (page !== query.page && total > 0) {
+  if (page !== normalized.page && total > 0) {
     notes = await prisma.creditNote.findMany({
       where,
       select: LIST_SELECT,
       orderBy: { createdAt: "desc" },
-      skip: (page - 1) * query.limit,
-      take: query.limit,
+      skip: (page - 1) * normalized.limit,
+      take: normalized.limit,
     });
   }
 
@@ -216,8 +329,9 @@ export async function listCreditNotesForShop(
     total,
     page,
     pages,
-    limit: query.limit,
-    query: { ...query, page },
+    limit: normalized.limit,
+    query: { ...normalized, page },
+    hasFilters: creditNoteListHasFilters(normalized),
   };
 }
 
