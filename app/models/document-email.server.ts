@@ -2,10 +2,9 @@
  * Group 12 document email — delivery settings, send, events, idempotency.
  * Customer document email uses Resend (not Help SMTP).
  *
- * Auto-send is gated only by per-document settings (invoiceAutoSend,
- * creditNoteAutoSend, refundDocumentAutoSend) and invoiceWhen. The legacy
- * master `enabled` field is still persisted for UI compatibility but is not
- * read for send decisions.
+ * Auto-send requires master `enabled` plus the per-document flag
+ * (invoiceAutoSend / creditNoteAutoSend / refundDocumentAutoSend) and
+ * invoiceWhen — same gates as the old application.
  *
  * Public links are optional (Group 13); send continues without them.
  */
@@ -47,7 +46,7 @@ export { getEmailProviderStatus };
 export { isResendConfigured as isEmailProviderConfigured };
 
 // ---------------------------------------------------------------------------
-// Auto-send schedule (per-document gates only — legacy master `enabled` ignored)
+// Auto-send schedule (master `enabled` + per-document gates — old parity)
 // ---------------------------------------------------------------------------
 
 export type ScheduleInvoiceAutoEmail = (
@@ -61,35 +60,37 @@ export type ScheduleInvoiceAutoEmailOnPaid = (
   invoiceId: string,
 ) => Promise<void>;
 
-/** True when invoice auto-send should run for this create/paid context. Ignores master `enabled`. */
+/** True when invoice auto-send should run for this create/paid context. */
 export function shouldAutoSendInvoice(
-  settings: Pick<DeliverySettings, "invoiceAutoSend" | "invoiceWhen">,
+  settings: Pick<DeliverySettings, "enabled" | "invoiceAutoSend" | "invoiceWhen">,
   orderIsPaid: boolean,
 ): boolean {
-  if (!settings.invoiceAutoSend) return false;
+  if (!settings.enabled || !settings.invoiceAutoSend) return false;
   if (settings.invoiceWhen === "paid" && !orderIsPaid) return false;
   return true;
 }
 
-/** True when orders/paid should trigger invoice auto-send. Ignores master `enabled`. */
+/** True when orders/paid should trigger invoice auto-send. */
 export function shouldAutoSendInvoiceOnPaid(
-  settings: Pick<DeliverySettings, "invoiceAutoSend" | "invoiceWhen">,
+  settings: Pick<DeliverySettings, "enabled" | "invoiceAutoSend" | "invoiceWhen">,
 ): boolean {
-  return Boolean(settings.invoiceAutoSend && settings.invoiceWhen === "paid");
+  return Boolean(
+    settings.enabled &&
+      settings.invoiceAutoSend &&
+      settings.invoiceWhen === "paid",
+  );
 }
 
-/** Ignores master `enabled`. */
 export function shouldAutoSendCreditNote(
-  settings: Pick<DeliverySettings, "creditNoteAutoSend">,
+  settings: Pick<DeliverySettings, "enabled" | "creditNoteAutoSend">,
 ): boolean {
-  return Boolean(settings.creditNoteAutoSend);
+  return Boolean(settings.enabled && settings.creditNoteAutoSend);
 }
 
-/** Ignores master `enabled`. */
 export function shouldAutoSendRefundDocument(
-  settings: Pick<DeliverySettings, "refundDocumentAutoSend">,
+  settings: Pick<DeliverySettings, "enabled" | "refundDocumentAutoSend">,
 ): boolean {
-  return Boolean(settings.refundDocumentAutoSend);
+  return Boolean(settings.enabled && settings.refundDocumentAutoSend);
 }
 
 async function recordProviderMissingFailure(
@@ -119,18 +120,16 @@ async function defaultScheduleInvoiceAutoEmail(
 ): Promise<void> {
   try {
     const settings = await getDeliverySettings(shopDomain);
-    if (!settings) return;
-
-    if (!shouldAutoSendInvoice(settings, orderIsPaid)) {
-      if (!settings.invoiceAutoSend) {
-        console.log(
-          `[email] skip invoice auto-send for ${invoiceId}: invoiceAutoSend disabled`,
-        );
-      } else {
-        console.log(
-          `[email] skip invoice auto-send for ${invoiceId}: waiting for order paid (invoiceWhen=paid)`,
-        );
-      }
+    if (!settings?.enabled || !settings.invoiceAutoSend) {
+      console.log(
+        `[email] skip invoice auto-send for ${invoiceId}: automated delivery disabled (master=${settings?.enabled}, invoice=${settings?.invoiceAutoSend})`,
+      );
+      return;
+    }
+    if (settings.invoiceWhen === "paid" && !orderIsPaid) {
+      console.log(
+        `[email] skip invoice auto-send for ${invoiceId}: waiting for order paid (invoiceWhen=paid)`,
+      );
       return;
     }
 
@@ -177,18 +176,16 @@ async function defaultScheduleInvoiceAutoEmailOnPaid(
 ): Promise<void> {
   try {
     const settings = await getDeliverySettings(shopDomain);
-    if (!settings) return;
-
-    if (!shouldAutoSendInvoiceOnPaid(settings)) {
-      if (!settings.invoiceAutoSend) {
-        console.log(
-          `[email] skip paid auto-send for ${invoiceId}: invoiceAutoSend disabled`,
-        );
-      } else {
-        console.log(
-          `[email] skip paid auto-send for ${invoiceId}: invoiceWhen=${settings.invoiceWhen}`,
-        );
-      }
+    if (!settings?.enabled || !settings.invoiceAutoSend) {
+      console.log(
+        `[email] skip paid auto-send for ${invoiceId}: automated delivery disabled`,
+      );
+      return;
+    }
+    if (settings.invoiceWhen !== "paid") {
+      console.log(
+        `[email] skip paid auto-send for ${invoiceId}: invoiceWhen=${settings.invoiceWhen}`,
+      );
       return;
     }
 
@@ -270,7 +267,8 @@ export async function scheduleInvoiceAutoEmailOnPaid(
 
 /**
  * Auto-send credit note and/or refund document after credit-note create.
- * Each document type uses only its own auto-send flag (master `enabled` ignored).
+ * Master `enabled` must be on; each document type uses its own auto-send flag.
+ * Both may send on the same CreditNote when both flags are enabled (old parity).
  */
 export async function scheduleCreditNoteAutoEmails(
   shopDomain: string,
@@ -278,7 +276,12 @@ export async function scheduleCreditNoteAutoEmails(
 ): Promise<void> {
   try {
     const settings = await getDeliverySettings(shopDomain);
-    if (!settings) return;
+    if (!settings?.enabled) {
+      console.log(
+        `[email] skip credit-note auto-send for ${creditNoteId}: master delivery disabled`,
+      );
+      return;
+    }
 
     const wantsCn = shouldAutoSendCreditNote(settings);
     const wantsRefund = shouldAutoSendRefundDocument(settings);
@@ -378,10 +381,7 @@ export function setDocumentEmailLinkResolver(
 // ---------------------------------------------------------------------------
 
 export interface DeliverySettings {
-  /**
-   * Legacy master automation flag. Still accepted/persisted for UI/API
-   * compatibility; ignored when deciding whether to auto-send.
-   */
+  /** Master automation flag — required for all automatic document emails. */
   enabled: boolean;
   invoiceAutoSend: boolean;
   invoiceWhen: EmailInvoiceWhen;

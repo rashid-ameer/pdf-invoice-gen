@@ -1,9 +1,10 @@
 /**
- * Audit shops where the legacy master delivery flag is off, but at least one
+ * Audit shops where the master delivery flag is off, but at least one
  * per-document auto-send setting is on.
  *
- * After removing the master gate from auto-send decisions, these shops would
- * start sending automated emails for the document types they already enabled.
+ * Auto-send requires master `enabled` (old parity / Phase 4). These shops
+ * will NOT auto-send until master is enabled — even if per-document flags
+ * are on. Useful when migrating settings or debugging "emails not sending".
  *
  * DO NOT run against production without review. This script only READS data;
  * it does not update any settings.

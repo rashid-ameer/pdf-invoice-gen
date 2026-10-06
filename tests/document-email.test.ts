@@ -192,32 +192,39 @@ async function seedCreditNoteForStore(storeId: string) {
   return note!;
 }
 
-describe("auto-send decisions ignore master enabled", () => {
-  it("gates only on per-document auto-send and invoiceWhen", () => {
+describe("auto-send decisions require master enabled", () => {
+  it("gates on master enabled, per-document auto-send, and invoiceWhen", () => {
     assert.equal(
       shouldAutoSendInvoice(
-        { invoiceAutoSend: true, invoiceWhen: "paid" },
+        { enabled: true, invoiceAutoSend: true, invoiceWhen: "paid" },
         true,
       ),
       true,
     );
     assert.equal(
       shouldAutoSendInvoice(
-        { invoiceAutoSend: true, invoiceWhen: "paid" },
+        { enabled: true, invoiceAutoSend: true, invoiceWhen: "paid" },
         false,
       ),
       false,
     );
     assert.equal(
       shouldAutoSendInvoice(
-        { invoiceAutoSend: true, invoiceWhen: "created" },
+        { enabled: true, invoiceAutoSend: true, invoiceWhen: "created" },
         false,
       ),
       true,
     );
     assert.equal(
       shouldAutoSendInvoice(
-        { invoiceAutoSend: false, invoiceWhen: "paid" },
+        { enabled: true, invoiceAutoSend: false, invoiceWhen: "paid" },
+        true,
+      ),
+      false,
+    );
+    assert.equal(
+      shouldAutoSendInvoice(
+        { enabled: false, invoiceAutoSend: true, invoiceWhen: "paid" },
         true,
       ),
       false,
@@ -225,6 +232,7 @@ describe("auto-send decisions ignore master enabled", () => {
 
     assert.equal(
       shouldAutoSendInvoiceOnPaid({
+        enabled: true,
         invoiceAutoSend: true,
         invoiceWhen: "paid",
       }),
@@ -232,6 +240,7 @@ describe("auto-send decisions ignore master enabled", () => {
     );
     assert.equal(
       shouldAutoSendInvoiceOnPaid({
+        enabled: true,
         invoiceAutoSend: true,
         invoiceWhen: "created",
       }),
@@ -239,46 +248,39 @@ describe("auto-send decisions ignore master enabled", () => {
     );
     assert.equal(
       shouldAutoSendInvoiceOnPaid({
-        invoiceAutoSend: false,
+        enabled: false,
+        invoiceAutoSend: true,
         invoiceWhen: "paid",
       }),
       false,
     );
 
-    assert.equal(shouldAutoSendCreditNote({ creditNoteAutoSend: true }), true);
-    assert.equal(shouldAutoSendCreditNote({ creditNoteAutoSend: false }), false);
     assert.equal(
-      shouldAutoSendRefundDocument({ refundDocumentAutoSend: true }),
+      shouldAutoSendCreditNote({ enabled: true, creditNoteAutoSend: true }),
       true,
     );
     assert.equal(
-      shouldAutoSendRefundDocument({ refundDocumentAutoSend: false }),
+      shouldAutoSendCreditNote({ enabled: true, creditNoteAutoSend: false }),
       false,
     );
-
-    // Master flag is not an input to these helpers — document-type flags alone decide.
-    const withMasterOff = normalizeDeliverySettings({
-      enabled: false,
-      invoiceAutoSend: true,
-      invoiceWhen: "paid",
-      creditNoteAutoSend: true,
-      refundDocumentAutoSend: true,
-    });
-    assert.equal(withMasterOff.enabled, false);
-    assert.equal(shouldAutoSendInvoice(withMasterOff, true), true);
-    assert.equal(shouldAutoSendCreditNote(withMasterOff), true);
-    assert.equal(shouldAutoSendRefundDocument(withMasterOff), true);
-
-    const withMasterOn = normalizeDeliverySettings({
-      enabled: true,
-      invoiceAutoSend: false,
-      creditNoteAutoSend: false,
-      refundDocumentAutoSend: false,
-    });
-    assert.equal(withMasterOn.enabled, true);
-    assert.equal(shouldAutoSendInvoice(withMasterOn, true), false);
-    assert.equal(shouldAutoSendCreditNote(withMasterOn), false);
-    assert.equal(shouldAutoSendRefundDocument(withMasterOn), false);
+    assert.equal(
+      shouldAutoSendCreditNote({ enabled: false, creditNoteAutoSend: true }),
+      false,
+    );
+    assert.equal(
+      shouldAutoSendRefundDocument({
+        enabled: true,
+        refundDocumentAutoSend: true,
+      }),
+      true,
+    );
+    assert.equal(
+      shouldAutoSendRefundDocument({
+        enabled: false,
+        refundDocumentAutoSend: true,
+      }),
+      false,
+    );
   });
 
   it("still accepts and stores master enabled when saving settings", async () => {
@@ -318,13 +320,37 @@ describe("auto-send decisions ignore master enabled", () => {
     assert.equal(sends, 0);
   });
 
+  it("does not auto-send when master enabled is off even if document auto-send is on", async () => {
+    const { store, invoice } = await seedStoreWithInvoice();
+    await saveDeliverySettings(store.shopifyDomain, {
+      enabled: false,
+      invoiceAutoSend: true,
+      invoiceWhen: "paid",
+      creditNoteAutoSend: true,
+      refundDocumentAutoSend: true,
+    });
+
+    let sends = 0;
+    setResendTransportForTests(async () => {
+      sends += 1;
+      return { ok: true, id: "re_master_off", from: "from@test.com" };
+    });
+
+    await scheduleInvoiceAutoEmail(store.shopifyDomain, invoice.id, true);
+    await scheduleInvoiceAutoEmailOnPaid(store.shopifyDomain, invoice.id);
+    const note = await seedCreditNoteForStore(store.id);
+    await scheduleCreditNoteAutoEmails(store.shopifyDomain, note.id);
+    assert.equal(sends, 0);
+    assert.equal(await hasEmailSentEvent(invoice.id, "tax_invoice"), false);
+  });
+
   it(
-    "auto-sends invoice when invoiceAutoSend is on even if master is off",
+    "auto-sends invoice when master and invoiceAutoSend are on",
     { skip: !hasChromium },
     async () => {
       const { store, invoice } = await seedStoreWithInvoice();
       await saveDeliverySettings(store.shopifyDomain, {
-        enabled: false,
+        enabled: true,
         invoiceAutoSend: true,
         invoiceWhen: "paid",
       });
@@ -345,7 +371,7 @@ describe("auto-send decisions ignore master enabled", () => {
   it("skips invoice auto-send when waiting for paid trigger", async () => {
     const { store, invoice } = await seedStoreWithInvoice();
     await saveDeliverySettings(store.shopifyDomain, {
-      enabled: false,
+      enabled: true,
       invoiceAutoSend: true,
       invoiceWhen: "paid",
     });
@@ -361,13 +387,13 @@ describe("auto-send decisions ignore master enabled", () => {
   });
 
   it(
-    "auto-sends credit note / refund by their own flags with master off",
+    "auto-sends credit note / refund by their own flags when master is on",
     { skip: !hasChromium },
     async () => {
       const { store, invoice } = await seedStoreWithInvoice();
       const note = await seedCreditNoteForStore(store.id);
       await saveDeliverySettings(store.shopifyDomain, {
-        enabled: false,
+        enabled: true,
         creditNoteAutoSend: true,
         refundDocumentAutoSend: false,
       });
@@ -794,5 +820,204 @@ describe("send via mocked Resend", () => {
     });
     assert.equal(result.ok, false);
     assert.match(result.error || "", /Unsupported|not found/i);
+  });
+});
+
+describe("Phase 4 automatic email schedule behavior", () => {
+  it(
+    "invoiceWhen=created sends on create even when unpaid; paid replay skips",
+    { skip: !hasChromium },
+    async () => {
+      const { store, invoice } = await seedStoreWithInvoice();
+      await saveDeliverySettings(store.shopifyDomain, {
+        enabled: true,
+        invoiceAutoSend: true,
+        invoiceWhen: "created",
+      });
+
+      let sends = 0;
+      setResendTransportForTests(async () => {
+        sends += 1;
+        return { ok: true, id: `re_created_${sends}`, from: "from@test.com" };
+      });
+
+      await scheduleInvoiceAutoEmail(store.shopifyDomain, invoice.id, false);
+      assert.equal(sends, 1);
+      assert.equal(await hasEmailSentEvent(invoice.id, "tax_invoice"), true);
+
+      await scheduleInvoiceAutoEmailOnPaid(store.shopifyDomain, invoice.id);
+      assert.equal(sends, 1, "paid trigger must not send when invoiceWhen=created");
+    },
+  );
+
+  it(
+    "invoiceWhen=paid sends on paid and skips duplicate paid calls",
+    { skip: !hasChromium },
+    async () => {
+      const { store, invoice } = await seedStoreWithInvoice();
+      await saveDeliverySettings(store.shopifyDomain, {
+        enabled: true,
+        invoiceAutoSend: true,
+        invoiceWhen: "paid",
+      });
+
+      let sends = 0;
+      setResendTransportForTests(async () => {
+        sends += 1;
+        return { ok: true, id: `re_paid_${sends}`, from: "from@test.com" };
+      });
+
+      await scheduleInvoiceAutoEmail(store.shopifyDomain, invoice.id, false);
+      assert.equal(sends, 0, "create while unpaid must wait");
+
+      await scheduleInvoiceAutoEmailOnPaid(store.shopifyDomain, invoice.id);
+      assert.equal(sends, 1);
+
+      await scheduleInvoiceAutoEmailOnPaid(store.shopifyDomain, invoice.id);
+      assert.equal(sends, 1, "duplicate paid must skip");
+
+      const events = await prisma.invoiceStatusEvent.findMany({
+        where: { invoiceId: invoice.id, status: "email_sent" },
+      });
+      assert.equal(events.length, 1);
+    },
+  );
+
+  it(
+    "email failure does not block document and allows later auto retry",
+    { skip: !hasChromium },
+    async () => {
+      const { store, invoice } = await seedStoreWithInvoice();
+      await saveDeliverySettings(store.shopifyDomain, {
+        enabled: true,
+        invoiceAutoSend: true,
+        invoiceWhen: "created",
+      });
+
+      setResendTransportForTests(async () => ({
+        ok: false,
+        error: "Resend temporary failure",
+      }));
+
+      await scheduleInvoiceAutoEmail(store.shopifyDomain, invoice.id, true);
+      assert.equal(await hasEmailSentEvent(invoice.id, "tax_invoice"), false);
+
+      const failed = await prisma.invoiceStatusEvent.findMany({
+        where: { invoiceId: invoice.id, status: "email_failed" },
+      });
+      assert.ok(failed.length >= 1);
+
+      const stillThere = await prisma.invoice.findUnique({
+        where: { id: invoice.id },
+      });
+      assert.ok(stillThere);
+
+      let sends = 0;
+      setResendTransportForTests(async () => {
+        sends += 1;
+        return { ok: true, id: "re_retry", from: "from@test.com" };
+      });
+      await scheduleInvoiceAutoEmail(store.shopifyDomain, invoice.id, true);
+      assert.equal(sends, 1);
+      assert.equal(await hasEmailSentEvent(invoice.id, "tax_invoice"), true);
+    },
+  );
+
+  it(
+    "sends both credit note and refund document when both flags are on",
+    { skip: !hasChromium },
+    async () => {
+      const { store, invoice } = await seedStoreWithInvoice();
+      const note = await seedCreditNoteForStore(store.id);
+      await saveDeliverySettings(store.shopifyDomain, {
+        enabled: true,
+        creditNoteAutoSend: true,
+        refundDocumentAutoSend: true,
+      });
+
+      let sends = 0;
+      setResendTransportForTests(async () => {
+        sends += 1;
+        return { ok: true, id: `re_both_${sends}`, from: "from@test.com" };
+      });
+
+      await scheduleCreditNoteAutoEmails(store.shopifyDomain, note.id);
+      assert.equal(sends, 2);
+      assert.equal(
+        await hasEmailSentEvent(invoice.id, "credit_note", note.id),
+        true,
+      );
+      assert.equal(
+        await hasEmailSentEvent(invoice.id, "refund_document", note.id),
+        true,
+      );
+
+      await scheduleCreditNoteAutoEmails(store.shopifyDomain, note.id);
+      assert.equal(sends, 2, "second schedule must be idempotent");
+    },
+  );
+
+  it("email failure does not prevent credit note schedule from completing", async () => {
+    const { store } = await seedStoreWithInvoice();
+    const note = await seedCreditNoteForStore(store.id);
+    await saveDeliverySettings(store.shopifyDomain, {
+      enabled: true,
+      creditNoteAutoSend: true,
+      refundDocumentAutoSend: false,
+    });
+
+    setResendTransportForTests(async () => ({
+      ok: false,
+      error: "provider down",
+    }));
+
+    await scheduleCreditNoteAutoEmails(store.shopifyDomain, note.id);
+    const stillThere = await prisma.creditNote.findUnique({
+      where: { id: note.id },
+    });
+    assert.ok(stillThere);
+  });
+});
+
+describe("Phase 4 lifecycle wiring (source inspection)", () => {
+  it("wires invoice create / paid schedule at old call sites", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const create = readFileSync(
+      join(process.cwd(), "app/models/invoice-create.server.ts"),
+      "utf8",
+    );
+    assert.match(create, /scheduleInvoiceAutoEmail\(/);
+    assert.match(create, /scheduleInvoiceAutoEmailOnPaid\(/);
+    assert.match(create, /orderIsPaid/);
+
+    const ordersPaid = readFileSync(
+      join(process.cwd(), "app/routes/webhooks.orders.paid.tsx"),
+      "utf8",
+    );
+    const ordersCreate = readFileSync(
+      join(process.cwd(), "app/routes/webhooks.orders.create.tsx"),
+      "utf8",
+    );
+    assert.match(ordersPaid, /handleOrderCreated/);
+    assert.match(ordersCreate, /handleOrderCreated/);
+  });
+
+  it("wires credit-note auto emails after successful create (webhook + sync)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const cn = readFileSync(
+      join(process.cwd(), "app/models/credit-note.server.ts"),
+      "utf8",
+    );
+    assert.match(cn, /scheduleCreditNoteAutoEmails\(/);
+    assert.match(cn, /createCreditNoteFromRefund/);
+    assert.match(cn, /handleRefundCreated/);
+
+    const sync = readFileSync(
+      join(process.cwd(), "app/models/refund-sync.server.ts"),
+      "utf8",
+    );
+    assert.match(sync, /createCreditNoteFromRefund/);
   });
 });
