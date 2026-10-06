@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -16,22 +16,31 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { TemplateVisualConfigEditor } from "../components/template-visual-config-editor";
 import type { DocumentType } from "../types/index";
 import {
   BASE_LAYOUT_CODES,
   type BaseLayoutCode,
+  type TemplateConfig,
 } from "../models/template-config.types";
 import {
   createCustomTemplate,
   deleteCustomTemplate,
   getTemplateByIdForShop,
+  parseConfigJsonFromForm,
   parseDocumentType,
+  previewTemplateVisualConfig,
   saveTemplateAsNew,
   saveTemplateConfig,
   setDefaultTemplate,
 } from "../models/template.server";
 import { templateSourceKind } from "../models/template-liquid.server";
 import { authenticate } from "../shopify.server";
+
+const SAVE_BAR_ID = "template-visual-config-save-bar";
+const MORE_MENU_ID = "template-details-more-actions";
+const EDITOR_LAYOUT_COLS =
+  "@container (inline-size > 900px) minmax(0, 1.1fr) minmax(0, 0.9fr), 1fr";
 
 function asBaseLayoutSafe(value: string | null | undefined): BaseLayoutCode {
   const code = (value ?? "modern") as BaseLayoutCode;
@@ -53,6 +62,10 @@ function documentTypeLabel(type: DocumentType): string {
     default:
       return "Tax invoice";
   }
+}
+
+function stableConfigKey(config: TemplateConfig): string {
+  return JSON.stringify(config);
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -103,7 +116,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       description: result.template.description ?? "",
       code: result.template.code,
       documentType: result.documentType,
-      baseLayoutCode: result.template.baseLayoutCode,
+      baseLayoutCode: asBaseLayoutSafe(result.template.baseLayoutCode),
       sourceType: templateSourceKind(result.template),
       isSystem: result.template.isSystem,
       isDefault: result.template.id === defaultId,
@@ -118,6 +131,51 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
   const templateId = String(params.id ?? formData.get("templateId") ?? "").trim();
+
+  if (intent === "preview") {
+    if (!templateId) {
+      return {
+        ok: false as const,
+        intent: "preview" as const,
+        error: "Template not found",
+      };
+    }
+    let draft: unknown;
+    const configJson = formData.get("configJson");
+    if (typeof configJson === "string" && configJson.trim()) {
+      try {
+        draft = JSON.parse(configJson);
+      } catch {
+        draft = undefined;
+      }
+    }
+    try {
+      const html = await previewTemplateVisualConfig(
+        session.shop,
+        templateId,
+        draft,
+      );
+      if (!html) {
+        return {
+          ok: false as const,
+          intent: "preview" as const,
+          error: "Template not found",
+        };
+      }
+      return {
+        ok: true as const,
+        intent: "preview" as const,
+        html,
+      };
+    } catch (error) {
+      console.error("[templates] visual preview error:", error);
+      return {
+        ok: false as const,
+        intent: "preview" as const,
+        error: "Failed to render preview",
+      };
+    }
+  }
 
   if (intent === "save") {
     if (!templateId) {
@@ -137,9 +195,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       };
     }
     try {
+      const parsedConfig = parseConfigJsonFromForm(
+        existing.config,
+        formData.get("configJson"),
+        existing.documentType,
+      );
       const updated = await saveTemplateConfig(session.shop, templateId, {
         name,
-        config: existing.config,
+        config: parsedConfig ?? existing.config,
       });
       if (!updated) {
         return {
@@ -187,9 +250,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       };
     }
     try {
+      const parsedConfig = parseConfigJsonFromForm(
+        existing.config,
+        formData.get("configJson"),
+        existing.documentType,
+      );
       const created = await saveTemplateAsNew(session.shop, templateId, {
         name,
-        config: existing.config,
+        config: parsedConfig ?? existing.config,
       });
       if (!created) {
         return {
@@ -269,20 +337,32 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   };
 };
 
-const MORE_MENU_ID = "template-details-more-actions";
-
 export default function TemplateDetailsPage() {
   const { result, isNew } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
+  const previewFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
+
   const [name, setName] = useState(result?.name ?? "");
+  const [config, setConfig] = useState<TemplateConfig | null>(
+    result?.config ?? null,
+  );
+  const [baselineName, setBaselineName] = useState(result?.name ?? "");
+  const [baselineConfig, setBaselineConfig] = useState<TemplateConfig | null>(
+    result ? structuredClone(result.config) : null,
+  );
+  const [logoResetToken, setLogoResetToken] = useState(0);
   const [saveAsName, setSaveAsName] = useState("");
   const [showSaveAs, setShowSaveAs] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [previewHtml, setPreviewHtml] = useState("");
   const awaiting = useRef(false);
   const dataAtSubmit = useRef(fetcher.data);
+  const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const loadingDetails =
     navigation.state !== "idle" &&
@@ -290,10 +370,27 @@ export default function TemplateDetailsPage() {
     isTemplateDetailsPath(navigation.location.pathname);
   const busy =
     fetcher.state === "submitting" || fetcher.state === "loading";
+  const previewing =
+    previewFetcher.state === "submitting" || previewFetcher.state === "loading";
+
+  const dirty = useMemo(() => {
+    if (!result || !config || !baselineConfig) return false;
+    return (
+      name.trim() !== baselineName.trim() ||
+      stableConfigKey(config) !== stableConfigKey(baselineConfig)
+    );
+  }, [result, config, name, baselineName, baselineConfig]);
 
   useEffect(() => {
-    setName(result?.name ?? "");
-  }, [result?.id, result?.name]);
+    if (!result) return;
+    const next = structuredClone(result.config);
+    setName(result.name);
+    setConfig(next);
+    setBaselineName(result.name);
+    setBaselineConfig(structuredClone(result.config));
+    setLogoResetToken((n) => n + 1);
+    setSaveError(null);
+  }, [result?.id]);
 
   useEffect(() => {
     if (!loadingDetails) return;
@@ -302,6 +399,21 @@ export default function TemplateDetailsPage() {
       shopify.loading(false);
     };
   }, [loadingDetails, shopify]);
+
+  useEffect(() => {
+    if (!result || result.isSystem) {
+      shopify.saveBar.hide(SAVE_BAR_ID);
+      return;
+    }
+    if (dirty) {
+      shopify.saveBar.show(SAVE_BAR_ID);
+    } else {
+      shopify.saveBar.hide(SAVE_BAR_ID);
+    }
+    return () => {
+      shopify.saveBar.hide(SAVE_BAR_ID);
+    };
+  }, [dirty, result, shopify]);
 
   useEffect(() => {
     if (!awaiting.current || fetcher.state !== "idle") return;
@@ -313,18 +425,21 @@ export default function TemplateDetailsPage() {
     }
 
     if (!fetcher.data.ok) {
-      shopify.toast.show(
-        ("error" in fetcher.data && fetcher.data.error) || "Request failed",
-        { isError: true },
-      );
+      const err =
+        ("error" in fetcher.data && fetcher.data.error) || "Request failed";
+      setSaveError(err);
+      shopify.toast.show(err, { isError: true });
       return;
     }
+
+    setSaveError(null);
 
     if (
       fetcher.data.intent === "save-as" &&
       "templateId" in fetcher.data &&
       fetcher.data.templateId
     ) {
+      shopify.saveBar.hide(SAVE_BAR_ID);
       shopify.toast.show(fetcher.data.message);
       navigate(
         `/app/templates/${encodeURIComponent(fetcher.data.templateId)}?saved=1`,
@@ -337,19 +452,70 @@ export default function TemplateDetailsPage() {
       "redirectTo" in fetcher.data &&
       fetcher.data.redirectTo
     ) {
+      shopify.saveBar.hide(SAVE_BAR_ID);
       shopify.toast.show(fetcher.data.message);
       navigate(fetcher.data.redirectTo);
       return;
     }
 
+    if (fetcher.data.intent === "save" && result && config) {
+      setBaselineName(name.trim() || result.name);
+      setBaselineConfig(structuredClone(config));
+      shopify.saveBar.hide(SAVE_BAR_ID);
+    }
+
     shopify.toast.show(
-      "message" in fetcher.data ? fetcher.data.message : "Saved",
+      "message" in fetcher.data && fetcher.data.message
+        ? fetcher.data.message
+        : "Saved",
     );
     setShowSaveAs(false);
     setSaveAsName("");
-  }, [fetcher.state, fetcher.data, navigate, shopify]);
+  }, [fetcher.state, fetcher.data, navigate, shopify, result, config, name]);
 
-  if (!result) {
+  // Live preview (debounced) — Group 7 layout renderer.
+  useEffect(() => {
+    if (!result || !config) return;
+    if (previewTimer.current) clearTimeout(previewTimer.current);
+    previewTimer.current = setTimeout(() => {
+      const body = new FormData();
+      body.set("intent", "preview");
+      body.set("templateId", result.id);
+      body.set("configJson", JSON.stringify(config));
+      previewFetcher.submit(body, { method: "post" });
+    }, 400);
+    return () => {
+      if (previewTimer.current) clearTimeout(previewTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- previewFetcher identity changes each render
+  }, [result?.id, config]);
+
+  useEffect(() => {
+    if (previewFetcher.state !== "idle" || !previewFetcher.data) return;
+    if (previewFetcher.data.intent !== "preview") return;
+    if (previewFetcher.data.ok && "html" in previewFetcher.data) {
+      setPreviewHtml(previewFetcher.data.html);
+    }
+  }, [previewFetcher.state, previewFetcher.data]);
+
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe || !previewHtml) return;
+    const onLoad = () => {
+      const doc = iframe.contentDocument;
+      const h = Math.max(
+        doc?.body?.scrollHeight ?? 0,
+        doc?.documentElement?.scrollHeight ?? 0,
+        480,
+      );
+      iframe.style.height = `${h}px`;
+    };
+    iframe.addEventListener("load", onLoad);
+    onLoad();
+    return () => iframe.removeEventListener("load", onLoad);
+  }, [previewHtml]);
+
+  if (!result || !config) {
     return (
       <s-page heading="Template not found">
         <s-link slot="breadcrumb-actions" href="/app/templates">
@@ -370,40 +536,68 @@ export default function TemplateDetailsPage() {
 
   const listHref = `/app/templates?type=${encodeURIComponent(result.documentType)}`;
   const nameRequiredBlank = !name.trim();
-  const isUntitled = isNew || nameRequiredBlank || searchParams.get("new") === "1";
+  const isUntitled =
+    isNew || nameRequiredBlank || searchParams.get("new") === "1";
 
   const submit = (intent: string, fields: Record<string, string> = {}) => {
     if (busy) return;
     dataAtSubmit.current = fetcher.data;
     awaiting.current = true;
+    setSaveError(null);
     const body = new FormData();
     body.set("intent", intent);
     body.set("templateId", result.id);
     body.set("documentType", result.documentType);
+    body.set("configJson", JSON.stringify(config));
     for (const [key, value] of Object.entries(fields)) {
       body.set(key, value);
     }
     fetcher.submit(body, { method: "post" });
   };
 
+  const saveForm = () => {
+    if (!name.trim()) {
+      shopify.toast.show("Template name can't be blank.", { isError: true });
+      return;
+    }
+    submit("save", { name });
+  };
+
+  const discardChanges = () => {
+    if (!baselineConfig) return;
+    setName(baselineName);
+    setConfig(structuredClone(baselineConfig));
+    setLogoResetToken((n) => n + 1);
+    setSaveError(null);
+    shopify.saveBar.hide(SAVE_BAR_ID);
+  };
+
   return (
-    <s-page heading={result.name || "Untitled template"}>
+    <s-page heading={result.name || "Untitled template"} inlineSize="large">
       <s-link slot="breadcrumb-actions" href={listHref}>
         Templates
       </s-link>
 
+      <ui-save-bar id={SAVE_BAR_ID}>
+        <button
+          variant="primary"
+          onClick={saveForm}
+          {...(busy ? { disabled: true, loading: true } : {})}
+        >
+          Save
+        </button>
+        <button
+          onClick={discardChanges}
+          {...(busy ? { disabled: true } : {})}
+        >
+          Discard
+        </button>
+      </ui-save-bar>
+
       <s-button
         slot="primary-action"
         variant="primary"
-        onClick={() => {
-          if (!name.trim()) {
-            shopify.toast.show("Template name can't be blank.", {
-              isError: true,
-            });
-            return;
-          }
-          submit("save", { name });
-        }}
+        onClick={saveForm}
         {...(busy || result.isSystem
           ? { loading: busy, disabled: true }
           : {})}
@@ -434,10 +628,7 @@ export default function TemplateDetailsPage() {
           </s-button>
         ) : null}
         {!result.isDefault ? (
-          <s-button
-            icon="check"
-            onClick={() => submit("set-default")}
-          >
+          <s-button icon="check" onClick={() => submit("set-default")}>
             Set as default
           </s-button>
         ) : (
@@ -459,20 +650,19 @@ export default function TemplateDetailsPage() {
         ) : null}
       </s-menu>
 
+      {saveError ? (
+        <s-banner
+          tone="critical"
+          heading="Couldn't save"
+          dismissible
+          onDismiss={() => setSaveError(null)}
+        >
+          {saveError}
+        </s-banner>
+      ) : null}
+
       <s-section heading="Template details">
         <s-stack gap="base">
-          {result.isSystem ? (
-            <s-banner tone="info" heading="System template">
-              System templates cannot be edited in place. A custom copy is
-              created when you open them for editing.
-            </s-banner>
-          ) : (
-            <s-banner tone="info" heading="Phase A editor">
-              Name and defaults are managed here. Visual configuration and
-              Liquid editing arrive in later Group 14 phases.
-            </s-banner>
-          )}
-
           <s-text-field
             label="Name"
             value={name}
@@ -482,31 +672,87 @@ export default function TemplateDetailsPage() {
             }}
             {...(result.isSystem ? { disabled: true } : {})}
           />
-
-          <s-stack gap="small">
-            <s-stack gap="none">
-              <s-text color="subdued">Document type</s-text>
-              <s-text>{documentTypeLabel(result.documentType)}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Layout</s-text>
-              <s-text>{result.baseLayoutCode}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Code</s-text>
-              <s-text>{result.code}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Source</s-text>
-              <s-text>{result.sourceType}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Default</s-text>
-              <s-text>{result.isDefault ? "Yes" : "No"}</s-text>
-            </s-stack>
-          </s-stack>
+          <s-query-container>
+            <s-grid
+              gridTemplateColumns="@container (inline-size > 600px) repeat(3, 1fr), 1fr"
+              gap="base"
+            >
+              <s-stack gap="none">
+                <s-text color="subdued">Document type</s-text>
+                <s-text>{documentTypeLabel(result.documentType)}</s-text>
+              </s-stack>
+              <s-stack gap="none">
+                <s-text color="subdued">Layout</s-text>
+                <s-text>{result.baseLayoutCode}</s-text>
+              </s-stack>
+              <s-stack gap="none">
+                <s-text color="subdued">Default</s-text>
+                <s-text>{result.isDefault ? "Yes" : "No"}</s-text>
+              </s-stack>
+            </s-grid>
+          </s-query-container>
         </s-stack>
       </s-section>
+
+      <s-query-container>
+        <s-grid
+          gridTemplateColumns={EDITOR_LAYOUT_COLS}
+          gap="large"
+          alignItems="start"
+        >
+          <TemplateVisualConfigEditor
+            config={config}
+            onChange={setConfig}
+            baseLayoutCode={result.baseLayoutCode}
+            documentType={result.documentType}
+            sourceType={result.sourceType}
+            disabled={result.isSystem}
+            logoResetToken={logoResetToken}
+          />
+
+          <s-section heading="Preview" subheading="Sample document · Group 7 layout renderer">
+            <s-stack gap="base">
+              {previewing && !previewHtml ? (
+                <s-spinner accessibilityLabel="Updating preview" />
+              ) : null}
+              {previewFetcher.data &&
+              !previewFetcher.data.ok &&
+              previewFetcher.data.intent === "preview" ? (
+                <s-banner tone="critical" heading="Preview failed">
+                  {"error" in previewFetcher.data
+                    ? previewFetcher.data.error
+                    : "Failed to render preview"}
+                </s-banner>
+              ) : null}
+              <s-box
+                border="base"
+                borderRadius="base"
+                overflow="hidden"
+                background="subdued"
+              >
+                <iframe
+                  ref={iframeRef}
+                  title="Template preview"
+                  srcDoc={previewHtml || undefined}
+                  sandbox="allow-same-origin allow-modals"
+                  style={{
+                    width: "100%",
+                    minHeight: 480,
+                    border: 0,
+                    background: "transparent",
+                    display: "block",
+                  }}
+                />
+              </s-box>
+              <s-text color="subdued">
+                Preview uses template configuration only (store Branding is
+                applied when documents are generated). Liquid code preview is
+                Phase C.
+              </s-text>
+            </s-stack>
+          </s-section>
+        </s-grid>
+      </s-query-container>
 
       {showSaveAs ? (
         <s-section heading="Save as new template">

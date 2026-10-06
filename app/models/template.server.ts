@@ -912,3 +912,86 @@ export async function resolveTemplateForShop(
     documentType: asDocumentType(fallback.documentType),
   };
 }
+
+/**
+ * Merge + validate a client draft config against the saved template config.
+ * Used by save and visual preview. Throws ZodError on invalid input.
+ */
+export function mergeDraftTemplateConfig(
+  existing: TemplateConfig,
+  draft: unknown,
+  documentType: DocumentType,
+): TemplateConfig {
+  const parsed = enforceComplianceLocks(
+    templateConfigSchema.parse({
+      ...existing,
+      ...templateConfigSchema.partial().parse(draft),
+    }),
+    documentType,
+  );
+  parsed.content = sanitizeTemplateConfigContent(parsed.content);
+  if (parsed.translations) {
+    parsed.translations = sanitizeTemplateTranslations(parsed.translations);
+  }
+  return parsed;
+}
+
+/**
+ * Parse `configJson` from a form post. Returns null if missing/empty JSON.
+ * Throws on invalid configuration (caller should reject save).
+ */
+export function parseConfigJsonFromForm(
+  existing: TemplateConfig,
+  configJson: unknown,
+  documentType: DocumentType,
+): TemplateConfig | null {
+  if (configJson == null || configJson === "") return null;
+  const raw =
+    typeof configJson === "string" ? JSON.parse(configJson) : configJson;
+  return mergeDraftTemplateConfig(existing, raw, documentType);
+}
+
+/**
+ * Group 14 Phase B — visual config preview via Group 7 layout renderer.
+ * Matches old `renderTemplatePreviewById` for config: no store branding merge.
+ * Liquid/code draft preview is Phase C — this always uses the layout engine so
+ * Style/Layout/Content/Fields changes are visible regardless of sourceType.
+ */
+export async function previewTemplateVisualConfig(
+  shopDomain: string,
+  templateId: string,
+  draftConfig?: unknown,
+): Promise<string | null> {
+  const { renderDocumentHtml, sampleRenderDataForDocumentType } = await import(
+    "./render.server"
+  );
+  const { wrapA4EmbedHtml } = await import("./document-preview.server");
+
+  const result = await getTemplateByIdForShop(shopDomain, templateId);
+  if (!result) return null;
+
+  let config = result.config;
+  if (draftConfig !== undefined && draftConfig !== null) {
+    try {
+      config = mergeDraftTemplateConfig(
+        result.config,
+        draftConfig,
+        result.documentType,
+      );
+    } catch {
+      // Invalid draft → fall back to saved config (old preview parity).
+    }
+  }
+
+  const layout = asBaseLayoutCode(result.template.baseLayoutCode);
+  const html = await renderDocumentHtml({
+    baseLayoutCode: layout,
+    documentType: result.documentType,
+    config,
+    data: sampleRenderDataForDocumentType(result.documentType),
+    branding: null,
+    sourceType: "layout",
+  });
+
+  return wrapA4EmbedHtml(html);
+}
