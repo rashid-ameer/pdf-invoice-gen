@@ -97,51 +97,48 @@ export function TemplateVisualConfigEditor({
 
   return (
     <s-stack gap="base">
-      <s-stack direction="inline" gap="small">
-        <TabButton
-          active={tab === "style"}
-          disabled={disabled}
-          onClick={() => setTab("style")}
-        >
-          Style
-        </TabButton>
-        {showLayoutTab ? (
-          <TabButton
-            active={tab === "layout"}
-            disabled={disabled}
-            onClick={() => setTab("layout")}
-          >
-            Layout
-          </TabButton>
-        ) : null}
-        <TabButton
-          active={tab === "content"}
-          disabled={disabled}
-          onClick={() => setTab("content")}
-        >
-          Content
-        </TabButton>
-        <TabButton
-          active={tab === "fields"}
-          disabled={disabled}
-          onClick={() => setTab("fields")}
-        >
-          Fields
-        </TabButton>
-      </s-stack>
+      <s-grid
+        gridTemplateColumns="repeat(4, auto)"
+        gap="small-200"
+        alignItems="center"
+        justifyContent="start"
+        accessibilityLabel="Editor options"
+      >
+        {(
+          [
+            ["style", "Style"],
+            ["layout", "Layout"],
+            ["content", "Content"],
+            ["fields", "Fields"],
+          ] as const
+        ).map(([value, label]) => {
+          const selected = tab === value;
+          return (
+            <s-clickable
+              key={value}
+              paddingBlock="small"
+              paddingInline="large"
+              border="none"
+              borderRadius="base"
+              background={selected ? "base" : "transparent"}
+              accessibilityLabel={`${label}${selected ? ", selected" : ""}`}
+              onClick={() => setTab(value)}
+            >
+              <s-text type="strong">{label}</s-text>
+            </s-clickable>
+          );
+        })}
+      </s-grid>
 
-      {!caps.codeEditor && !isImported ? (
-        <s-banner tone="info" heading="Fixed layout">
-          This layout keeps field positions fixed. Style, content, and fields
-          still apply. Controls that would break this design are hidden.
+      {tab === "layout" && (!caps.codeEditor || isImported) ? (
+        <s-banner tone="info">
+          The layout of this template is fixed. You can still change its style,
+          content, and fields.
         </s-banner>
       ) : null}
 
       {tab === "style" ? (
-        <s-section
-          heading="Style"
-          subheading="Template-level colors and typography. Store Branding overrides logo and brand colors when documents are rendered."
-        >
+        <s-section heading="Style">
           <s-stack gap="base">
             <LogoEditor
               logoUrl={config.branding.logoUrl}
@@ -273,11 +270,8 @@ export function TemplateVisualConfigEditor({
         </s-section>
       ) : null}
 
-      {tab === "layout" && showLayoutTab ? (
-        <s-section
-          heading="Layout"
-          subheading="Base layout is fixed after create. Start from Templates to pick a different layout."
-        >
+      {tab === "layout" && showLayoutTab && caps.codeEditor ? (
+        <s-section heading="Layout">
           <s-stack gap="base">
             <s-select
               label="Base layout"
@@ -374,7 +368,7 @@ export function TemplateVisualConfigEditor({
       ) : null}
 
       {tab === "content" ? (
-        <s-section heading="Content" subheading="Titles, notes, terms, footer, and labels.">
+        <s-section heading="Content">
           <s-stack gap="base">
             <s-select
               label="Language"
@@ -618,7 +612,7 @@ export function TemplateVisualConfigEditor({
       ) : null}
 
       {tab === "fields" ? (
-        <s-section heading="Fields" subheading="Section and column visibility.">
+        <s-section heading="Fields">
           <s-stack gap="base">
             <s-heading>
               {isPackingSlip
@@ -967,28 +961,6 @@ export function TemplateVisualConfigEditor({
         </s-section>
       ) : null}
     </s-stack>
-  );
-}
-
-function TabButton({
-  active,
-  disabled,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  disabled?: boolean;
-  onClick: () => void;
-  children: string;
-}) {
-  return (
-    <s-button
-      variant={active ? "primary" : "secondary"}
-      onClick={onClick}
-      {...(disabled ? { disabled: true } : {})}
-    >
-      {children}
-    </s-button>
   );
 }
 

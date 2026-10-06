@@ -38,16 +38,17 @@ import {
   syncConfigToLiquidForShop,
   validateTemplateLiquidForShop,
 } from "../models/template.server";
-import { LIQUID_VARIABLE_HELP } from "../models/template-liquid.defaults";
 import { extractVisualConfigFromLiquid } from "../models/template-liquid-extract";
 import { templateSourceKind } from "../models/template-liquid.server";
 import { scheduleTemplateThumbnailRefresh } from "../models/template-thumbnail.server";
 import { authenticate } from "../shopify.server";
 
 const SAVE_BAR_ID = "template-visual-config-save-bar";
-const MORE_MENU_ID = "template-details-more-actions";
+const SAVE_MODAL_ID = "template-editor-save-modal";
+/** Controls ~40% / preview ~60%; lower breakpoint so base page width still gets two columns. */
 const EDITOR_LAYOUT_COLS =
-  "@container (inline-size > 900px) minmax(0, 1.1fr) minmax(0, 0.9fr), 1fr";
+  "@container (inline-size > 600px) 2fr 3fr, 1fr";
+const TEMPLATE_NAME_MAX = 60;
 
 type EditorSourceType = "layout" | "code" | "imported";
 type EditorView = "preview" | "code";
@@ -83,6 +84,28 @@ function documentTypeLabel(type: DocumentType): string {
     default:
       return "Tax invoice";
   }
+}
+
+function documentTypeTitle(type: DocumentType): string {
+  switch (type) {
+    case "packing_slip":
+      return "packing slip";
+    case "credit_note":
+      return "credit note";
+    case "refund_document":
+      return "refund document";
+    default:
+      return "tax invoice";
+  }
+}
+
+function validateTemplateName(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return "Template name is required";
+  if (trimmed.length > TEMPLATE_NAME_MAX) {
+    return `Template name must be ${TEMPLATE_NAME_MAX} characters or fewer`;
+  }
+  return null;
 }
 
 function stableConfigKey(config: TemplateConfig): string {
@@ -604,7 +627,6 @@ export default function TemplateDetailsPage() {
   const fetcher = useFetcher<typeof action>();
   const previewFetcher = useFetcher<typeof action>();
   const syncFetcher = useFetcher<typeof action>();
-  const validateFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -631,24 +653,30 @@ export default function TemplateDetailsPage() {
   const [syncedConfig, setSyncedConfig] = useState<TemplateConfig | null>(
     result ? structuredClone(result.config) : null,
   );
-  const [editorView, setEditorView] = useState<EditorView>("preview");
+  const [editorView] = useState<EditorView>("preview");
   const [liquidValidation, setLiquidValidation] = useState<LiquidCheck | null>(
     null,
   );
   const [logoResetToken, setLogoResetToken] = useState(0);
-  const [saveAsName, setSaveAsName] = useState("");
-  const [showSaveAs, setShowSaveAs] = useState(false);
+  const [saveModalName, setSaveModalName] = useState("");
+  const [saveModalNameError, setSaveModalNameError] = useState<string | null>(
+    null,
+  );
+  const [customSaveMode, setCustomSaveMode] = useState<"update" | "save-as">(
+    "update",
+  );
   const [saveError, setSaveError] = useState<string | null>(null);
   const [previewHtml, setPreviewHtml] = useState("");
+  const [savingInModal, setSavingInModal] = useState(false);
   const awaiting = useRef(false);
   const dataAtSubmit = useRef(fetcher.data);
+  const saveToastKind = useRef<"saved" | "updated">("updated");
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const extractTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const applyingCode = useRef(false);
   const applyingForm = useRef(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
-  const liquidAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const loadingDetails =
     navigation.state !== "idle" &&
@@ -699,7 +727,6 @@ export default function TemplateDetailsPage() {
     setLogoResetToken((n) => n + 1);
     setSaveError(null);
     setLiquidValidation(null);
-    setEditorView("preview");
   }, [result?.id]);
 
   useEffect(() => {
@@ -711,7 +738,7 @@ export default function TemplateDetailsPage() {
   }, [loadingDetails, shopify]);
 
   useEffect(() => {
-    if (!result || result.isSystem) {
+    if (!result) {
       shopify.saveBar.hide(SAVE_BAR_ID);
       return;
     }
@@ -740,12 +767,8 @@ export default function TemplateDetailsPage() {
     awaiting.current = false;
 
     if (!fetcher.data || fetcher.data === dataAtSubmit.current) {
-      shopify.toast.show("Couldn't save", { isError: true });
-      return;
-    }
-
-    if (!fetcher.data || fetcher.data === dataAtSubmit.current) {
-      shopify.toast.show("Couldn't save", { isError: true });
+      setSaveError("Couldn't save");
+      setSavingInModal(false);
       return;
     }
 
@@ -753,26 +776,30 @@ export default function TemplateDetailsPage() {
       const err =
         ("error" in fetcher.data && fetcher.data.error) || "Request failed";
       setSaveError(err);
+      setSavingInModal(false);
       if ("validation" in fetcher.data && fetcher.data.validation) {
         setLiquidValidation(fetcher.data.validation as LiquidCheck);
       }
-      shopify.toast.show(err, { isError: true });
       return;
     }
 
     setSaveError(null);
     setLiquidValidation(null);
+    setSavingInModal(false);
 
-    if (
-      fetcher.data.intent === "save-as" &&
-      "templateId" in fetcher.data &&
-      fetcher.data.templateId
-    ) {
+    const listPath = result
+      ? `/app/templates?type=${encodeURIComponent(result.documentType)}`
+      : "/app/templates";
+
+    if (fetcher.data.intent === "save-as" || fetcher.data.intent === "save") {
       shopify.saveBar.hide(SAVE_BAR_ID);
-      shopify.toast.show(fetcher.data.message);
-      navigate(
-        `/app/templates/${encodeURIComponent(fetcher.data.templateId)}?saved=1`,
+      void shopify.modal.hide(SAVE_MODAL_ID);
+      shopify.toast.show(
+        saveToastKind.current === "saved" || fetcher.data.intent === "save-as"
+          ? "Template saved"
+          : "Template updated",
       );
+      open(listPath, "_self");
       return;
     }
 
@@ -799,35 +826,12 @@ export default function TemplateDetailsPage() {
       return;
     }
 
-    if (fetcher.data.intent === "save" && result && config) {
-      setBaselineName(name.trim() || result.name);
-      setBaselineConfig(structuredClone(config));
-      setBaselineLiquid(liquidHtml);
-      setBaselineCss(customCss);
-      setBaselineSourceType(sourceType);
-      setSyncedConfig(structuredClone(config));
-      shopify.saveBar.hide(SAVE_BAR_ID);
-    }
-
     shopify.toast.show(
       "message" in fetcher.data && fetcher.data.message
         ? fetcher.data.message
-        : "Saved",
+        : "Done",
     );
-    setShowSaveAs(false);
-    setSaveAsName("");
-  }, [
-    fetcher.state,
-    fetcher.data,
-    navigate,
-    shopify,
-    result,
-    config,
-    name,
-    liquidHtml,
-    customCss,
-    sourceType,
-  ]);
+  }, [fetcher.state, fetcher.data, navigate, shopify, result]);
 
   // Config → Liquid sync when editing code templates from the visual sidebar.
   useEffect(() => {
@@ -864,25 +868,6 @@ export default function TemplateDetailsPage() {
   }, [syncFetcher.state, syncFetcher.data, config]);
 
   useEffect(() => {
-    if (validateFetcher.state !== "idle" || !validateFetcher.data) return;
-    if (validateFetcher.data.intent !== "validate") return;
-    if (validateFetcher.data.ok && "validation" in validateFetcher.data) {
-      setLiquidValidation(validateFetcher.data.validation as LiquidCheck);
-      const errs = (validateFetcher.data.validation as LiquidCheck).errors;
-      shopify.toast.show(
-        errs.length ? "Liquid has issues to fix" : "Liquid looks valid",
-        { isError: errs.length > 0 },
-      );
-    } else if (!validateFetcher.data.ok) {
-      shopify.toast.show(
-        ("error" in validateFetcher.data && validateFetcher.data.error) ||
-          "Validation failed",
-        { isError: true },
-      );
-    }
-  }, [validateFetcher.state, validateFetcher.data, shopify]);
-
-  useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
     if (
       fetcher.data.intent !== "load-source" &&
@@ -901,7 +886,6 @@ export default function TemplateDetailsPage() {
         setSourceType(fetcher.data.sourceType as EditorSourceType);
       }
       applyingForm.current = false;
-      setEditorView("code");
     }
   }, [fetcher.state, fetcher.data]);
 
@@ -982,7 +966,7 @@ export default function TemplateDetailsPage() {
 
   if (!result || !config) {
     return (
-      <s-page heading="Template not found">
+      <s-page heading="Template not found" inlineSize="base">
         <s-link slot="breadcrumb-actions" href="/app/templates">
           Templates
         </s-link>
@@ -992,7 +976,7 @@ export default function TemplateDetailsPage() {
             not belong to this store.
           </s-banner>
           <s-button variant="primary" href="/app/templates">
-            Back to Templates
+            Back to templates
           </s-button>
         </s-section>
       </s-page>
@@ -1000,9 +984,11 @@ export default function TemplateDetailsPage() {
   }
 
   const listHref = `/app/templates?type=${encodeURIComponent(result.documentType)}`;
-  const nameRequiredBlank = !name.trim();
   const isUntitled =
-    isNew || nameRequiredBlank || searchParams.get("new") === "1";
+    isNew || searchParams.get("new") === "1";
+  const pageHeading = isUntitled
+    ? `New ${documentTypeTitle(result.documentType)} template`
+    : result.name || "Untitled template";
 
   const submit = (intent: string, fields: Record<string, string> = {}) => {
     if (busy) return;
@@ -1026,12 +1012,68 @@ export default function TemplateDetailsPage() {
     fetcher.submit(body, { method: "post" });
   };
 
-  const saveForm = () => {
-    if (!name.trim()) {
-      shopify.toast.show("Template name can't be blank.", { isError: true });
+  const openSaveModal = () => {
+    setSaveError(null);
+    setSaveModalNameError(null);
+    setCustomSaveMode("update");
+    setSaveModalName(
+      isUntitled ? "Untitled template" : `${result.name} copy`,
+    );
+    void shopify.modal.show(SAVE_MODAL_ID);
+  };
+
+  const closeSaveModal = () => {
+    if (savingInModal) return;
+    setSaveError(null);
+    setSaveModalNameError(null);
+    void shopify.modal.hide(SAVE_MODAL_ID);
+  };
+
+  const confirmSaveModal = () => {
+    if (savingInModal || busy) return;
+    const needsName =
+      isUntitled ||
+      result.isSystem ||
+      customSaveMode === "save-as";
+    if (needsName) {
+      const err = validateTemplateName(saveModalName);
+      setSaveModalNameError(err);
+      if (err) return;
+    }
+    const trimmed = saveModalName.trim();
+    setSavingInModal(true);
+    setSaveError(null);
+    if (isUntitled) {
+      saveToastKind.current = "saved";
+      submit("save", { name: trimmed });
       return;
     }
-    submit("save", { name });
+    if (result.isSystem || customSaveMode === "save-as") {
+      saveToastKind.current = "saved";
+      submit("save-as", { name: trimmed });
+      return;
+    }
+    saveToastKind.current = "updated";
+    submit("save", { name: result.name });
+  };
+
+  const refreshPreview = () => {
+    if (!result || !config) return;
+    const body = new FormData();
+    body.set("intent", "preview");
+    body.set("templateId", result.id);
+    body.set("configJson", JSON.stringify(config));
+    body.set(
+      "sourceType",
+      sourceType === "code"
+        ? "code"
+        : sourceType === "imported"
+          ? "imported"
+          : "layout",
+    );
+    body.set("liquidHtml", liquidHtml);
+    body.set("customCss", customCss);
+    previewFetcher.submit(body, { method: "post" });
   };
 
   const discardChanges = () => {
@@ -1048,188 +1090,61 @@ export default function TemplateDetailsPage() {
     shopify.saveBar.hide(SAVE_BAR_ID);
   };
 
-  const runValidate = () => {
-    const body = new FormData();
-    body.set("intent", "validate");
-    body.set("templateId", result.id);
-    body.set("liquidHtml", liquidHtml);
-    validateFetcher.submit(body, { method: "post" });
-  };
+  const previewFailed =
+    Boolean(previewFetcher.data) &&
+    !previewFetcher.data?.ok &&
+    previewFetcher.data?.intent === "preview";
+  const previewErrorMessage =
+    previewFailed && previewFetcher.data && "error" in previewFetcher.data
+      ? previewFetcher.data.error
+      : "Failed to render preview";
 
-  const openCodeEditor = () => {
-    if (!codeEditorAllowed) return;
-    if (sourceType === "layout" && !liquidHtml.trim()) {
-      const body = new FormData();
-      body.set("intent", "load-source");
-      body.set("templateId", result.id);
-      fetcher.submit(body, { method: "post" });
-      setSourceType("code");
-    }
-    setEditorView("code");
-  };
-
-  const loadStarter = () => {
-    if (
-      !window.confirm(
-        "Replace the current HTML / Liquid with the default starter template for this document type? Style, Layout, Content, and Fields options are kept, but any custom code is overwritten.",
-      )
-    ) {
-      return;
-    }
-    const body = new FormData();
-    body.set("intent", "load-starter");
-    body.set("templateId", result.id);
-    fetcher.submit(body, { method: "post" });
-  };
-
-  const insertLiquidToken = (token: string) => {
-    const area = liquidAreaRef.current;
-    if (!area) {
-      onLiquidChange(liquidHtml + token);
-      return;
-    }
-    const start = area.selectionStart || 0;
-    const end = area.selectionEnd || 0;
-    const next =
-      liquidHtml.slice(0, start) + token + liquidHtml.slice(end);
-    onLiquidChange(next);
-    requestAnimationFrame(() => {
-      area.focus();
-      const pos = start + token.length;
-      area.setSelectionRange(pos, pos);
-    });
-  };
+  const saveModalHeading = isUntitled
+    ? "Name your template"
+    : result.isSystem
+      ? "Save as new template"
+      : "Save template";
+  const saveModalPrimaryLabel = isUntitled || result.isSystem
+    ? "Save template"
+    : "Save";
 
   return (
-    <s-page heading={result.name || "Untitled template"} inlineSize="large">
+    <s-page heading={pageHeading} inlineSize="base">
       <s-link slot="breadcrumb-actions" href={listHref}>
         Templates
       </s-link>
+      {!isUntitled ? (
+        <s-badge slot="accessory" tone="neutral">
+          {result.isSystem ? "System" : "Custom"}
+        </s-badge>
+      ) : null}
 
       <ui-save-bar id={SAVE_BAR_ID}>
         <button
           variant="primary"
-          onClick={saveForm}
-          {...(busy ? { disabled: true, loading: true } : {})}
+          onClick={openSaveModal}
+          {...(busy || savingInModal ? { disabled: true } : {})}
         >
           Save
         </button>
         <button
           onClick={discardChanges}
-          {...(busy ? { disabled: true } : {})}
+          {...(busy || savingInModal ? { disabled: true } : {})}
         >
           Discard
         </button>
       </ui-save-bar>
 
-      <s-button
-        slot="primary-action"
-        variant="primary"
-        onClick={() =>
-          result.isSystem ? submit("customize") : saveForm()
-        }
-        {...(busy
-          ? { loading: true, disabled: true }
-          : {})}
-      >
-        {result.isSystem ? "Customize" : "Save"}
-      </s-button>
-      <s-button
-        slot="secondary-actions"
-        variant="secondary"
-        commandFor={MORE_MENU_ID}
-        {...(busy ? { disabled: true } : {})}
-      >
-        More actions
-      </s-button>
-      <s-menu
-        id={MORE_MENU_ID}
-        accessibilityLabel={`More actions for ${result.name}`}
-      >
-        {!isUntitled ? (
-          <s-button
-            icon="duplicate"
-            onClick={() => {
-              setSaveAsName(`${result.name} (copy)`);
-              setShowSaveAs(true);
-            }}
-          >
-            Save as
-          </s-button>
-        ) : null}
-        {!result.isDefault ? (
-          <s-button icon="check" onClick={() => submit("set-default")}>
-            Set as default
-          </s-button>
-        ) : (
-          <s-button icon="check" disabled>
-            Applied
-          </s-button>
-        )}
-        {!result.isSystem && !result.isDefault ? (
-          <s-button
-            icon="delete"
-            tone="critical"
-            onClick={() => {
-              if (!window.confirm("Delete this template?")) return;
-              submit("delete");
-            }}
-          >
-            Delete
-          </s-button>
-        ) : null}
-      </s-menu>
-
-      {saveError ? (
-        <s-banner
-          tone="critical"
-          heading="Couldn't save"
-          dismissible
-          onDismiss={() => setSaveError(null)}
-        >
-          {saveError}
-        </s-banner>
-      ) : null}
-
       {result.isSystem ? (
-        <s-banner tone="info" heading="System template">
-          This template is read-only. Click Customize to create an editable copy
-          under My templates.
+        <s-banner
+          slot="supplemental-start"
+          tone="info"
+          heading="System templates can't be edited"
+        >
+          When you save, your changes become a new template. The original stays
+          as it is.
         </s-banner>
       ) : null}
-
-      <s-section heading="Template details">
-        <s-stack gap="base">
-          <s-text-field
-            label="Name"
-            value={name}
-            maxLength={80}
-            onInput={(event: Event) => {
-              setName((event.currentTarget as HTMLInputElement).value);
-            }}
-            {...(result.isSystem ? { disabled: true } : {})}
-          />
-          <s-query-container>
-            <s-grid
-              gridTemplateColumns="@container (inline-size > 600px) repeat(3, 1fr), 1fr"
-              gap="base"
-            >
-              <s-stack gap="none">
-                <s-text color="subdued">Document type</s-text>
-                <s-text>{documentTypeLabel(result.documentType)}</s-text>
-              </s-stack>
-              <s-stack gap="none">
-                <s-text color="subdued">Layout</s-text>
-                <s-text>{result.baseLayoutCode}</s-text>
-              </s-stack>
-              <s-stack gap="none">
-                <s-text color="subdued">Default</s-text>
-                <s-text>{result.isDefault ? "Yes" : "No"}</s-text>
-              </s-stack>
-            </s-grid>
-          </s-query-container>
-        </s-stack>
-      </s-section>
 
       <s-query-container>
         <s-grid
@@ -1237,245 +1152,179 @@ export default function TemplateDetailsPage() {
           gap="large"
           alignItems="start"
         >
-          <TemplateVisualConfigEditor
-            config={config}
-            onChange={onConfigChange}
-            baseLayoutCode={result.baseLayoutCode}
-            documentType={result.documentType}
-            sourceType={sourceType}
-            disabled={result.isSystem}
-            logoResetToken={logoResetToken}
-          />
+          <s-stack gap="base">
+            <TemplateVisualConfigEditor
+              config={config}
+              onChange={onConfigChange}
+              baseLayoutCode={result.baseLayoutCode}
+              documentType={result.documentType}
+              sourceType={sourceType}
+              logoResetToken={logoResetToken}
+            />
+          </s-stack>
 
-          <s-section
-            heading={editorView === "code" ? "Edit code" : "Preview"}
-            subheading={
-              editorView === "code"
-                ? "HTML / Liquid · Extra CSS optional"
-                : "Sample document · Group 7 renderer"
-            }
-          >
+          <s-section heading="Preview">
             <s-stack gap="base">
-              <s-stack direction="inline" gap="small">
-                {codeEditorAllowed ? (
-                  <s-button
-                    variant={editorView === "code" ? "primary" : "secondary"}
-                    onClick={openCodeEditor}
-                    {...(result.isSystem ? { disabled: true } : {})}
-                  >
-                    Edit code
-                  </s-button>
-                ) : null}
-                <s-button
-                  variant={editorView === "preview" ? "primary" : "secondary"}
-                  onClick={() => setEditorView("preview")}
-                >
-                  Preview
-                </s-button>
-                {codeEditorAllowed && editorView === "code" ? (
-                  <>
+              {previewFailed ? (
+                <s-banner tone="critical" heading="Preview failed">
+                  <s-stack gap="base">
+                    <s-text>{previewErrorMessage}</s-text>
                     <s-button
                       variant="secondary"
-                      onClick={runValidate}
-                      {...(validateFetcher.state !== "idle"
-                        ? { loading: true, disabled: true }
-                        : result.isSystem
-                          ? { disabled: true }
-                          : {})}
+                      onClick={refreshPreview}
+                      {...(previewing ? { loading: true, disabled: true } : {})}
                     >
-                      Validate
+                      Try again
                     </s-button>
-                    <s-button
-                      variant="secondary"
-                      onClick={loadStarter}
-                      {...(busy || result.isSystem ? { disabled: true } : {})}
-                    >
-                      Load starter
-                    </s-button>
-                  </>
-                ) : null}
-              </s-stack>
-
-              {!codeEditorAllowed ? (
-                <s-banner tone="info" heading="Fixed layout">
-                  This layout keeps field positions fixed. Style, content, and
-                  fields still apply. Code editing is not available.
-                </s-banner>
-              ) : null}
-
-              {liquidValidation ? (
-                <s-banner
-                  tone={
-                    liquidValidation.errors.length
-                      ? "critical"
-                      : liquidValidation.warnings.length
-                        ? "warning"
-                        : "success"
-                  }
-                  heading={
-                    liquidValidation.errors.length
-                      ? "Cannot save until these are fixed"
-                      : liquidValidation.warnings.length
-                        ? "Template parses. Recommended fields missing"
-                        : "Template is valid"
-                  }
-                  dismissible
-                  onDismiss={() => setLiquidValidation(null)}
-                >
-                  <s-stack gap="small">
-                    {liquidValidation.checks.map((check) => (
-                      <s-text key={check.id}>
-                        {check.ok ? "✓" : check.level === "error" ? "✗" : "!"}{" "}
-                        {check.label}
-                        {!check.ok
-                          ? check.level === "error"
-                            ? " (required)"
-                            : " (recommended)"
-                          : ""}
-                      </s-text>
-                    ))}
-                    {liquidValidation.errors.concat(liquidValidation.warnings).map(
-                      (msg) => (
-                        <s-text key={msg}>{msg}</s-text>
-                      ),
-                    )}
                   </s-stack>
                 </s-banner>
               ) : null}
-
-              {editorView === "code" && codeEditorAllowed ? (
-                <s-stack gap="base">
-                  <s-stack direction="inline" gap="small">
-                    {LIQUID_VARIABLE_HELP.map((item) => (
-                      <s-button
-                        key={item.token}
-                        variant="tertiary"
-                        onClick={() => insertLiquidToken(item.token)}
-                        {...(result.isSystem ? { disabled: true } : {})}
-                      >
-                        {item.token}
-                      </s-button>
-                    ))}
-                  </s-stack>
-                  <s-text-area
-                    label="HTML / Liquid"
-                    value={liquidHtml}
-                    rows={18}
-                    details="Validated with the same rules as the old template editor."
-                    {...(result.isSystem ? { disabled: true } : {})}
-                    onInput={(event: Event) => {
-                      const target = event.currentTarget as HTMLTextAreaElement;
-                      liquidAreaRef.current = target;
-                      onLiquidChange(target.value ?? "");
-                    }}
-                    onChange={(event: Event) => {
-                      const target = event.currentTarget as HTMLTextAreaElement;
-                      liquidAreaRef.current = target;
-                      onLiquidChange(target.value ?? "");
-                    }}
+              {previewing && !previewHtml ? (
+                <s-spinner accessibilityLabel="Updating preview" />
+              ) : null}
+              {!previewFailed && previewHtml ? (
+                <s-box
+                  border="base"
+                  borderRadius="base"
+                  overflow="hidden"
+                  background="subdued"
+                >
+                  <iframe
+                    ref={iframeRef}
+                    title="Template preview"
+                    srcDoc={previewHtml}
+                    sandbox="allow-same-origin allow-modals"
+                    width="100%"
                   />
-                  <s-text-area
-                    label="Extra CSS (optional)"
-                    value={customCss}
-                    rows={4}
-                    {...(result.isSystem ? { disabled: true } : {})}
-                    onInput={(event: Event) => {
-                      setCustomCss(
-                        (event.currentTarget as HTMLTextAreaElement).value ??
-                          "",
-                      );
-                      if (sourceType === "layout") setSourceType("code");
-                    }}
-                  />
-                </s-stack>
-              ) : (
-                <s-stack gap="base">
-                  {previewing && !previewHtml ? (
-                    <s-spinner accessibilityLabel="Updating preview" />
-                  ) : null}
-                  {previewFetcher.data &&
-                  !previewFetcher.data.ok &&
-                  previewFetcher.data.intent === "preview" ? (
-                    <s-banner tone="critical" heading="Preview failed">
-                      {"error" in previewFetcher.data
-                        ? previewFetcher.data.error
-                        : "Failed to render preview"}
-                    </s-banner>
-                  ) : null}
-                  <s-box
-                    border="base"
-                    borderRadius="base"
-                    overflow="hidden"
-                    background="subdued"
-                  >
-                    <iframe
-                      ref={iframeRef}
-                      title="Template preview"
-                      srcDoc={previewHtml || undefined}
-                      sandbox="allow-same-origin allow-modals"
-                      style={{
-                        width: "100%",
-                        minHeight: 480,
-                        border: 0,
-                        background: "transparent",
-                        display: "block",
-                      }}
-                    />
-                  </s-box>
-                  <s-text color="subdued">
-                    {sourceType === "code" || sourceType === "imported"
-                      ? "Preview uses the Liquid / custom HTML path through Group 7."
-                      : "Preview uses the layout renderer. Store Branding is applied when documents are generated."}
-                  </s-text>
-                </s-stack>
-              )}
+                </s-box>
+              ) : null}
             </s-stack>
           </s-section>
         </s-grid>
       </s-query-container>
 
-      {showSaveAs ? (
-        <s-section heading="Save as new template">
-          <s-stack gap="base">
+      <s-modal
+        id={SAVE_MODAL_ID}
+        heading={saveModalHeading}
+        onHide={() => {
+          if (savingInModal) {
+            void shopify.modal.show(SAVE_MODAL_ID);
+            return;
+          }
+          setSaveError(null);
+          setSaveModalNameError(null);
+        }}
+      >
+        <s-stack gap="base">
+          {saveError ? (
+            <s-banner tone="critical" heading="Couldn't save">
+              {saveError}
+            </s-banner>
+          ) : null}
+
+          {isUntitled ? (
             <s-text-field
-              label="New template name"
-              value={saveAsName}
-              maxLength={80}
+              label="Template name"
+              value={saveModalName}
+              maxLength={TEMPLATE_NAME_MAX}
+              {...(saveModalNameError ? { error: saveModalNameError } : {})}
               onInput={(event: Event) => {
-                setSaveAsName(
+                setSaveModalName(
                   (event.currentTarget as HTMLInputElement).value,
                 );
+                if (saveModalNameError) setSaveModalNameError(null);
               }}
             />
-            <s-stack direction="inline" gap="small">
-              <s-button
-                variant="primary"
-                onClick={() => {
-                  if (!saveAsName.trim()) {
-                    shopify.toast.show("Template name can't be blank.", {
-                      isError: true,
-                    });
-                    return;
+          ) : null}
+
+          {result.isSystem && !isUntitled ? (
+            <>
+              <s-text>
+                {result.name} can&apos;t be edited, so your changes will be
+                saved as a new template.
+              </s-text>
+              <s-text-field
+                label="Template name"
+                value={saveModalName}
+                maxLength={TEMPLATE_NAME_MAX}
+                {...(saveModalNameError ? { error: saveModalNameError } : {})}
+                onInput={(event: Event) => {
+                  setSaveModalName(
+                    (event.currentTarget as HTMLInputElement).value,
+                  );
+                  if (saveModalNameError) setSaveModalNameError(null);
+                }}
+              />
+            </>
+          ) : null}
+
+          {!result.isSystem && !isUntitled ? (
+            <>
+              <s-choice-list
+                label="How do you want to save?"
+                name="custom-save-mode"
+                values={[customSaveMode]}
+                onChange={(event: Event) => {
+                  const values = (
+                    event.currentTarget as unknown as { values?: string[] }
+                  ).values;
+                  const next =
+                    values?.[0] === "save-as" ? "save-as" : "update";
+                  setCustomSaveMode(next);
+                  setSaveModalNameError(null);
+                  if (next === "save-as" && !saveModalName.trim()) {
+                    setSaveModalName(`${result.name} copy`);
                   }
-                  submit("save-as", { name: saveAsName.trim() });
-                }}
-                {...(busy ? { loading: true, disabled: true } : {})}
-              >
-                Create copy
-              </s-button>
-              <s-button
-                variant="secondary"
-                onClick={() => {
-                  setShowSaveAs(false);
-                  setSaveAsName("");
                 }}
               >
-                Cancel
-              </s-button>
-            </s-stack>
-          </s-stack>
-        </s-section>
-      ) : null}
+                <s-choice value="update">
+                  {`Update "${result.name}"`}
+                  <s-text slot="details">Replace it with your changes.</s-text>
+                </s-choice>
+                <s-choice value="save-as">
+                  Save as new template
+                  <s-text slot="details">
+                    Keep the original and create a copy.
+                  </s-text>
+                </s-choice>
+              </s-choice-list>
+              {customSaveMode === "save-as" ? (
+                <s-text-field
+                  label="Template name"
+                  value={saveModalName}
+                  maxLength={TEMPLATE_NAME_MAX}
+                  {...(saveModalNameError
+                    ? { error: saveModalNameError }
+                    : {})}
+                  onInput={(event: Event) => {
+                    setSaveModalName(
+                      (event.currentTarget as HTMLInputElement).value,
+                    );
+                    if (saveModalNameError) setSaveModalNameError(null);
+                  }}
+                />
+              ) : null}
+            </>
+          ) : null}
+        </s-stack>
+
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          onClick={confirmSaveModal}
+          {...(savingInModal ? { loading: true, disabled: true } : {})}
+        >
+          {saveModalPrimaryLabel}
+        </s-button>
+        <s-button
+          slot="secondary-actions"
+          variant="secondary"
+          onClick={closeSaveModal}
+          {...(savingInModal ? { disabled: true } : {})}
+        >
+          Cancel
+        </s-button>
+      </s-modal>
     </s-page>
   );
 }
