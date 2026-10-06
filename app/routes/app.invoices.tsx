@@ -16,6 +16,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { APP_LOCALE } from "../constants/app";
+import { sendInvoiceEmail } from "../models/document-email.server";
 import {
   listInvoicesForShop,
   parseInvoiceListQuery,
@@ -78,6 +79,37 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
+
+  if (intent === "send-email") {
+    const invoiceId = String(formData.get("documentId") ?? "").trim();
+    if (!invoiceId) {
+      return {
+        ok: false as const,
+        intent: "send-email" as const,
+        error: "Invoice not found",
+      };
+    }
+    // Direct send: buyer email + default PDF template from Phase 1 service.
+    const result = await sendInvoiceEmail({
+      shop: session.shop,
+      invoiceId,
+      trigger: "manual",
+    });
+    if (!result.ok) {
+      return {
+        ok: false as const,
+        intent: "send-email" as const,
+        error: result.error || "Failed to send email",
+        to: result.to,
+      };
+    }
+    return {
+      ok: true as const,
+      intent: "send-email" as const,
+      to: result.to,
+      message: `Email sent to ${result.to}`,
+    };
+  }
 
   if (intent === "sync") {
     try {
@@ -144,6 +176,7 @@ export default function InvoicesPage() {
   const data = useLoaderData<typeof loader>();
   const syncFetcher = useFetcher<typeof action>();
   const webhookFetcher = useFetcher<typeof action>();
+  const emailFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -155,12 +188,17 @@ export default function InvoicesPage() {
     isInvoicesListPath(navigation.location.pathname);
   const syncBusy = syncFetcher.state !== "idle";
   const webhookBusy = webhookFetcher.state !== "idle";
+  const emailSending =
+    emailFetcher.state === "submitting" || emailFetcher.state === "loading";
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchDraft, setSearchDraft] = useState(data.query.q);
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const emailAwaiting = useRef(false);
+  const emailDataAtSubmit = useRef(emailFetcher.data);
 
   useEffect(() => {
     setSearchDraft(data.query.q);
@@ -178,6 +216,7 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     if (syncFetcher.state !== "idle" || !syncFetcher.data) return;
+    if (syncFetcher.data.intent !== "sync") return;
     shopify.toast.show(syncFetcher.data.message, {
       isError: !syncFetcher.data.ok,
     });
@@ -185,10 +224,33 @@ export default function InvoicesPage() {
 
   useEffect(() => {
     if (webhookFetcher.state !== "idle" || !webhookFetcher.data) return;
+    if (webhookFetcher.data.intent !== "reregister") return;
     shopify.toast.show(webhookFetcher.data.message, {
       isError: !webhookFetcher.data.ok,
     });
   }, [webhookFetcher.state, webhookFetcher.data, shopify]);
+
+  useEffect(() => {
+    if (!emailAwaiting.current || emailFetcher.state !== "idle") return;
+    emailAwaiting.current = false;
+    setEmailSendingId(null);
+
+    if (!emailFetcher.data || emailFetcher.data === emailDataAtSubmit.current) {
+      shopify.toast.show("Couldn't send", { isError: true });
+      return;
+    }
+
+    if (emailFetcher.data.intent !== "send-email") return;
+
+    if (emailFetcher.data.ok) {
+      shopify.toast.show(emailFetcher.data.message);
+      return;
+    }
+
+    shopify.toast.show(emailFetcher.data.error || "Failed to send email", {
+      isError: true,
+    });
+  }, [emailFetcher.state, emailFetcher.data, shopify]);
 
   const updateFilters = useCallback(
     (patch: Record<string, string | null | undefined>) => {
@@ -330,6 +392,18 @@ export default function InvoicesPage() {
     } finally {
       setDownloadingId(null);
     }
+  };
+
+  /** Direct send with buyer email + default PDF template (no modal). */
+  const sendEmail = (invoice: InvoiceListItem) => {
+    if (emailSending) return;
+    setEmailSendingId(invoice.id);
+    emailDataAtSubmit.current = emailFetcher.data;
+    emailAwaiting.current = true;
+    const body = new FormData();
+    body.set("intent", "send-email");
+    body.set("documentId", invoice.id);
+    emailFetcher.submit(body, { method: "post" });
   };
 
   const printSelected = () => {
@@ -638,7 +712,15 @@ export default function InvoicesPage() {
                           >
                             Download
                           </s-button>
-                          <s-button icon="email" disabled>
+                          <s-button
+                            icon="email"
+                            onClick={() => sendEmail(invoice)}
+                            {...(emailSendingId === invoice.id
+                              ? { loading: true, disabled: true }
+                              : emailSending
+                                ? { disabled: true }
+                                : {})}
+                          >
                             Send email
                           </s-button>
                         </s-menu>

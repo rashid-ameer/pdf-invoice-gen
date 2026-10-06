@@ -461,10 +461,11 @@ describe("Credit note document routes / UI wiring", () => {
     assert.match(source, /Back to Credit notes/);
     assert.doesNotMatch(source, /s-modal|s-choice-list|Print credit note/);
     assert.doesNotMatch(source, /Send email|Copy link|QR code|public link/i);
+    assert.doesNotMatch(source, /DocumentEmailModal/);
     assert.doesNotMatch(source, /refund_document/);
   });
 
-  it("wires list page View/Print/Download/bulk with selection", () => {
+  it("wires list page View/Print/Download/Email/bulk with selection", () => {
     const source = readFileSync(
       join(process.cwd(), "app/routes/app.credit-notes.tsx"),
       "utf8",
@@ -475,6 +476,12 @@ describe("Credit note document routes / UI wiring", () => {
     assert.match(source, /menu-horizontal/);
     assert.match(source, /downloadCreditNotePdf/);
     assert.match(source, /fetchAndPrintCreditNoteDocument/);
+    assert.match(source, /const sendEmail = /);
+    assert.match(source, /sendCreditNoteEmail/);
+    assert.match(source, /Send email/);
+    assert.doesNotMatch(source, /DocumentEmailModal|s-modal|s-email-field/);
+    assert.match(source, /sendRefundDocumentEmail/);
+    assert.match(source, /trigger: "manual"/);
     assert.match(source, /fetchAndPrintCreditNoteDocuments/);
     assert.match(source, />\s*View\s*</);
     assert.match(source, /\/app\/credit-notes\/\$\{/);

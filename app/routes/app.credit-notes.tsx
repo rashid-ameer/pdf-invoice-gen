@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -16,6 +16,10 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { APP_LOCALE } from "../constants/app";
+import {
+  sendCreditNoteEmail,
+  sendRefundDocumentEmail,
+} from "../models/document-email.server";
 import {
   listCreditNotesForShop,
   parseCreditNoteListQuery,
@@ -88,6 +92,51 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
 
+  if (intent === "send-email") {
+    const creditNoteId = String(formData.get("documentId") ?? "").trim();
+    const documentType =
+      String(formData.get("documentType") ?? "") === "refund_document"
+        ? ("refund_document" as const)
+        : ("credit_note" as const);
+
+    if (!creditNoteId) {
+      return {
+        ok: false as const,
+        intent: "send-email" as const,
+        error: "Credit note not found",
+      };
+    }
+
+    // Direct send: buyer email + default PDF template from Phase 1 service.
+    const result =
+      documentType === "refund_document"
+        ? await sendRefundDocumentEmail({
+            shop: session.shop,
+            creditNoteId,
+            trigger: "manual",
+          })
+        : await sendCreditNoteEmail({
+            shop: session.shop,
+            creditNoteId,
+            trigger: "manual",
+          });
+
+    if (!result.ok) {
+      return {
+        ok: false as const,
+        intent: "send-email" as const,
+        error: result.error || "Failed to send email",
+        to: result.to,
+      };
+    }
+    return {
+      ok: true as const,
+      intent: "send-email" as const,
+      to: result.to,
+      message: `Email sent to ${result.to}`,
+    };
+  }
+
   if (intent === "sync") {
     try {
       await enqueueSyncRefunds(session.shop);
@@ -141,6 +190,7 @@ function formatIssueDate(iso: string): string {
 export default function CreditNotesPage() {
   const data = useLoaderData<typeof loader>();
   const syncFetcher = useFetcher<typeof action>();
+  const emailFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -151,18 +201,46 @@ export default function CreditNotesPage() {
     navigation.location != null &&
     isCreditNotesListPath(navigation.location.pathname);
   const syncBusy = syncFetcher.state !== "idle";
+  const emailSending =
+    emailFetcher.state === "submitting" || emailFetcher.state === "loading";
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
   const [csvBusy, setCsvBusy] = useState(false);
+  const emailAwaiting = useRef(false);
+  const emailDataAtSubmit = useRef(emailFetcher.data);
 
   useEffect(() => {
     if (syncFetcher.state !== "idle" || !syncFetcher.data) return;
+    if (syncFetcher.data.intent !== "sync") return;
     shopify.toast.show(syncFetcher.data.message, {
       isError: !syncFetcher.data.ok,
     });
   }, [syncFetcher.state, syncFetcher.data, shopify]);
+
+  useEffect(() => {
+    if (!emailAwaiting.current || emailFetcher.state !== "idle") return;
+    emailAwaiting.current = false;
+    setEmailSendingId(null);
+
+    if (!emailFetcher.data || emailFetcher.data === emailDataAtSubmit.current) {
+      shopify.toast.show("Couldn't send", { isError: true });
+      return;
+    }
+
+    if (emailFetcher.data.intent !== "send-email") return;
+
+    if (emailFetcher.data.ok) {
+      shopify.toast.show(emailFetcher.data.message);
+      return;
+    }
+
+    shopify.toast.show(emailFetcher.data.error || "Failed to send email", {
+      isError: true,
+    });
+  }, [emailFetcher.state, emailFetcher.data, shopify]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -328,6 +406,22 @@ export default function CreditNotesPage() {
     } finally {
       setDownloadingId(null);
     }
+  };
+
+  /** Direct send with buyer email + default PDF template (no modal). */
+  const sendEmail = (note: CreditNoteListItem) => {
+    if (emailSending) return;
+    setEmailSendingId(note.id);
+    emailDataAtSubmit.current = emailFetcher.data;
+    emailAwaiting.current = true;
+    const body = new FormData();
+    body.set("intent", "send-email");
+    body.set("documentId", note.id);
+    body.set(
+      "documentType",
+      isRefundTab ? "refund_document" : "credit_note",
+    );
+    emailFetcher.submit(body, { method: "post" });
   };
 
   const printSelected = () => {
@@ -624,6 +718,17 @@ export default function CreditNotesPage() {
                                   : {})}
                             >
                               Download
+                            </s-button>
+                            <s-button
+                              icon="email"
+                              onClick={() => sendEmail(note)}
+                              {...(emailSendingId === note.id
+                                ? { loading: true, disabled: true }
+                                : emailSending
+                                  ? { disabled: true }
+                                  : {})}
+                            >
+                              Send email
                             </s-button>
                           </s-menu>
                         </s-table-cell>

@@ -158,7 +158,11 @@ describe("Invoices page wiring", () => {
     assert.match(source, /<s-menu/);
     assert.match(source, /Print selected/);
     assert.match(source, /Send email/);
-    assert.match(source, /disabled/);
+    assert.match(source, /const sendEmail = /);
+    assert.match(source, /sendInvoiceEmail/);
+    assert.match(source, /trigger: "manual"/);
+    assert.doesNotMatch(source, /DocumentEmailModal|s-modal|s-email-field/);
+    assert.doesNotMatch(source, /icon="email"\s+disabled/);
     assert.match(source, /isInvoicesListPath/);
     assert.match(source, /navigation\.location/);
     assert.doesNotMatch(

@@ -356,6 +356,7 @@ describe("Refund document route wiring", () => {
     assert.match(source, /Refund document/);
     assert.doesNotMatch(source, /s-modal|s-choice-list/);
     assert.doesNotMatch(source, /Send email|Copy link|QR code/i);
+    assert.doesNotMatch(source, /DocumentEmailModal/);
   });
 
   it("wires list Refund Documents tab to refund document actions", () => {
@@ -365,6 +366,10 @@ describe("Refund document route wiring", () => {
     );
     assert.match(page, /listRefundDocumentTemplatesForShop/);
     assert.match(page, /fetchAndPrintRefundDocument/);
+    assert.match(page, /const sendEmail = /);
+    assert.match(page, /sendRefundDocumentEmail/);
+    assert.doesNotMatch(page, /DocumentEmailModal|s-modal|s-email-field/);
+    assert.doesNotMatch(page, /Email refund document/);
     assert.match(page, /downloadRefundDocumentPdf/);
     assert.match(page, /fetchAndPrintRefundDocuments/);
     assert.match(page, /\/refund/);

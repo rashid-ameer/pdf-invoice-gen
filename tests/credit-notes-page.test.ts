@@ -315,7 +315,7 @@ describe("Credit notes page UI wiring", () => {
     assert.match(csvRoute, /creditNotesToCsv/);
   });
 
-  it("uses Invoices-style row action menu: View, Copy, Print, Download", () => {
+  it("uses Invoices-style row action menu: View, Copy, Print, Download, Send email", () => {
     const page = readFileSync(
       join(process.cwd(), "app/routes/app.credit-notes.tsx"),
       "utf8",
@@ -324,11 +324,13 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /icon="clipboard"/);
     assert.match(page, /icon="print"/);
     assert.match(page, /icon="download"/);
+    assert.match(page, /icon="email"/);
     assert.match(page, />\s*View\s*</);
     assert.match(page, />\s*Copy\s*</);
     assert.match(page, />\s*Print\s*</);
     assert.match(page, />\s*Download\s*</);
+    assert.match(page, />\s*Send email\s*</);
     assert.match(page, /copyCreditNoteNumber/);
-    assert.doesNotMatch(page, /icon="email"/);
+    assert.match(page, /const sendEmail = /);
   });
 });
