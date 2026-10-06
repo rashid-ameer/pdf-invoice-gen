@@ -3,7 +3,7 @@
  *
  * Port of public handlers in `uae-invoiceing-app/server/routes/app.routes.ts`.
  * Token security lives in Phase A (`public-link.server.ts`).
- * No download/status events. No verification/QR (Phase C).
+ * No download/status events. Verification/QR attached via G7 render when enabled (Phase C).
  */
 
 import {

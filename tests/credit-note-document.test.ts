@@ -203,10 +203,8 @@ describe("renderCreditNoteDocument", () => {
     assert.equal(doc!.originalInvoiceNumber, invoice.invoiceNumber);
     assert.equal(doc!.templateId, templates![0].id);
     assert.match(doc!.html, /html|body|div/i);
-    assert.doesNotMatch(
-      doc!.html,
-      /data:image\/png;base64,[A-Za-z0-9+/=]{200,}/,
-    );
+    assert.match(doc!.html, /data-section="verification_qr"/);
+    assert.match(doc!.html, /data:image\/png;base64,/);
   });
 
   it("returns null for missing credit note", async () => {

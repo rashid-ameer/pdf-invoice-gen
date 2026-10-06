@@ -119,12 +119,13 @@ describe("invoiceToRenderData", () => {
 });
 
 describe("renderInvoiceDocument", () => {
-  it("resolves a system template and renders HTML without QR", async () => {
+  it("resolves a system template and renders HTML with verification QR when enabled", async () => {
     const { store, invoice } = await seedStoreWithInvoice();
     const doc = await renderInvoiceDocument(store.shopifyDomain, invoice.id);
     assert.ok(doc);
     assert.match(doc!.html, /Widget|Invoice|Acme/i);
-    assert.doesNotMatch(doc!.html, /data:image\/png;base64,[A-Za-z0-9+/=]{200,}/);
+    assert.match(doc!.html, /data-section="verification_qr"/);
+    assert.match(doc!.html, /data:image\/png;base64,/);
     assert.ok(doc!.templateId);
     assert.equal(doc!.invoiceNumber, invoice.invoiceNumber);
   });

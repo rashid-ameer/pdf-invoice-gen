@@ -1,4 +1,4 @@
-/** Group 13 will own full verification. Group 7 only needs QR HTML when payload is present. */
+/** Group 7 QR HTML helper. Full verification lives in verification.server.ts (Group 13). */
 export interface DocumentVerificationPayload {
   qrDataUrl: string;
   verifyUrl: string;

@@ -20,6 +20,7 @@ import {
 import { prepareLineItemsForRender } from "./line-item-render.server";
 import { applyA4DocumentLayout } from "./document-preview.server";
 import { cachedHtmlToPdfBuffer } from "./pdf-cache.server";
+import { buildCreditNoteVerification } from "./verification.server";
 
 const BULK_RENDER_CONCURRENCY = 4;
 /** Old credit-notes / refund-documents bulk routes reject > 50. */
@@ -157,7 +158,7 @@ export type RenderedCreditNoteDocument = {
 /**
  * Shared CreditNote → HTML for credit_note or refund_document (G5/G7).
  * Same mapper data; documentType drives template resolution and labels.
- * No QR (Group 13).
+ * QR when config.sections.qrCode.visible (Group 13 Phase C).
  */
 async function renderCreditNoteDerivedDocument(
   shopDomain: string,
@@ -199,7 +200,14 @@ async function renderCreditNoteDerivedDocument(
     documentType,
   );
 
-  // Group 13: QR / integrity verification — do not attach here.
+  if (config.sections.qrCode?.visible) {
+    const verification = await buildCreditNoteVerification(
+      creditNote.id,
+      documentType,
+    );
+    if (verification) data.verification = verification;
+  }
+
   data.lineItems = await prepareLineItemsForRender(data.lineItems, config);
 
   const customHtml =

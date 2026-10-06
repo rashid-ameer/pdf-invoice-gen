@@ -20,6 +20,7 @@ import {
 import { prepareLineItemsForRender } from "./line-item-render.server";
 import { applyA4DocumentLayout } from "./document-preview.server";
 import { cachedHtmlToPdfBuffer } from "./pdf-cache.server";
+import { buildInvoiceVerification } from "./verification.server";
 
 const BULK_RENDER_CONCURRENCY = 4;
 /** Safety cap for bulk PDF (packing slips used 50 in the old app). */
@@ -177,7 +178,9 @@ export type RenderedInvoiceDocument = {
 
 /**
  * Shared render path for an existing invoice document (tax invoice or packing slip).
- * Template resolved at view/download time. QR/verification only for tax invoices (Group 13).
+ * Template resolved at view/download time.
+ * QR/verification only for tax_invoice when qrCode.visible (Group 13 Phase C).
+ * Packing slips never attach verification QR.
  */
 async function renderDocumentForInvoice(
   shopDomain: string,
@@ -209,7 +212,11 @@ async function renderDocumentForInvoice(
     documentType,
   );
 
-  // Group 13: QR / integrity verification — do not attach here.
+  if (config.sections.qrCode?.visible && documentType === "tax_invoice") {
+    const verification = await buildInvoiceVerification(invoice.id);
+    if (verification) data.verification = verification;
+  }
+
   data.lineItems = await prepareLineItemsForRender(data.lineItems, config);
 
   const customHtml =
