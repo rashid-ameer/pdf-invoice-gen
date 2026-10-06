@@ -255,6 +255,12 @@ model CreditNote {
   lineItems        Json
   /// InvoiceTotals JSON
   totals           Json
+  /// { tokenHash, token, expiresAt, issuedAt } — credit_note public links only
+  publicAccessCreditNote      Json?
+  /// { tokenHash, token, expiresAt, issuedAt } — refund_document public links only
+  publicAccessRefundDocument  Json?
+  /// { integrityHash, sealedAt } — shared CN/refund verification (old parity; Group 13 Phase C)
+  verification                Json?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
