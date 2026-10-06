@@ -25,6 +25,7 @@ import {
   setDefaultTemplate,
   type TemplateListItem,
 } from "../models/template.server";
+import { scheduleTemplateThumbnailRefresh } from "../models/template-thumbnail.server";
 import { authenticate } from "../shopify.server";
 
 const DOC_TYPES: Array<{ value: DocumentType; label: string }> = [
@@ -52,6 +53,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw new Response("Store not found. Please reinstall the app.", {
       status: 404,
     });
+  }
+
+  // Kick off JPEG generation for templates that still lack a cached thumbnail
+  // (old lazy-on-img-request parity). Concurrent limit lives in the thumbnail service.
+  for (const item of [...list.customItems, ...list.systemItems]) {
+    if (!item.thumbnailDataUrl) {
+      scheduleTemplateThumbnailRefresh(session.shop, item.id);
+    }
   }
 
   return {
@@ -92,6 +101,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         error: "Store not found",
       };
     }
+    scheduleTemplateThumbnailRefresh(session.shop, created.id);
     return {
       ok: true as const,
       intent: "create-layout" as const,
@@ -117,6 +127,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         error: "Store not found",
       };
     }
+    scheduleTemplateThumbnailRefresh(session.shop, created.id);
     return {
       ok: true as const,
       intent: "create-code" as const,
@@ -306,11 +317,20 @@ export default function TemplatesPage() {
     return (
       <s-table-row key={item.id}>
         <s-table-cell>
-          <s-stack gap="none">
-            <s-link href={`/app/templates/${encodeURIComponent(item.id)}`}>
-              {item.name}
-            </s-link>
-            <s-text color="subdued">{item.description || item.code}</s-text>
+          <s-stack direction="inline" gap="base" alignItems="center">
+            <TemplateThumb
+              dataUrl={item.thumbnailDataUrl}
+              fetchUrl={item.thumbnailUrl}
+              theme={item.theme}
+              alt=""
+              name={item.name}
+            />
+            <s-stack gap="none">
+              <s-link href={`/app/templates/${encodeURIComponent(item.id)}`}>
+                {item.name}
+              </s-link>
+              <s-text color="subdued">{item.description || item.code}</s-text>
+            </s-stack>
           </s-stack>
         </s-table-cell>
         <s-table-cell>
@@ -485,6 +505,158 @@ export default function TemplatesPage() {
         ) : null}
       </s-section>
     </s-page>
+  );
+}
+
+/**
+ * List thumbnail: prefer cached data URL from the loader (no auth needed).
+ * Fall back to a CSS mini-preview (old parity — never a blank box) and optionally
+ * fetch JPEG with App Bridge Bearer when cache is still empty.
+ */
+function TemplateThumb({
+  dataUrl,
+  fetchUrl,
+  theme,
+  alt,
+  name,
+}: {
+  dataUrl: string | null;
+  fetchUrl: string;
+  theme: { primary: string; accent: string; secondary: string };
+  alt: string;
+  name: string;
+}) {
+  const shopify = useAppBridge();
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (dataUrl) {
+      setObjectUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    let created: string | null = null;
+
+    (async () => {
+      try {
+        const token = await shopify.idToken();
+        const res = await fetch(fetchUrl, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const blob = await res.blob();
+        if (cancelled) return;
+        created = URL.createObjectURL(blob);
+        setObjectUrl(created);
+      } catch {
+        // Keep CSS mini-preview — never force a blank failed state.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (created) URL.revokeObjectURL(created);
+    };
+  }, [dataUrl, fetchUrl, shopify]);
+
+  const src = dataUrl || objectUrl;
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={alt || `${name} preview`}
+        loading="lazy"
+        decoding="async"
+        width={48}
+        height={64}
+        style={{
+          width: 48,
+          height: 64,
+          objectFit: "cover",
+          objectPosition: "top center",
+          borderRadius: 4,
+          border: "1px solid #c9cccf",
+          background: "#f1f2f3",
+          display: "block",
+          flexShrink: 0,
+        }}
+      />
+    );
+  }
+
+  return <MiniPreview theme={theme} name={name} />;
+}
+
+/** Compact CSS stub matching old list mini-preview (always visible). */
+function MiniPreview({
+  theme,
+  name,
+}: {
+  theme: { primary: string; accent: string; secondary: string };
+  name: string;
+}) {
+  return (
+    <div
+      aria-label={`${name} preview`}
+      style={{
+        width: 48,
+        height: 64,
+        borderRadius: 4,
+        border: "1px solid #c9cccf",
+        background: "#fff",
+        overflow: "hidden",
+        flexShrink: 0,
+        boxSizing: "border-box",
+      }}
+    >
+      <div style={{ height: 10, background: theme.primary }} />
+      <div style={{ padding: 5 }}>
+        <div
+          style={{
+            height: 3,
+            width: "72%",
+            background: theme.accent,
+            marginBottom: 4,
+            borderRadius: 1,
+          }}
+        />
+        <div
+          style={{
+            height: 2,
+            width: "100%",
+            background: "#e1e3e5",
+            marginBottom: 3,
+          }}
+        />
+        <div
+          style={{
+            height: 2,
+            width: "92%",
+            background: "#e1e3e5",
+            marginBottom: 3,
+          }}
+        />
+        <div
+          style={{
+            height: 2,
+            width: "80%",
+            background: "#e1e3e5",
+            marginBottom: 6,
+          }}
+        />
+        <div
+          style={{
+            height: 4,
+            width: "55%",
+            marginLeft: "auto",
+            background: theme.secondary,
+            borderRadius: 1,
+            opacity: 0.55,
+          }}
+        />
+      </div>
+    </div>
   );
 }
 

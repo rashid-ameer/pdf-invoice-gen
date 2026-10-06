@@ -508,6 +508,6 @@ describe("Group 14 Phase C — Phase B + wiring regression markers", () => {
     assert.match(details, /syncConfigToLiquidForShop|from-config/);
     assert.match(details, /Edit code/);
     assert.match(details, /Load starter/);
-    assert.doesNotMatch(details, /thumbnail|JPEG|Phase D/);
+    assert.match(details, /scheduleTemplateThumbnailRefresh/);
   });
 });

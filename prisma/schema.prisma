@@ -300,6 +300,9 @@ model InvoiceTemplate {
   customCss      String?
   /// Import / document-graph metadata for Group 14 imported templates
   importMeta     Json?
+  /// Cached JPEG preview of the template (Group 14 Phase D). Bytes omitted from default selects.
+  thumbnailJpeg  Bytes?
+  thumbnailGeneratedAt DateTime?
   version        Int      @default(1)
   isSystem       Boolean  @default(true)
   isActive       Boolean  @default(true)

@@ -241,6 +241,13 @@ export type TemplateListItem = {
   isSystem: boolean;
   isCustom: boolean;
   updatedAt?: string;
+  /** Lazy thumbnail URL (old `/app/templates/:id/thumbnail?v=updatedAt`). */
+  thumbnailUrl: string;
+  /**
+   * Cached JPEG as a data URL when available (avoids embedded-admin auth on <img>).
+   * Null until a thumbnail has been generated; list UI falls back to a CSS mini-preview.
+   */
+  thumbnailDataUrl: string | null;
 };
 
 function defaultIdForType(
@@ -332,6 +339,16 @@ function mapTemplateListItem(
     updatedAt: template.updatedAt
       ? new Date(template.updatedAt).toISOString()
       : "",
+    thumbnailUrl: (() => {
+      const v = template.updatedAt
+        ? new Date(template.updatedAt).toISOString()
+        : "";
+      const base = `/app/templates/${encodeURIComponent(template.id)}/thumbnail`;
+      return v ? `${base}?v=${encodeURIComponent(v)}` : base;
+    })(),
+    thumbnailDataUrl: template.thumbnailJpeg
+      ? `data:image/jpeg;base64,${Buffer.from(template.thumbnailJpeg).toString("base64")}`
+      : null,
   };
 }
 
@@ -1097,11 +1114,10 @@ export type PreviewTemplateDraft = {
 };
 
 /**
- * Group 14 Phase C — template preview (old renderTemplatePreviewById).
- * Uses Group 7 via renderDocumentHtml. No store branding merge (editor parity).
- * Honors draft Liquid / sourceType for code templates.
+ * Raw template preview HTML (old `renderTemplatePreviewById`).
+ * No A4 wrap / embed chrome — used by thumbnails and then wrapped for UI preview.
  */
-export async function previewTemplateVisualConfig(
+export async function renderTemplatePreviewHtmlById(
   shopDomain: string,
   templateId: string,
   draftConfigOrDraft?: unknown | PreviewTemplateDraft,
@@ -1109,7 +1125,6 @@ export async function previewTemplateVisualConfig(
   const { renderDocumentHtml, sampleRenderDataForDocumentType } = await import(
     "./render.server"
   );
-  const { wrapA4EmbedHtml } = await import("./document-preview.server");
 
   const result = await getTemplateByIdForShop(shopDomain, templateId);
   if (!result) return null;
@@ -1158,7 +1173,7 @@ export async function previewTemplateVisualConfig(
       : null);
 
   const layout = asBaseLayoutCode(result.template.baseLayoutCode);
-  const html = await renderDocumentHtml({
+  return renderDocumentHtml({
     baseLayoutCode: layout,
     documentType: result.documentType,
     config,
@@ -1168,6 +1183,23 @@ export async function previewTemplateVisualConfig(
     sourceType: kind === "layout" ? "layout" : kind,
     customCss,
   });
+}
 
+/**
+ * Group 14 Phase C — template preview for the editor iframe.
+ * Wraps raw preview HTML with A4 embed chrome.
+ */
+export async function previewTemplateVisualConfig(
+  shopDomain: string,
+  templateId: string,
+  draftConfigOrDraft?: unknown | PreviewTemplateDraft,
+): Promise<string | null> {
+  const { wrapA4EmbedHtml } = await import("./document-preview.server");
+  const html = await renderTemplatePreviewHtmlById(
+    shopDomain,
+    templateId,
+    draftConfigOrDraft,
+  );
+  if (!html) return null;
   return wrapA4EmbedHtml(html);
 }

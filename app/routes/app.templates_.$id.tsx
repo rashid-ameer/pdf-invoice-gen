@@ -5,7 +5,6 @@ import type {
   LoaderFunctionArgs,
 } from "react-router";
 import {
-  redirect,
   useFetcher,
   useLoaderData,
   useNavigate,
@@ -44,6 +43,7 @@ import {
   templateSourceKind,
 } from "../models/template-liquid.server";
 import { extractVisualConfigFromLiquid } from "../models/template-liquid-extract.server";
+import { scheduleTemplateThumbnailRefresh } from "../models/template-thumbnail.server";
 import { authenticate } from "../shopify.server";
 
 const SAVE_BAR_ID = "template-visual-config-save-bar";
@@ -101,24 +101,10 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     return { result: null, isNew: false };
   }
 
-  let result = await getTemplateByIdForShop(session.shop, templateId);
-
-  // Old parity: opening a system template for edit clones it first.
-  if (result?.template.isSystem) {
-    const cloned = await createCustomTemplate(session.shop, {
-      name: "",
-      baseLayoutCode: asBaseLayoutSafe(result.template.baseLayoutCode),
-      documentType: result.documentType,
-      sourceTemplateId: result.template.id,
-    });
-    if (cloned) {
-      throw redirect(
-        `/app/templates/${encodeURIComponent(cloned.id)}?new=1`,
-      );
-    }
-  }
-
-  result = await getTemplateByIdForShop(session.shop, templateId);
+  // System templates open for inspection (read-only). Cloning happens only via
+  // explicit Customize (list create-layout or details intent=customize) — old
+  // list Edit posted to /create; navigating to the system id must not auto-clone.
+  const result = await getTemplateByIdForShop(session.shop, templateId);
   if (!result) {
     return { result: null, isNew };
   }
@@ -172,6 +158,45 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
   const templateId = String(params.id ?? formData.get("templateId") ?? "").trim();
+
+  // Explicit customize: clone system → custom, then open the editable copy.
+  if (intent === "customize") {
+    if (!templateId) {
+      return {
+        ok: false as const,
+        intent: "customize" as const,
+        error: "Template not found",
+      };
+    }
+    const existing = await getTemplateByIdForShop(session.shop, templateId);
+    if (!existing?.template.isSystem) {
+      return {
+        ok: false as const,
+        intent: "customize" as const,
+        error: "Only system templates can be customized this way",
+      };
+    }
+    const cloned = await createCustomTemplate(session.shop, {
+      name: "",
+      baseLayoutCode: asBaseLayoutSafe(existing.template.baseLayoutCode),
+      documentType: existing.documentType,
+      sourceTemplateId: existing.template.id,
+    });
+    if (!cloned) {
+      return {
+        ok: false as const,
+        intent: "customize" as const,
+        error: "Store not found",
+      };
+    }
+    scheduleTemplateThumbnailRefresh(session.shop, cloned.id);
+    return {
+      ok: true as const,
+      intent: "customize" as const,
+      templateId: cloned.id,
+      message: "Template created",
+    };
+  }
 
   if (intent === "preview") {
     if (!templateId) {
@@ -415,6 +440,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           error: "Template not found or cannot be edited",
         };
       }
+      scheduleTemplateThumbnailRefresh(session.shop, templateId);
       return {
         ok: true as const,
         intent: "save" as const,
@@ -503,6 +529,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           customCss,
         });
       }
+      scheduleTemplateThumbnailRefresh(session.shop, created.id);
       return {
         ok: true as const,
         intent: "save-as" as const,
@@ -747,6 +774,18 @@ export default function TemplateDetailsPage() {
       shopify.toast.show(fetcher.data.message);
       navigate(
         `/app/templates/${encodeURIComponent(fetcher.data.templateId)}?saved=1`,
+      );
+      return;
+    }
+
+    if (
+      fetcher.data.intent === "customize" &&
+      "templateId" in fetcher.data &&
+      fetcher.data.templateId
+    ) {
+      shopify.toast.show(fetcher.data.message);
+      navigate(
+        `/app/templates/${encodeURIComponent(fetcher.data.templateId)}?new=1`,
       );
       return;
     }
@@ -1088,12 +1127,14 @@ export default function TemplateDetailsPage() {
       <s-button
         slot="primary-action"
         variant="primary"
-        onClick={saveForm}
-        {...(busy || result.isSystem
-          ? { loading: busy, disabled: true }
+        onClick={() =>
+          result.isSystem ? submit("customize") : saveForm()
+        }
+        {...(busy
+          ? { loading: true, disabled: true }
           : {})}
       >
-        Save
+        {result.isSystem ? "Customize" : "Save"}
       </s-button>
       <s-button
         slot="secondary-actions"
@@ -1149,6 +1190,13 @@ export default function TemplateDetailsPage() {
           onDismiss={() => setSaveError(null)}
         >
           {saveError}
+        </s-banner>
+      ) : null}
+
+      {result.isSystem ? (
+        <s-banner tone="info" heading="System template">
+          This template is read-only. Click Customize to create an editable copy
+          under My templates.
         </s-banner>
       ) : null}
 
