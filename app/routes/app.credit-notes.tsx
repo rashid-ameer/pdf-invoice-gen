@@ -27,6 +27,7 @@ import {
   type CreditNoteListTab,
 } from "../models/credit-note-list.server";
 import { listRefundDocumentTemplatesForShop } from "../models/credit-note-document.server";
+import { issueCreditNotePublicLinkForShop } from "../models/public-link.server";
 import { enqueueSyncRefunds } from "../models/sync-queue.server";
 import { formatPaymentStatus } from "../utils/csv";
 import { downloadCreditNotePdf } from "../utils/download-credit-note-pdf";
@@ -137,6 +138,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
+  if (intent === "customer-link") {
+    const creditNoteId = String(formData.get("documentId") ?? "").trim();
+    const documentType =
+      String(formData.get("documentType") ?? "") === "refund_document"
+        ? ("refund_document" as const)
+        : ("credit_note" as const);
+
+    if (!creditNoteId) {
+      return {
+        ok: false as const,
+        intent: "customer-link" as const,
+        error: "Credit note not found",
+      };
+    }
+
+    const result = await issueCreditNotePublicLinkForShop(
+      session.shop,
+      creditNoteId,
+      documentType,
+    );
+    if (!result) {
+      return {
+        ok: false as const,
+        intent: "customer-link" as const,
+        error: "Credit note not found",
+      };
+    }
+    return {
+      ok: true as const,
+      intent: "customer-link" as const,
+      url: result.url,
+      expiresAt: result.expiresAt.toISOString(),
+    };
+  }
+
   if (intent === "sync") {
     try {
       await enqueueSyncRefunds(session.shop);
@@ -191,6 +227,7 @@ export default function CreditNotesPage() {
   const data = useLoaderData<typeof loader>();
   const syncFetcher = useFetcher<typeof action>();
   const emailFetcher = useFetcher<typeof action>();
+  const linkFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -203,14 +240,19 @@ export default function CreditNotesPage() {
   const syncBusy = syncFetcher.state !== "idle";
   const emailSending =
     emailFetcher.state === "submitting" || emailFetcher.state === "loading";
+  const linkCopying =
+    linkFetcher.state === "submitting" || linkFetcher.state === "loading";
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
+  const [linkCopyingId, setLinkCopyingId] = useState<string | null>(null);
   const [csvBusy, setCsvBusy] = useState(false);
   const emailAwaiting = useRef(false);
   const emailDataAtSubmit = useRef(emailFetcher.data);
+  const linkAwaiting = useRef(false);
+  const linkDataAtSubmit = useRef(linkFetcher.data);
 
   useEffect(() => {
     if (syncFetcher.state !== "idle" || !syncFetcher.data) return;
@@ -241,6 +283,40 @@ export default function CreditNotesPage() {
       isError: true,
     });
   }, [emailFetcher.state, emailFetcher.data, shopify]);
+
+  useEffect(() => {
+    if (!linkAwaiting.current || linkFetcher.state !== "idle") return;
+    linkAwaiting.current = false;
+    setLinkCopyingId(null);
+
+    if (!linkFetcher.data || linkFetcher.data === linkDataAtSubmit.current) {
+      shopify.toast.show("Failed to create link", { isError: true });
+      return;
+    }
+
+    if (linkFetcher.data.intent !== "customer-link") return;
+
+    if (!linkFetcher.data.ok || !("url" in linkFetcher.data) || !linkFetcher.data.url) {
+      shopify.toast.show(
+        ("error" in linkFetcher.data && linkFetcher.data.error) ||
+          "Failed to create link",
+        { isError: true },
+      );
+      return;
+    }
+
+    const url = linkFetcher.data.url;
+    void navigator.clipboard.writeText(url).then(
+      () => {
+        shopify.toast.show("Customer link copied");
+      },
+      () => {
+        // Old credit-note / refund Copy link opened the URL when clipboard failed.
+        window.open(url, "_blank", "noopener");
+        shopify.toast.show("Link created — opened in a new tab");
+      },
+    );
+  }, [linkFetcher.state, linkFetcher.data, shopify]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -422,6 +498,21 @@ export default function CreditNotesPage() {
       isRefundTab ? "refund_document" : "credit_note",
     );
     emailFetcher.submit(body, { method: "post" });
+  };
+
+  const copyCustomerLink = (noteId: string) => {
+    if (linkCopying) return;
+    setLinkCopyingId(noteId);
+    linkDataAtSubmit.current = linkFetcher.data;
+    linkAwaiting.current = true;
+    const body = new FormData();
+    body.set("intent", "customer-link");
+    body.set("documentId", noteId);
+    body.set(
+      "documentType",
+      isRefundTab ? "refund_document" : "credit_note",
+    );
+    linkFetcher.submit(body, { method: "post" });
   };
 
   const printSelected = () => {
@@ -694,6 +785,17 @@ export default function CreditNotesPage() {
                               }
                             >
                               Copy
+                            </s-button>
+                            <s-button
+                              icon="link"
+                              onClick={() => copyCustomerLink(note.id)}
+                              {...(linkCopyingId === note.id
+                                ? { loading: true, disabled: true }
+                                : linkCopying
+                                  ? { disabled: true }
+                                  : {})}
+                            >
+                              Copy customer link
                             </s-button>
                             <s-button
                               icon="print"

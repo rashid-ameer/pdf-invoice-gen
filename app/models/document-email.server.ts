@@ -38,6 +38,10 @@ import {
 import { renderInvoiceDocumentPdf } from "./invoice-document.server";
 import { pdfFilename } from "./pdf-cache.server";
 import {
+  issueCreditNotePublicLinkForShop,
+  issueInvoicePublicLinkForShop,
+} from "./public-link.server";
+import {
   deliverViaResend,
   getEmailProviderStatus,
   isResendConfigured,
@@ -249,6 +253,7 @@ export function setDocumentEmailHooks(hooks: {
 export function restoreDocumentEmailHooks(): void {
   scheduleInvoiceAutoEmailImpl = defaultScheduleInvoiceAutoEmail;
   scheduleInvoiceAutoEmailOnPaidImpl = defaultScheduleInvoiceAutoEmailOnPaid;
+  documentLinkResolver = defaultDocumentLinkResolver;
 }
 
 export async function scheduleInvoiceAutoEmail(
@@ -349,7 +354,7 @@ export async function scheduleCreditNoteAutoEmails(
 }
 
 // ---------------------------------------------------------------------------
-// Public link injection (Group 13 — empty until provided)
+// Public link injection (Group 13 Phase D — Phase A helpers)
 // ---------------------------------------------------------------------------
 
 export type DocumentEmailType = "tax_invoice" | "credit_note" | "refund_document";
@@ -363,13 +368,43 @@ export type DocumentLinkResolver = (args: {
   creditNoteId?: string;
 }) => Promise<string | null>;
 
-let documentLinkResolver: DocumentLinkResolver = async () => null;
+/** Production resolver — Phase A public-link helpers (Group 13 Phase D). */
+const defaultDocumentLinkResolver: DocumentLinkResolver = async (args) => {
+  try {
+    if (args.documentType === "tax_invoice") {
+      const result = await issueInvoicePublicLinkForShop(
+        args.shopDomain,
+        args.invoiceId,
+      );
+      return result?.url ?? null;
+    }
 
-/** Group 13 will call this to provide real public links. */
+    const creditNoteId = args.creditNoteId?.trim();
+    if (!creditNoteId) return null;
+
+    const documentType =
+      args.documentType === "refund_document"
+        ? "refund_document"
+        : "credit_note";
+    const result = await issueCreditNotePublicLinkForShop(
+      args.shopDomain,
+      creditNoteId,
+      documentType,
+    );
+    return result?.url ?? null;
+  } catch (error) {
+    console.warn("[email] public link resolver failed:", error);
+    return null;
+  }
+};
+
+let documentLinkResolver: DocumentLinkResolver = defaultDocumentLinkResolver;
+
+/** Override for tests. Pass null to restore the production resolver. */
 export function setDocumentEmailLinkResolver(
   resolver: DocumentLinkResolver | null,
 ): void {
-  documentLinkResolver = resolver ?? (async () => null);
+  documentLinkResolver = resolver ?? defaultDocumentLinkResolver;
 }
 
 // ---------------------------------------------------------------------------

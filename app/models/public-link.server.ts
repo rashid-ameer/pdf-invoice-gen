@@ -1,10 +1,4 @@
-/**
- * Group 13 Phase A — public customer-link tokens.
- *
- * Port of `uae-invoiceing-app/server/services/public-invoice-link.service.ts`.
- * Issue / reuse / resolve only. Public routes, verification, and Copy-link UI
- * are later phases.
- */
+/** Group 13 Phase A — public customer-link tokens. Phase D UI/email reuse these helpers. */
 
 import crypto from "node:crypto";
 import type { CreditNote, Invoice, Store } from "@prisma/client";
@@ -478,4 +472,47 @@ async function findCreditNoteIdByLegacyTokenHash(
     LIMIT 1
   `;
   return rows[0]?.id ?? null;
+}
+
+/**
+ * Shop-scoped issue for admin Copy-link / email resolver.
+ * Verifies the document belongs to the authenticated shop before issuing.
+ */
+export async function issueInvoicePublicLinkForShop(
+  shopDomain: string,
+  invoiceId: string,
+) {
+  const store = await prisma.store.findFirst({
+    where: { shopifyDomain: shopDomain },
+    select: { id: true },
+  });
+  if (!store) return null;
+
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, storeId: store.id },
+    select: { id: true },
+  });
+  if (!invoice) return null;
+
+  return issueInvoicePublicLink(invoice.id);
+}
+
+export async function issueCreditNotePublicLinkForShop(
+  shopDomain: string,
+  creditNoteId: string,
+  documentType: CreditNotePublicDocumentType,
+) {
+  const store = await prisma.store.findFirst({
+    where: { shopifyDomain: shopDomain },
+    select: { id: true },
+  });
+  if (!store) return null;
+
+  const creditNote = await prisma.creditNote.findFirst({
+    where: { id: creditNoteId, storeId: store.id },
+    select: { id: true },
+  });
+  if (!creditNote) return null;
+
+  return issueCreditNotePublicLink(creditNote.id, documentType);
 }

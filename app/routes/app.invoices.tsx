@@ -22,6 +22,7 @@ import {
   parseInvoiceListQuery,
   type InvoiceListItem,
 } from "../models/invoice-list.server";
+import { issueInvoicePublicLinkForShop } from "../models/public-link.server";
 import { enqueueSyncOrders } from "../models/sync-queue.server";
 import { reregisterWebhooksForShop } from "../models/webhook-register.server";
 import { formatPaymentStatus } from "../utils/csv";
@@ -111,6 +112,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     };
   }
 
+  if (intent === "customer-link") {
+    const invoiceId = String(formData.get("documentId") ?? "").trim();
+    if (!invoiceId) {
+      return {
+        ok: false as const,
+        intent: "customer-link" as const,
+        error: "Invoice not found",
+      };
+    }
+    const result = await issueInvoicePublicLinkForShop(session.shop, invoiceId);
+    if (!result) {
+      return {
+        ok: false as const,
+        intent: "customer-link" as const,
+        error: "Invoice not found",
+      };
+    }
+    return {
+      ok: true as const,
+      intent: "customer-link" as const,
+      url: result.url,
+      expiresAt: result.expiresAt.toISOString(),
+    };
+  }
+
   if (intent === "sync") {
     try {
       await enqueueSyncOrders(session.shop);
@@ -177,6 +203,7 @@ export default function InvoicesPage() {
   const syncFetcher = useFetcher<typeof action>();
   const webhookFetcher = useFetcher<typeof action>();
   const emailFetcher = useFetcher<typeof action>();
+  const linkFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -190,15 +217,20 @@ export default function InvoicesPage() {
   const webhookBusy = webhookFetcher.state !== "idle";
   const emailSending =
     emailFetcher.state === "submitting" || emailFetcher.state === "loading";
+  const linkCopying =
+    linkFetcher.state === "submitting" || linkFetcher.state === "loading";
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchDraft, setSearchDraft] = useState(data.query.q);
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
+  const [linkCopyingId, setLinkCopyingId] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailAwaiting = useRef(false);
   const emailDataAtSubmit = useRef(emailFetcher.data);
+  const linkAwaiting = useRef(false);
+  const linkDataAtSubmit = useRef(linkFetcher.data);
 
   useEffect(() => {
     setSearchDraft(data.query.q);
@@ -251,6 +283,39 @@ export default function InvoicesPage() {
       isError: true,
     });
   }, [emailFetcher.state, emailFetcher.data, shopify]);
+
+  useEffect(() => {
+    if (!linkAwaiting.current || linkFetcher.state !== "idle") return;
+    linkAwaiting.current = false;
+    setLinkCopyingId(null);
+
+    if (!linkFetcher.data || linkFetcher.data === linkDataAtSubmit.current) {
+      shopify.toast.show("Failed to create link", { isError: true });
+      return;
+    }
+
+    if (linkFetcher.data.intent !== "customer-link") return;
+
+    if (!linkFetcher.data.ok || !("url" in linkFetcher.data) || !linkFetcher.data.url) {
+      shopify.toast.show(
+        ("error" in linkFetcher.data && linkFetcher.data.error) ||
+          "Failed to create link",
+        { isError: true },
+      );
+      return;
+    }
+
+    const url = linkFetcher.data.url;
+    void navigator.clipboard.writeText(url).then(
+      () => {
+        shopify.toast.show("Customer link copied");
+      },
+      () => {
+        // Old invoice Copy link had no open-tab fallback.
+        shopify.toast.show("Failed to create link", { isError: true });
+      },
+    );
+  }, [linkFetcher.state, linkFetcher.data, shopify]);
 
   const updateFilters = useCallback(
     (patch: Record<string, string | null | undefined>) => {
@@ -404,6 +469,17 @@ export default function InvoicesPage() {
     body.set("intent", "send-email");
     body.set("documentId", invoice.id);
     emailFetcher.submit(body, { method: "post" });
+  };
+
+  const copyCustomerLink = (invoiceId: string) => {
+    if (linkCopying) return;
+    setLinkCopyingId(invoiceId);
+    linkDataAtSubmit.current = linkFetcher.data;
+    linkAwaiting.current = true;
+    const body = new FormData();
+    body.set("intent", "customer-link");
+    body.set("documentId", invoiceId);
+    linkFetcher.submit(body, { method: "post" });
   };
 
   const printSelected = () => {
@@ -689,6 +765,17 @@ export default function InvoicesPage() {
                             }
                           >
                             Copy
+                          </s-button>
+                          <s-button
+                            icon="link"
+                            onClick={() => copyCustomerLink(invoice.id)}
+                            {...(linkCopyingId === invoice.id
+                              ? { loading: true, disabled: true }
+                              : linkCopying
+                                ? { disabled: true }
+                                : {})}
+                          >
+                            Copy customer link
                           </s-button>
                           <s-button
                             icon="print"

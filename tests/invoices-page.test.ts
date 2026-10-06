@@ -161,6 +161,10 @@ describe("Invoices page wiring", () => {
     assert.match(source, /const sendEmail = /);
     assert.match(source, /sendInvoiceEmail/);
     assert.match(source, /trigger: "manual"/);
+    assert.match(source, /Copy customer link/);
+    assert.match(source, /intent === "customer-link"/);
+    assert.match(source, /issueInvoicePublicLinkForShop/);
+    assert.match(source, /Customer link copied/);
     assert.doesNotMatch(source, /DocumentEmailModal|s-modal|s-email-field/);
     assert.doesNotMatch(source, /icon="email"\s+disabled/);
     assert.match(source, /isInvoicesListPath/);
@@ -356,8 +360,8 @@ describe("sync and webhook page actions (Group 8 reuse)", () => {
   });
 });
 
-describe("HTML view + template picker + bulk (no QR)", () => {
-  it("renders HTML viewer markup with download link and no QR payload", async () => {
+describe("HTML view + template picker + bulk", () => {
+  it("renders HTML viewer markup with download link (QR when template enables it)", async () => {
     const { store, invoice } = await seedInvoice();
     const templates = await listTaxInvoiceTemplatesForShop(store.shopifyDomain);
     assert.ok(templates && templates.length > 0);
@@ -368,11 +372,9 @@ describe("HTML view + template picker + bulk (no QR)", () => {
       templates![0].id,
     );
     assert.ok(doc);
-    assert.equal((doc as { verification?: unknown }).verification, undefined);
-    assert.doesNotMatch(
-      doc!.html,
-      /data:image\/png;base64,[A-Za-z0-9+/=]{200,}/,
-    );
+    // Group 13 Phase C: tax_invoice QR when template qrCode.visible (system default on).
+    assert.match(doc!.html, /data-section="verification_qr"|verification-qr/);
+    assert.match(doc!.html, /data:image\/png;base64,[A-Za-z0-9+/=]{200,}/);
 
     const viewer = wrapA4DocumentViewerHtml(applyA4DocumentLayout(doc!.html), {
       title: `Invoice ${doc!.invoiceNumber}`,
@@ -428,6 +430,11 @@ describe("Invoice details page", () => {
     assert.match(source, /icon="print"/);
     assert.match(source, /icon="download"/);
     assert.match(source, />\s*Copy\s*</);
+    assert.match(source, /Copy customer link/);
+    assert.match(source, /intent === "customer-link"/);
+    assert.match(source, /issueInvoicePublicLinkForShop/);
+    assert.match(source, /Customer link copied/);
+    assert.match(source, /const copyCustomerLink = /);
     assert.match(source, />\s*More actions\s*</);
     assert.equal(
       [...source.matchAll(/slot="secondary-actions"/g)].length,

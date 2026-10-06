@@ -181,6 +181,10 @@ describe("packing slips Phase 1 — list + CSV", () => {
     assert.doesNotMatch(packingSrc, /Download selected/);
     assert.doesNotMatch(packingSrc, />\s*Copy\s*</);
     assert.doesNotMatch(packingSrc, />\s*Send email\s*</);
+    assert.doesNotMatch(packingSrc, /Copy customer link/);
+    assert.doesNotMatch(packingSrc, /customer-link/);
+    assert.doesNotMatch(packingSrc, /issueInvoicePublicLink|issueCreditNotePublicLink/);
+    assert.doesNotMatch(packingSrc, /public-link\.server/);
 
     const invoicesSrc = readFileSync(
       join(process.cwd(), "app/routes/app.invoices.tsx"),

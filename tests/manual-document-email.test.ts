@@ -80,6 +80,7 @@ describe("Phase 3 manual email UI wiring", () => {
       "utf8",
     );
     assert.doesNotMatch(packing, /DocumentEmailModal|send-email|Send email/);
+    assert.doesNotMatch(packing, /Copy customer link|customer-link/);
   });
 
   it("removes the manual email modal component", () => {

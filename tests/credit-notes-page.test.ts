@@ -315,22 +315,57 @@ describe("Credit notes page UI wiring", () => {
     assert.match(csvRoute, /creditNotesToCsv/);
   });
 
-  it("uses Invoices-style row action menu: View, Copy, Print, Download, Send email", () => {
+  it("uses Invoices-style row action menu: View, Copy, Copy customer link, Print, Download, Send email", () => {
     const page = readFileSync(
       join(process.cwd(), "app/routes/app.credit-notes.tsx"),
       "utf8",
     );
     assert.match(page, /icon="view"/);
     assert.match(page, /icon="clipboard"/);
+    assert.match(page, /icon="link"/);
     assert.match(page, /icon="print"/);
     assert.match(page, /icon="download"/);
     assert.match(page, /icon="email"/);
     assert.match(page, />\s*View\s*</);
     assert.match(page, />\s*Copy\s*</);
+    assert.match(page, /Copy customer link/);
     assert.match(page, />\s*Print\s*</);
     assert.match(page, />\s*Download\s*</);
     assert.match(page, />\s*Send email\s*</);
     assert.match(page, /copyCreditNoteNumber/);
     assert.match(page, /const sendEmail = /);
+    assert.match(page, /intent === "customer-link"/);
+    assert.match(page, /issueCreditNotePublicLinkForShop/);
+    assert.match(page, /"credit_note"/);
+    assert.match(page, /"refund_document"/);
+    assert.match(page, /Customer link copied/);
+    assert.match(page, /Link created — opened in a new tab/);
+  });
+
+  it("wires Copy customer link on credit note and refund details", () => {
+    const cnDetails = readFileSync(
+      join(process.cwd(), "app/routes/app.credit-notes_.$id.tsx"),
+      "utf8",
+    );
+    const refundDetails = readFileSync(
+      join(process.cwd(), "app/routes/app.credit-notes_.$id_.refund.tsx"),
+      "utf8",
+    );
+
+    assert.match(cnDetails, /Copy customer link/);
+    assert.match(cnDetails, /intent === "customer-link"/);
+    assert.match(cnDetails, /issueCreditNotePublicLinkForShop/);
+    assert.match(cnDetails, /"credit_note"/);
+    assert.doesNotMatch(cnDetails, /"refund_document"/);
+    assert.match(cnDetails, /Customer link copied/);
+    assert.match(cnDetails, /Link created — opened in a new tab/);
+
+    assert.match(refundDetails, /Copy customer link/);
+    assert.match(refundDetails, /intent === "customer-link"/);
+    assert.match(refundDetails, /issueCreditNotePublicLinkForShop/);
+    assert.match(refundDetails, /"refund_document"/);
+    assert.doesNotMatch(refundDetails, /"credit_note"/);
+    assert.match(refundDetails, /Customer link copied/);
+    assert.match(refundDetails, /Link created — opened in a new tab/);
   });
 });

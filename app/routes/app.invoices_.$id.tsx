@@ -20,6 +20,7 @@ import {
   getInvoiceDetailsForShop,
   renderInvoiceDocument,
 } from "../models/invoice-document.server";
+import { issueInvoicePublicLinkForShop } from "../models/public-link.server";
 import { formatPaymentStatus } from "../utils/csv";
 import { downloadInvoicePdf } from "../utils/download-invoice-pdf";
 import { paymentStatusBadgeTone } from "../utils/invoice-status-badges";
@@ -88,6 +89,31 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     };
   }
 
+  if (intent === "customer-link") {
+    const invoiceId = String(params.id ?? formData.get("documentId") ?? "").trim();
+    if (!invoiceId) {
+      return {
+        ok: false as const,
+        intent: "customer-link" as const,
+        error: "Invoice not found",
+      };
+    }
+    const result = await issueInvoicePublicLinkForShop(session.shop, invoiceId);
+    if (!result) {
+      return {
+        ok: false as const,
+        intent: "customer-link" as const,
+        error: "Invoice not found",
+      };
+    }
+    return {
+      ok: true as const,
+      intent: "customer-link" as const,
+      url: result.url,
+      expiresAt: result.expiresAt.toISOString(),
+    };
+  }
+
   return {
     ok: false as const,
     intent: "unknown" as const,
@@ -123,6 +149,7 @@ const MORE_MENU_ID = "invoice-details-more-actions";
 export default function InvoiceDetailsPage() {
   const { invoice, previewHtml } = useLoaderData<typeof loader>();
   const emailFetcher = useFetcher<typeof action>();
+  const linkFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigation = useNavigation();
   // Shopify: host Loading API for route transitions; section spinners only while
@@ -138,6 +165,10 @@ export default function InvoiceDetailsPage() {
   const emailDataAtSubmit = useRef(emailFetcher.data);
   const emailSending =
     emailFetcher.state === "submitting" || emailFetcher.state === "loading";
+  const linkAwaiting = useRef(false);
+  const linkDataAtSubmit = useRef(linkFetcher.data);
+  const linkCopying =
+    linkFetcher.state === "submitting" || linkFetcher.state === "loading";
 
   // Host-level indicator only while navigating to (or reloading) details.
   useEffect(() => {
@@ -168,6 +199,37 @@ export default function InvoiceDetailsPage() {
       isError: true,
     });
   }, [emailFetcher.state, emailFetcher.data, shopify]);
+
+  useEffect(() => {
+    if (!linkAwaiting.current || linkFetcher.state !== "idle") return;
+    linkAwaiting.current = false;
+
+    if (!linkFetcher.data || linkFetcher.data === linkDataAtSubmit.current) {
+      shopify.toast.show("Failed to create link", { isError: true });
+      return;
+    }
+
+    if (linkFetcher.data.intent !== "customer-link") return;
+
+    if (!linkFetcher.data.ok || !("url" in linkFetcher.data) || !linkFetcher.data.url) {
+      shopify.toast.show(
+        ("error" in linkFetcher.data && linkFetcher.data.error) ||
+          "Failed to create link",
+        { isError: true },
+      );
+      return;
+    }
+
+    const url = linkFetcher.data.url;
+    void navigator.clipboard.writeText(url).then(
+      () => {
+        shopify.toast.show("Customer link copied");
+      },
+      () => {
+        shopify.toast.show("Failed to create link", { isError: true });
+      },
+    );
+  }, [linkFetcher.state, linkFetcher.data, shopify]);
 
   /**
    * Mark the preview ready once the srcDoc iframe has laid out.
@@ -319,6 +381,16 @@ export default function InvoiceDetailsPage() {
     emailFetcher.submit(body, { method: "post" });
   };
 
+  const copyCustomerLink = () => {
+    if (!invoice || linkCopying) return;
+    linkDataAtSubmit.current = linkFetcher.data;
+    linkAwaiting.current = true;
+    const body = new FormData();
+    body.set("intent", "customer-link");
+    body.set("documentId", invoice.id);
+    linkFetcher.submit(body, { method: "post" });
+  };
+
   return (
     <s-page heading={invoice.invoiceNumber}>
       <s-link slot="breadcrumb-actions" href="/app/invoices">
@@ -352,6 +424,13 @@ export default function InvoiceDetailsPage() {
       >
         <s-button icon="clipboard" onClick={() => void copyInvoiceNumber()}>
           Copy
+        </s-button>
+        <s-button
+          icon="link"
+          onClick={copyCustomerLink}
+          {...(linkCopying ? { loading: true, disabled: true } : {})}
+        >
+          Copy customer link
         </s-button>
         <s-button icon="print" onClick={printInvoice}>
           Print

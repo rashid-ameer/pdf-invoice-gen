@@ -10,7 +10,9 @@ import {
   hashPublicToken,
   inspectSignedPublicToken,
   issueCreditNotePublicLink,
+  issueCreditNotePublicLinkForShop,
   issueInvoicePublicLink,
+  issueInvoicePublicLinkForShop,
   LINK_TTL_MS,
   resolveCreditNoteByPublicToken,
   resolveInvoiceByPublicToken,
@@ -462,5 +464,61 @@ describe("Group 13 Phase A — public-link tokens", () => {
       where: { id: invoice.id },
     });
     assert.equal(refreshed.status, "generated");
+  });
+});
+
+describe("Phase D — shop-scoped issue helpers", () => {
+  it("issueInvoicePublicLinkForShop verifies shop ownership and reuses URL", async () => {
+    const { merchant, store } = await seedStore();
+    const other = await seedStore();
+    const invoice = await seedInvoice(store.id, merchant.id);
+
+    const first = await issueInvoicePublicLinkForShop(
+      store.shopifyDomain,
+      invoice.id,
+    );
+    assert.ok(first);
+    assert.match(first!.url, /\/public\/invoices\//);
+
+    const second = await issueInvoicePublicLinkForShop(
+      store.shopifyDomain,
+      invoice.id,
+    );
+    assert.equal(second!.url, first!.url);
+
+    const foreign = await issueInvoicePublicLinkForShop(
+      other.store.shopifyDomain,
+      invoice.id,
+    );
+    assert.equal(foreign, null);
+  });
+
+  it("issueCreditNotePublicLinkForShop separates credit_note and refund_document URLs", async () => {
+    const { merchant, store } = await seedStore();
+    const invoice = await seedInvoice(store.id, merchant.id);
+    const note = await seedCreditNote(store.id, merchant.id, invoice.id);
+
+    const cn = await issueCreditNotePublicLinkForShop(
+      store.shopifyDomain,
+      note.id,
+      "credit_note",
+    );
+    const rd = await issueCreditNotePublicLinkForShop(
+      store.shopifyDomain,
+      note.id,
+      "refund_document",
+    );
+    assert.ok(cn);
+    assert.ok(rd);
+    assert.match(cn!.url, /\/public\/credit-notes\//);
+    assert.match(rd!.url, /\/public\/refund-documents\//);
+    assert.notEqual(cn!.url, rd!.url);
+
+    const cnAgain = await issueCreditNotePublicLinkForShop(
+      store.shopifyDomain,
+      note.id,
+      "credit_note",
+    );
+    assert.equal(cnAgain!.url, cn!.url);
   });
 });

@@ -21,6 +21,7 @@ import {
   listCreditNoteTemplatesForShop,
   renderCreditNoteDocument,
 } from "../models/credit-note-document.server";
+import { issueCreditNotePublicLinkForShop } from "../models/public-link.server";
 import { formatPaymentStatus } from "../utils/csv";
 import { downloadCreditNotePdf } from "../utils/download-credit-note-pdf";
 import {
@@ -130,6 +131,37 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     };
   }
 
+  if (intent === "customer-link") {
+    const creditNoteId = String(
+      params.id ?? formData.get("documentId") ?? "",
+    ).trim();
+    if (!creditNoteId) {
+      return {
+        ok: false as const,
+        intent: "customer-link" as const,
+        error: "Credit note not found",
+      };
+    }
+    const result = await issueCreditNotePublicLinkForShop(
+      session.shop,
+      creditNoteId,
+      "credit_note",
+    );
+    if (!result) {
+      return {
+        ok: false as const,
+        intent: "customer-link" as const,
+        error: "Credit note not found",
+      };
+    }
+    return {
+      ok: true as const,
+      intent: "customer-link" as const,
+      url: result.url,
+      expiresAt: result.expiresAt.toISOString(),
+    };
+  }
+
   return {
     ok: false as const,
     intent: "unknown" as const,
@@ -166,6 +198,7 @@ export default function CreditNoteDetailsPage() {
   const { creditNote, previewHtml, selectedTemplateId } =
     useLoaderData<typeof loader>();
   const emailFetcher = useFetcher<typeof action>();
+  const linkFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigation = useNavigation();
   const loadingDetailsContent =
@@ -179,6 +212,10 @@ export default function CreditNoteDetailsPage() {
   const emailDataAtSubmit = useRef(emailFetcher.data);
   const emailSending =
     emailFetcher.state === "submitting" || emailFetcher.state === "loading";
+  const linkAwaiting = useRef(false);
+  const linkDataAtSubmit = useRef(linkFetcher.data);
+  const linkCopying =
+    linkFetcher.state === "submitting" || linkFetcher.state === "loading";
 
   useEffect(() => {
     if (!loadingDetailsContent) return;
@@ -208,6 +245,38 @@ export default function CreditNoteDetailsPage() {
       isError: true,
     });
   }, [emailFetcher.state, emailFetcher.data, shopify]);
+
+  useEffect(() => {
+    if (!linkAwaiting.current || linkFetcher.state !== "idle") return;
+    linkAwaiting.current = false;
+
+    if (!linkFetcher.data || linkFetcher.data === linkDataAtSubmit.current) {
+      shopify.toast.show("Failed to create link", { isError: true });
+      return;
+    }
+
+    if (linkFetcher.data.intent !== "customer-link") return;
+
+    if (!linkFetcher.data.ok || !("url" in linkFetcher.data) || !linkFetcher.data.url) {
+      shopify.toast.show(
+        ("error" in linkFetcher.data && linkFetcher.data.error) ||
+          "Failed to create link",
+        { isError: true },
+      );
+      return;
+    }
+
+    const url = linkFetcher.data.url;
+    void navigator.clipboard.writeText(url).then(
+      () => {
+        shopify.toast.show("Customer link copied");
+      },
+      () => {
+        window.open(url, "_blank", "noopener");
+        shopify.toast.show("Link created — opened in a new tab");
+      },
+    );
+  }, [linkFetcher.state, linkFetcher.data, shopify]);
 
   useEffect(() => {
     if (!previewHtml) {
@@ -351,6 +420,16 @@ export default function CreditNoteDetailsPage() {
     emailFetcher.submit(body, { method: "post" });
   };
 
+  const copyCustomerLink = () => {
+    if (linkCopying) return;
+    linkDataAtSubmit.current = linkFetcher.data;
+    linkAwaiting.current = true;
+    const body = new FormData();
+    body.set("intent", "customer-link");
+    body.set("documentId", creditNote.id);
+    linkFetcher.submit(body, { method: "post" });
+  };
+
   return (
     <s-page heading={creditNote.creditNoteNumber}>
       <s-link slot="breadcrumb-actions" href="/app/credit-notes">
@@ -384,6 +463,13 @@ export default function CreditNoteDetailsPage() {
       >
         <s-button icon="clipboard" onClick={() => void copyCreditNoteNumber()}>
           Copy
+        </s-button>
+        <s-button
+          icon="link"
+          onClick={copyCustomerLink}
+          {...(linkCopying ? { loading: true, disabled: true } : {})}
+        >
+          Copy customer link
         </s-button>
         <s-button
           icon="print"

@@ -20,6 +20,7 @@ import {
   sendDocumentTestEmail,
   sendInvoiceEmail,
   sendRefundDocumentEmail,
+  setDocumentEmailLinkResolver,
   shouldAutoSendCreditNote,
   shouldAutoSendInvoice,
   shouldAutoSendInvoiceOnPaid,
@@ -1043,5 +1044,149 @@ describe("Phase 4 lifecycle wiring (source inspection)", () => {
       "utf8",
     );
     assert.match(sync, /createCreditNoteFromRefund/);
+  });
+});
+
+describe("Group 13 Phase D — email public-link resolver", () => {
+  it("wires default resolver to Phase A ForShop helpers", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const emailSrc = readFileSync(
+      join(process.cwd(), "app/models/document-email.server.ts"),
+      "utf8",
+    );
+    assert.match(emailSrc, /issueInvoicePublicLinkForShop/);
+    assert.match(emailSrc, /issueCreditNotePublicLinkForShop/);
+    assert.match(emailSrc, /defaultDocumentLinkResolver/);
+    assert.match(emailSrc, /documentType === "tax_invoice"/);
+    assert.match(emailSrc, /documentType === "refund_document"/);
+    assert.match(emailSrc, /"credit_note"/);
+    assert.match(emailSrc, /invoice_link:/);
+    assert.match(emailSrc, /credit_note_link:/);
+    assert.match(emailSrc, /refund_link:/);
+    assert.match(emailSrc, /document_link:/);
+    assert.match(emailSrc, /\[email\] public link resolver failed/);
+    assert.match(emailSrc, /\[email\] invoice public link issue failed/);
+  });
+
+  it("resolves invoice_link / credit_note_link / refund_link / document_link by type", async () => {
+    const { store, invoice } = await seedStoreWithInvoice();
+    const note = await seedCreditNoteForStore(store.id);
+    assert.ok(note);
+
+    const {
+      issueInvoicePublicLinkForShop,
+      issueCreditNotePublicLinkForShop,
+    } = await import("../app/models/public-link.server");
+
+    const invoiceLink = await issueInvoicePublicLinkForShop(
+      store.shopifyDomain,
+      invoice.id,
+    );
+    const cnLink = await issueCreditNotePublicLinkForShop(
+      store.shopifyDomain,
+      note!.id,
+      "credit_note",
+    );
+    const rdLink = await issueCreditNotePublicLinkForShop(
+      store.shopifyDomain,
+      note!.id,
+      "refund_document",
+    );
+    assert.ok(invoiceLink);
+    assert.ok(cnLink);
+    assert.ok(rdLink);
+    assert.match(invoiceLink!.url, /\/public\/invoices\//);
+    assert.match(cnLink!.url, /\/public\/credit-notes\//);
+    assert.match(rdLink!.url, /\/public\/refund-documents\//);
+
+    // Copy Link and Email Resolver must reuse the same Phase A URL.
+    const reused = await issueInvoicePublicLinkForShop(
+      store.shopifyDomain,
+      invoice.id,
+    );
+    assert.equal(reused!.url, invoiceLink!.url);
+
+    const calls: string[] = [];
+    setDocumentEmailLinkResolver(async (args) => {
+      calls.push(args.documentType);
+      if (args.documentType === "tax_invoice") {
+        assert.equal(args.invoiceId, invoice.id);
+        return invoiceLink!.url;
+      }
+      assert.equal(args.creditNoteId, note!.id);
+      if (args.documentType === "credit_note") return cnLink!.url;
+      assert.equal(args.documentType, "refund_document");
+      return rdLink!.url;
+    });
+
+    if (!hasChromium) return;
+
+    const bodies: string[] = [];
+    setResendTransportForTests(async (input) => {
+      bodies.push(`${input.html || ""}\n${input.text || ""}`);
+      return { ok: true, id: `re_${bodies.length}`, from: "from@test.com" };
+    });
+
+    await saveDeliverySettings(store.shopifyDomain, {
+      invoiceBody: "<p>{{invoice_link}} {{document_link}}</p>",
+      creditNoteBody: "<p>{{credit_note_link}} {{document_link}}</p>",
+      refundBody: "<p>{{refund_link}} {{document_link}}</p>",
+      showViewButton: true,
+    });
+
+    const escapeRegExp = (value: string) =>
+      value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    const invSend = await sendInvoiceEmail({
+      shop: store.shopifyDomain,
+      invoiceId: invoice.id,
+      trigger: "manual",
+    });
+    assert.equal(invSend.ok, true);
+    assert.ok(calls.includes("tax_invoice"));
+    assert.match(
+      bodies.at(-1) || "",
+      new RegExp(escapeRegExp(invoiceLink!.url)),
+    );
+
+    const cnSend = await sendCreditNoteEmail({
+      shop: store.shopifyDomain,
+      creditNoteId: note!.id,
+      trigger: "manual",
+    });
+    assert.equal(cnSend.ok, true);
+    assert.ok(calls.includes("credit_note"));
+    assert.match(bodies.at(-1) || "", new RegExp(escapeRegExp(cnLink!.url)));
+
+    const rdSend = await sendRefundDocumentEmail({
+      shop: store.shopifyDomain,
+      creditNoteId: note!.id,
+      trigger: "manual",
+    });
+    assert.equal(rdSend.ok, true);
+    assert.ok(calls.includes("refund_document"));
+    assert.match(bodies.at(-1) || "", new RegExp(escapeRegExp(rdLink!.url)));
+  });
+
+  it("public-link failure does not break email sending", async () => {
+    const { store, invoice } = await seedStoreWithInvoice();
+    setDocumentEmailLinkResolver(async () => {
+      throw new Error("link boom");
+    });
+    setResendTransportForTests(async () => ({
+      ok: true,
+      id: "re_no_link",
+      from: "from@test.com",
+    }));
+
+    if (!hasChromium) return;
+
+    const result = await sendInvoiceEmail({
+      shop: store.shopifyDomain,
+      invoiceId: invoice.id,
+      trigger: "manual",
+    });
+    assert.equal(result.ok, true);
   });
 });
