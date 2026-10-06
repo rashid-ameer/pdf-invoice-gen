@@ -103,7 +103,12 @@ describe("Email config page UI wiring", () => {
     assert.match(page, /Email template/);
     assert.match(page, /Which template is sent\?/);
     assert.match(page, /s-email-field/);
+    assert.match(page, /inlineSize="large"/);
+    assert.match(page, /s-query-container/);
+    assert.match(page, /s-grid/);
+    assert.match(page, /3fr 2fr/);
     assert.doesNotMatch(page, /ui-save-bar/);
+    assert.doesNotMatch(page, /slot="aside"/);
     assert.doesNotMatch(page, /<details>/);
     assert.doesNotMatch(
       page,

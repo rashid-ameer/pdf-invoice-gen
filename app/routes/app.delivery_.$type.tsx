@@ -87,6 +87,10 @@ const FIELD_PLACEHOLDERS = [
   "{{customer_name}}",
 ] as const;
 
+/** 3:2 visual editor (left form / right preview); collapses on narrow containers. */
+const EDITOR_LAYOUT_COLS =
+  "@container (inline-size > 768px) 3fr 2fr, 1fr";
+
 function isUrlType(value: string | undefined): value is UrlType {
   return Boolean(value && value in TYPE_META);
 }
@@ -598,11 +602,7 @@ function EmailTemplateEditor({
         aria-hidden="true"
       />
 
-      {/*
-        inlineSize defaults to "base" so the aside column renders.
-        Docs: aside is only rendered when inlineSize is "base" (not "large").
-      */}
-      <s-page heading={meta.title}>
+      <s-page heading={meta.title} inlineSize="large">
         <s-link slot="breadcrumb-actions" href="/app/delivery">
           Email
         </s-link>
@@ -623,171 +623,250 @@ function EmailTemplateEditor({
           </s-banner>
         ) : null}
 
-        <s-section heading="Email template">
-          <s-choice-list
-            label="Which template is sent?"
-            name="bodyMode"
-            values={[form.bodyMode]}
-            disabled={saving || undefined}
-            onChange={(event: Event) => {
-              const values = (
-                event.currentTarget as unknown as { values?: string[] }
-              ).values;
-              patch(
-                "bodyMode",
-                values?.[0] === "custom_html" ? "custom_html" : "designed",
-              );
-            }}
+        <s-query-container>
+          <s-grid
+            gridTemplateColumns={EDITOR_LAYOUT_COLS}
+            gap="base"
+            alignItems="start"
           >
-            <s-choice value="designed">
-              Designed
-              <s-text slot="details">
-                Write the message and we wrap it in your branded layout.
-              </s-text>
-            </s-choice>
-            <s-choice value="custom_html">
-              Custom HTML
-              <s-text slot="details">
-                Write the full email in HTML. Full HTML documents skip the
-                branded wrapper.
-              </s-text>
-            </s-choice>
-          </s-choice-list>
-        </s-section>
-
-        {form.bodyMode === "designed" ? (
-          <s-section heading="Message">
             <s-stack gap="base">
-              <s-text-field
-                label="Subject"
-                name="subject"
-                value={form.subject}
-                error={subjectError || undefined}
-                disabled={saving || undefined}
-                onInput={(event: Event) => patch("subject", fieldValue(event))}
-                onChange={(event: Event) => patch("subject", fieldValue(event))}
-              />
-
-              {placeholderChips}
-
-              <EmailBodyRichTextEditor
-                ref={richTextRef}
-                label="Message"
-                value={form.body}
-                disabled={saving}
-                onChange={(html) => patch("body", html)}
-              />
-
-              <s-checkbox
-                label='Show "View document" button'
-                details="Appears when a secure link is available. Links expire after 30 days."
-                checked={form.showViewButton}
-                disabled={saving || undefined}
-                onChange={(event: Event) => {
-                  patch(
-                    "showViewButton",
-                    Boolean((event.currentTarget as HTMLInputElement).checked),
-                  );
-                }}
-              />
-            </s-stack>
-          </s-section>
-        ) : (
-          <s-section heading="Custom HTML">
-            <s-stack gap="base">
-              <s-banner tone="warning" heading="Your HTML is sent as written">
-                Full HTML documents are sent without the branded wrapper. Add{" "}
-                {meta.linkPlaceholder} yourself if you want a document link.
-              </s-banner>
-
-              <s-text-field
-                label="Subject"
-                name="subject"
-                value={form.subject}
-                error={subjectError || undefined}
-                disabled={saving || undefined}
-                onInput={(event: Event) => patch("subject", fieldValue(event))}
-                onChange={(event: Event) => patch("subject", fieldValue(event))}
-              />
-
-              {placeholderChips}
-
-              <s-text-area
-                label="HTML"
-                name="bodyCustom"
-                value={form.bodyCustom}
-                rows={14}
-                disabled={saving || undefined}
-                onInput={(event: Event) =>
-                  patch("bodyCustom", fieldValue(event))
-                }
-                onChange={(event: Event) =>
-                  patch("bodyCustom", fieldValue(event))
-                }
-              />
-            </s-stack>
-          </s-section>
-        )}
-
-        <s-section slot="aside" heading="Live preview">
-          <s-stack gap="base">
-            <s-badge>{templateLabel}</s-badge>
-            <s-box
-              padding="none"
-              background="subdued"
-              borderRadius="base"
-              borderWidth="base"
-              overflow="hidden"
-            >
-              {previewHtml ? (
-                <iframe
-                  title="Email preview"
-                  srcDoc={previewHtml}
-                  sandbox=""
-                  style={{
-                    width: "100%",
-                    minHeight: "360px",
-                    border: "0",
-                    display: "block",
+              <s-section heading="Email template">
+                <s-choice-list
+                  label="Which template is sent?"
+                  name="bodyMode"
+                  values={[form.bodyMode]}
+                  disabled={saving || undefined}
+                  onChange={(event: Event) => {
+                    const values = (
+                      event.currentTarget as unknown as { values?: string[] }
+                    ).values;
+                    patch(
+                      "bodyMode",
+                      values?.[0] === "custom_html"
+                        ? "custom_html"
+                        : "designed",
+                    );
                   }}
-                />
-              ) : (
-                <s-box padding="base">
-                  <s-text>
-                    {previewing ? "Loading preview…" : "Preview unavailable"}
-                  </s-text>
-                </s-box>
-              )}
-            </s-box>
-          </s-stack>
-        </s-section>
+                >
+                  <s-choice value="designed">
+                    Designed
+                    <s-text slot="details">
+                      Write the message and we wrap it in your branded layout.
+                    </s-text>
+                  </s-choice>
+                  <s-choice value="custom_html">
+                    Custom HTML
+                    <s-text slot="details">
+                      Write the full email in HTML. Full HTML documents skip
+                      the branded wrapper.
+                    </s-text>
+                  </s-choice>
+                </s-choice-list>
+              </s-section>
 
-        <s-section slot="aside" heading="Send a test">
-          <s-stack gap="base">
-            <s-email-field
-              label="Test recipient"
-              value={testTo}
-              details="Sends your current edits without a PDF."
-              error={testError || undefined}
-              disabled={!emailConfigured || testing || undefined}
-              autocomplete="off"
-              onInput={(event: Event) => setTestTo(fieldValue(event))}
-              onChange={(event: Event) => setTestTo(fieldValue(event))}
-            />
-            <s-button
-              type="button"
-              variant="secondary"
-              onClick={sendTest}
-              {...(testing || !emailConfigured
-                ? { loading: testing || undefined, disabled: true }
-                : {})}
-            >
-              Send test
-            </s-button>
-          </s-stack>
-        </s-section>
+              {form.bodyMode === "designed" ? (
+                <s-section heading="Message">
+                  <s-stack gap="base">
+                    <s-text-field
+                      label="Subject"
+                      name="subject"
+                      value={form.subject}
+                      error={subjectError || undefined}
+                      disabled={saving || undefined}
+                      onInput={(event: Event) =>
+                        patch("subject", fieldValue(event))
+                      }
+                      onChange={(event: Event) =>
+                        patch("subject", fieldValue(event))
+                      }
+                    />
+
+                    {placeholderChips}
+
+                    <EmailBodyRichTextEditor
+                      ref={richTextRef}
+                      label="Message"
+                      value={form.body}
+                      disabled={saving}
+                      onChange={(html) => patch("body", html)}
+                    />
+
+                    <s-checkbox
+                      label='Show "View document" button'
+                      details="Appears when a secure link is available. Links expire after 30 days."
+                      checked={form.showViewButton}
+                      disabled={saving || undefined}
+                      onChange={(event: Event) => {
+                        patch(
+                          "showViewButton",
+                          Boolean(
+                            (event.currentTarget as HTMLInputElement).checked,
+                          ),
+                        );
+                      }}
+                    />
+                  </s-stack>
+                </s-section>
+              ) : (
+                <s-section heading="Custom HTML">
+                  <s-stack gap="base">
+                    <s-banner
+                      tone="warning"
+                      heading="Your HTML is sent as written"
+                    >
+                      Full HTML documents are sent without the branded wrapper.
+                      Add {meta.linkPlaceholder} yourself if you want a
+                      document link.
+                    </s-banner>
+
+                    <s-text-field
+                      label="Subject"
+                      name="subject"
+                      value={form.subject}
+                      error={subjectError || undefined}
+                      disabled={saving || undefined}
+                      onInput={(event: Event) =>
+                        patch("subject", fieldValue(event))
+                      }
+                      onChange={(event: Event) =>
+                        patch("subject", fieldValue(event))
+                      }
+                    />
+
+                    {placeholderChips}
+
+                    <s-text-area
+                      label="HTML"
+                      name="bodyCustom"
+                      value={form.bodyCustom}
+                      rows={14}
+                      disabled={saving || undefined}
+                      onInput={(event: Event) =>
+                        patch("bodyCustom", fieldValue(event))
+                      }
+                      onChange={(event: Event) =>
+                        patch("bodyCustom", fieldValue(event))
+                      }
+                    />
+                  </s-stack>
+                </s-section>
+              )}
+            </s-stack>
+
+            <s-stack gap="base" minInlineSize="0" overflow="hidden">
+              <s-section heading="Live preview">
+                <s-stack gap="base">
+                  <s-badge>{templateLabel}</s-badge>
+                  <EmailLivePreviewFrame
+                    html={previewHtml}
+                    previewing={previewing}
+                  />
+                </s-stack>
+              </s-section>
+
+              <s-section heading="Send a test">
+                <s-stack gap="base">
+                  <s-email-field
+                    label="Test recipient"
+                    value={testTo}
+                    details="Sends your current edits without a PDF."
+                    error={testError || undefined}
+                    disabled={!emailConfigured || testing || undefined}
+                    autocomplete="off"
+                    onInput={(event: Event) => setTestTo(fieldValue(event))}
+                    onChange={(event: Event) => setTestTo(fieldValue(event))}
+                  />
+                  <s-button
+                    type="button"
+                    variant="secondary"
+                    onClick={sendTest}
+                    {...(testing || !emailConfigured
+                      ? { loading: testing || undefined, disabled: true }
+                      : {})}
+                  >
+                    Send test
+                  </s-button>
+                </s-stack>
+              </s-section>
+            </s-stack>
+          </s-grid>
+        </s-query-container>
       </s-page>
     </form>
+  );
+}
+
+/**
+ * Full-width email preview: iframe fills the card and grows to the email height
+ * so the page has a single scrollbar (no inner iframe scroll).
+ */
+function EmailLivePreviewFrame({
+  html,
+  previewing,
+}: {
+  html: string;
+  previewing: boolean;
+}) {
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  const fitPreview = useCallback(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
+
+    const doc = iframe.contentDocument;
+    const contentHeight = Math.max(
+      doc?.body?.scrollHeight ?? 0,
+      doc?.documentElement?.scrollHeight ?? 0,
+      240,
+    );
+
+    iframe.style.width = "100%";
+    iframe.style.height = `${contentHeight}px`;
+    iframe.style.border = "0";
+    iframe.style.display = "block";
+  }, []);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => fitPreview());
+    observer.observe(shell);
+    return () => observer.disconnect();
+  }, [fitPreview]);
+
+  useEffect(() => {
+    fitPreview();
+  }, [html, fitPreview]);
+
+  return (
+    <s-box
+      padding="none"
+      background="subdued"
+      borderRadius="base"
+      borderWidth="base"
+      overflow="hidden"
+      minInlineSize="0"
+    >
+      {html ? (
+        <div ref={shellRef} style={{ width: "100%", minWidth: 0 }}>
+          <iframe
+            ref={iframeRef}
+            title="Email preview"
+            srcDoc={html}
+            sandbox="allow-same-origin"
+            onLoad={fitPreview}
+            style={{ width: "100%", border: 0, display: "block", minHeight: 240 }}
+          />
+        </div>
+      ) : (
+        <s-box padding="base">
+          <s-text>
+            {previewing ? "Loading preview…" : "Preview unavailable"}
+          </s-text>
+        </s-box>
+      )}
+    </s-box>
   );
 }
 

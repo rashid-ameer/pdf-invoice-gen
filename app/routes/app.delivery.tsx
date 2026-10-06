@@ -353,58 +353,59 @@ export default function EmailConfigPage() {
         ))}
       </s-stack>
 
-      <s-section
-        slot="aside"
-        heading="Sender"
-        subheading="How your store appears in the inbox."
-        
-      >
+      <s-box slot="aside">
         <s-stack gap="base">
-          <s-text-field
-            label="From name"
-            name="fromName"
-            value={form.fromName}
-            placeholder="Store name"
-            disabled={saving || undefined}
-            onInput={(event: Event) => patch("fromName", fieldValue(event))}
-            onChange={(event: Event) => patch("fromName", fieldValue(event))}
-          />
-          <s-text-field
-            label="Reply-to"
-            name="replyTo"
-            value={form.replyTo}
-            placeholder="support@example.com"
-            details="Defaults to your business email when empty."
-            error={replyToError || undefined}
-            disabled={saving || undefined}
-            onInput={(event: Event) => {
-              setReplyToError("");
-              patch("replyTo", fieldValue(event));
-            }}
-            onChange={(event: Event) => {
-              setReplyToError("");
-              patch("replyTo", fieldValue(event));
-            }}
-          />
-        </s-stack>
-      </s-section>
+          <s-section
+            heading="Sender"
+            subheading="How your store appears in the inbox."
+          >
+            <s-stack gap="base">
+              <s-text-field
+                label="From name"
+                name="fromName"
+                value={form.fromName}
+                placeholder="Store name"
+                disabled={saving || undefined}
+                onInput={(event: Event) => patch("fromName", fieldValue(event))}
+                onChange={(event: Event) => patch("fromName", fieldValue(event))}
+              />
+              <s-text-field
+                label="Reply-to"
+                name="replyTo"
+                value={form.replyTo}
+                placeholder="support@example.com"
+                details="Defaults to your business email when empty."
+                error={replyToError || undefined}
+                disabled={saving || undefined}
+                onInput={(event: Event) => {
+                  setReplyToError("");
+                  patch("replyTo", fieldValue(event));
+                }}
+                onChange={(event: Event) => {
+                  setReplyToError("");
+                  patch("replyTo", fieldValue(event));
+                }}
+              />
+            </s-stack>
+          </s-section>
 
-      <s-section
-        slot="aside"
-        heading="Recipients"
-        subheading="Customers always receive the email at their order email."
-      >
-        <s-text-field
-          label="CC staff (optional)"
-          name="ccStaff"
-          value={form.ccStaff}
-          placeholder="ops@example.com, accounting@…"
-          details="Comma-separated."
-          disabled={saving || undefined}
-          onInput={(event: Event) => patch("ccStaff", fieldValue(event))}
-          onChange={(event: Event) => patch("ccStaff", fieldValue(event))}
-        />
-      </s-section>
+          <s-section
+            heading="Recipients"
+            subheading="Customers always receive the email at their order email."
+          >
+            <s-text-field
+              label="CC staff (optional)"
+              name="ccStaff"
+              value={form.ccStaff}
+              placeholder="ops@example.com, accounting@…"
+              details="Comma-separated."
+              disabled={saving || undefined}
+              onInput={(event: Event) => patch("ccStaff", fieldValue(event))}
+              onChange={(event: Event) => patch("ccStaff", fieldValue(event))}
+            />
+          </s-section>
+        </s-stack>
+      </s-box>
     </s-page>
   );
 }
