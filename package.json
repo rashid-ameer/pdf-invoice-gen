@@ -34,6 +34,7 @@
     "@shopify/shopify-app-session-storage-prisma": "^11.0.0",
     "bwip-js": "^4.11.4",
     "isbot": "^5.1.31",
+    "liquidjs": "^10.30.0",
     "nodemailer": "^10.0.11",
     "prisma": "^6.16.3",
     "puppeteer-core": "^24.43.1",

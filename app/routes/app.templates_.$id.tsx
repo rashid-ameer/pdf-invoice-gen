@@ -20,27 +20,50 @@ import { TemplateVisualConfigEditor } from "../components/template-visual-config
 import type { DocumentType } from "../types/index";
 import {
   BASE_LAYOUT_CODES,
+  layoutEditorCapabilities,
   type BaseLayoutCode,
   type TemplateConfig,
 } from "../models/template-config.types";
 import {
+  blockingLiquidErrorsForEditor,
   createCustomTemplate,
   deleteCustomTemplate,
   getTemplateByIdForShop,
+  getTemplateLiquidSourceForShop,
   parseConfigJsonFromForm,
   parseDocumentType,
   previewTemplateVisualConfig,
   saveTemplateAsNew,
   saveTemplateConfig,
   setDefaultTemplate,
+  syncConfigToLiquidForShop,
+  validateTemplateLiquidForShop,
 } from "../models/template.server";
-import { templateSourceKind } from "../models/template-liquid.server";
+import {
+  LIQUID_VARIABLE_HELP,
+  templateSourceKind,
+} from "../models/template-liquid.server";
+import { extractVisualConfigFromLiquid } from "../models/template-liquid-extract.server";
 import { authenticate } from "../shopify.server";
 
 const SAVE_BAR_ID = "template-visual-config-save-bar";
 const MORE_MENU_ID = "template-details-more-actions";
 const EDITOR_LAYOUT_COLS =
   "@container (inline-size > 900px) minmax(0, 1.1fr) minmax(0, 0.9fr), 1fr";
+
+type EditorSourceType = "layout" | "code" | "imported";
+type EditorView = "preview" | "code";
+type LiquidCheck = {
+  errors: string[];
+  warnings: string[];
+  checks: Array<{
+    id: string;
+    label: string;
+    ok: boolean;
+    level: "error" | "warning";
+  }>;
+  syntaxLine: number | null;
+};
 
 function asBaseLayoutSafe(value: string | null | undefined): BaseLayoutCode {
   const code = (value ?? "modern") as BaseLayoutCode;
@@ -109,6 +132,15 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
           ? result.store.defaultRefundDocumentTemplateId
           : result.store.defaultTemplateId;
 
+  const sourceType = templateSourceKind(result.template);
+  const caps = layoutEditorCapabilities(
+    asBaseLayoutSafe(result.template.baseLayoutCode),
+  );
+  const liquidSource = await getTemplateLiquidSourceForShop(
+    session.shop,
+    result.template.id,
+  );
+
   return {
     result: {
       id: result.template.id,
@@ -117,7 +149,16 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       code: result.template.code,
       documentType: result.documentType,
       baseLayoutCode: asBaseLayoutSafe(result.template.baseLayoutCode),
-      sourceType: templateSourceKind(result.template),
+      sourceType,
+      liquidHtml:
+        typeof result.template.customHtml === "string"
+          ? result.template.customHtml
+          : (liquidSource?.liquidHtml ?? ""),
+      customCss:
+        typeof result.template.customCss === "string"
+          ? result.template.customCss
+          : "",
+      codeEditor: caps.codeEditor,
       isSystem: result.template.isSystem,
       isDefault: result.template.id === defaultId,
       config: result.config,
@@ -140,21 +181,37 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         error: "Template not found",
       };
     }
-    let draft: unknown;
+    let draftConfig: unknown;
     const configJson = formData.get("configJson");
     if (typeof configJson === "string" && configJson.trim()) {
       try {
-        draft = JSON.parse(configJson);
+        draftConfig = JSON.parse(configJson);
       } catch {
-        draft = undefined;
+        draftConfig = undefined;
       }
     }
+    const sourceTypeRaw = String(formData.get("sourceType") ?? "");
+    const sourceType =
+      sourceTypeRaw === "code" ||
+      sourceTypeRaw === "layout" ||
+      sourceTypeRaw === "imported"
+        ? sourceTypeRaw
+        : undefined;
+    const liquidHtml =
+      typeof formData.get("liquidHtml") === "string"
+        ? String(formData.get("liquidHtml"))
+        : undefined;
+    const customCss =
+      typeof formData.get("customCss") === "string"
+        ? String(formData.get("customCss"))
+        : undefined;
     try {
-      const html = await previewTemplateVisualConfig(
-        session.shop,
-        templateId,
-        draft,
-      );
+      const html = await previewTemplateVisualConfig(session.shop, templateId, {
+        config: draftConfig,
+        liquidHtml,
+        customCss,
+        sourceType,
+      });
       if (!html) {
         return {
           ok: false as const,
@@ -177,6 +234,116 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     }
   }
 
+  if (intent === "validate") {
+    if (!templateId) {
+      return {
+        ok: false as const,
+        intent: "validate" as const,
+        error: "Template not found",
+      };
+    }
+    const liquidHtml = String(formData.get("liquidHtml") ?? "");
+    const check = await validateTemplateLiquidForShop(
+      session.shop,
+      templateId,
+      liquidHtml,
+    );
+    if (!check) {
+      return {
+        ok: false as const,
+        intent: "validate" as const,
+        error: "Template not found",
+      };
+    }
+    return {
+      ok: true as const,
+      intent: "validate" as const,
+      validation: check,
+    };
+  }
+
+  if (intent === "from-config") {
+    if (!templateId) {
+      return {
+        ok: false as const,
+        intent: "from-config" as const,
+        error: "Template not found",
+      };
+    }
+    let config: unknown;
+    let previousConfig: unknown;
+    const configJson = formData.get("configJson");
+    const previousJson = formData.get("previousConfigJson");
+    try {
+      if (typeof configJson === "string" && configJson.trim()) {
+        config = JSON.parse(configJson);
+      }
+      if (typeof previousJson === "string" && previousJson.trim()) {
+        previousConfig = JSON.parse(previousJson);
+      }
+    } catch {
+      return {
+        ok: false as const,
+        intent: "from-config" as const,
+        error: "Invalid template configuration",
+      };
+    }
+    try {
+      const synced = await syncConfigToLiquidForShop(session.shop, templateId, {
+        config,
+        previousConfig,
+        liquidHtml: String(formData.get("liquidHtml") ?? ""),
+      });
+      if (!synced) {
+        return {
+          ok: false as const,
+          intent: "from-config" as const,
+          error: "Template not found",
+        };
+      }
+      return {
+        ok: true as const,
+        intent: "from-config" as const,
+        liquidHtml: synced.liquidHtml,
+      };
+    } catch {
+      return {
+        ok: false as const,
+        intent: "from-config" as const,
+        error: "Failed to sync template code",
+      };
+    }
+  }
+
+  if (intent === "load-source" || intent === "load-starter") {
+    if (!templateId) {
+      return {
+        ok: false as const,
+        intent: intent as "load-source" | "load-starter",
+        error: "Template not found",
+      };
+    }
+    const source = await getTemplateLiquidSourceForShop(
+      session.shop,
+      templateId,
+      { starter: intent === "load-starter" },
+    );
+    if (!source) {
+      return {
+        ok: false as const,
+        intent: intent as "load-source" | "load-starter",
+        error: "Template not found",
+      };
+    }
+    return {
+      ok: true as const,
+      intent: intent as "load-source" | "load-starter",
+      liquidHtml: source.liquidHtml,
+      customCss: source.customCss,
+      sourceType: source.sourceType,
+    };
+  }
+
   if (intent === "save") {
     if (!templateId) {
       return {
@@ -194,6 +361,40 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         error: "Template not found or cannot be edited",
       };
     }
+    const sourceTypeRaw = String(formData.get("sourceType") ?? "");
+    const sourceType =
+      sourceTypeRaw === "code" || sourceTypeRaw === "layout"
+        ? sourceTypeRaw
+        : undefined;
+    const liquidHtml = String(formData.get("liquidHtml") ?? "");
+    const customCss = String(formData.get("customCss") ?? "");
+    const editorMode =
+      String(formData.get("editorMode") ?? "") === "code" ? "code" : "visual";
+
+    if (sourceType === "code") {
+      const check = await validateTemplateLiquidForShop(
+        session.shop,
+        templateId,
+        liquidHtml,
+      );
+      if (!check) {
+        return {
+          ok: false as const,
+          intent: "save" as const,
+          error: "Template not found or cannot be edited",
+        };
+      }
+      const blocking = blockingLiquidErrorsForEditor(check, editorMode);
+      if (blocking.length) {
+        return {
+          ok: false as const,
+          intent: "save" as const,
+          error: blocking.join(" "),
+          validation: check,
+        };
+      }
+    }
+
     try {
       const parsedConfig = parseConfigJsonFromForm(
         existing.config,
@@ -203,6 +404,9 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       const updated = await saveTemplateConfig(session.shop, templateId, {
         name,
         config: parsedConfig ?? existing.config,
+        sourceType,
+        liquidHtml,
+        customCss,
       });
       if (!updated) {
         return {
@@ -249,6 +453,30 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         error: "Template not found",
       };
     }
+    const sourceTypeRaw = String(formData.get("sourceType") ?? "");
+    const sourceType =
+      sourceTypeRaw === "code" || sourceTypeRaw === "layout"
+        ? sourceTypeRaw
+        : undefined;
+    const liquidHtml = String(formData.get("liquidHtml") ?? "");
+    const customCss = String(formData.get("customCss") ?? "");
+
+    if (sourceType === "code") {
+      const check = await validateTemplateLiquidForShop(
+        session.shop,
+        templateId,
+        liquidHtml,
+      );
+      if (check && check.errors.length) {
+        return {
+          ok: false as const,
+          intent: "save-as" as const,
+          error: check.errors.join(" "),
+          validation: check,
+        };
+      }
+    }
+
     try {
       const parsedConfig = parseConfigJsonFromForm(
         existing.config,
@@ -265,6 +493,15 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           intent: "save-as" as const,
           error: "Template not found",
         };
+      }
+      if (sourceType) {
+        await saveTemplateConfig(session.shop, created.id, {
+          name,
+          config: parsedConfig ?? existing.config,
+          sourceType,
+          liquidHtml,
+          customCss,
+        });
       }
       return {
         ok: true as const,
@@ -341,6 +578,8 @@ export default function TemplateDetailsPage() {
   const { result, isNew } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const previewFetcher = useFetcher<typeof action>();
+  const syncFetcher = useFetcher<typeof action>();
+  const validateFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -354,6 +593,23 @@ export default function TemplateDetailsPage() {
   const [baselineConfig, setBaselineConfig] = useState<TemplateConfig | null>(
     result ? structuredClone(result.config) : null,
   );
+  const [sourceType, setSourceType] = useState<EditorSourceType>(
+    (result?.sourceType as EditorSourceType) ?? "layout",
+  );
+  const [liquidHtml, setLiquidHtml] = useState(result?.liquidHtml ?? "");
+  const [customCss, setCustomCss] = useState(result?.customCss ?? "");
+  const [baselineLiquid, setBaselineLiquid] = useState(result?.liquidHtml ?? "");
+  const [baselineCss, setBaselineCss] = useState(result?.customCss ?? "");
+  const [baselineSourceType, setBaselineSourceType] = useState<EditorSourceType>(
+    (result?.sourceType as EditorSourceType) ?? "layout",
+  );
+  const [syncedConfig, setSyncedConfig] = useState<TemplateConfig | null>(
+    result ? structuredClone(result.config) : null,
+  );
+  const [editorView, setEditorView] = useState<EditorView>("preview");
+  const [liquidValidation, setLiquidValidation] = useState<LiquidCheck | null>(
+    null,
+  );
   const [logoResetToken, setLogoResetToken] = useState(0);
   const [saveAsName, setSaveAsName] = useState("");
   const [showSaveAs, setShowSaveAs] = useState(false);
@@ -362,7 +618,12 @@ export default function TemplateDetailsPage() {
   const awaiting = useRef(false);
   const dataAtSubmit = useRef(fetcher.data);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const extractTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applyingCode = useRef(false);
+  const applyingForm = useRef(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const liquidAreaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const loadingDetails =
     navigation.state !== "idle" &&
@@ -372,24 +633,48 @@ export default function TemplateDetailsPage() {
     fetcher.state === "submitting" || fetcher.state === "loading";
   const previewing =
     previewFetcher.state === "submitting" || previewFetcher.state === "loading";
+  const codeEditorAllowed = Boolean(result?.codeEditor);
 
   const dirty = useMemo(() => {
     if (!result || !config || !baselineConfig) return false;
     return (
       name.trim() !== baselineName.trim() ||
-      stableConfigKey(config) !== stableConfigKey(baselineConfig)
+      stableConfigKey(config) !== stableConfigKey(baselineConfig) ||
+      liquidHtml !== baselineLiquid ||
+      customCss !== baselineCss ||
+      sourceType !== baselineSourceType
     );
-  }, [result, config, name, baselineName, baselineConfig]);
+  }, [
+    result,
+    config,
+    name,
+    baselineName,
+    baselineConfig,
+    liquidHtml,
+    baselineLiquid,
+    customCss,
+    baselineCss,
+    sourceType,
+    baselineSourceType,
+  ]);
 
   useEffect(() => {
     if (!result) return;
-    const next = structuredClone(result.config);
     setName(result.name);
-    setConfig(next);
+    setConfig(structuredClone(result.config));
     setBaselineName(result.name);
     setBaselineConfig(structuredClone(result.config));
+    setSyncedConfig(structuredClone(result.config));
+    setSourceType(result.sourceType as EditorSourceType);
+    setBaselineSourceType(result.sourceType as EditorSourceType);
+    setLiquidHtml(result.liquidHtml);
+    setBaselineLiquid(result.liquidHtml);
+    setCustomCss(result.customCss);
+    setBaselineCss(result.customCss);
     setLogoResetToken((n) => n + 1);
     setSaveError(null);
+    setLiquidValidation(null);
+    setEditorView("preview");
   }, [result?.id]);
 
   useEffect(() => {
@@ -417,7 +702,22 @@ export default function TemplateDetailsPage() {
 
   useEffect(() => {
     if (!awaiting.current || fetcher.state !== "idle") return;
+    if (
+      fetcher.data &&
+      (fetcher.data.intent === "load-source" ||
+        fetcher.data.intent === "load-starter" ||
+        fetcher.data.intent === "validate" ||
+        fetcher.data.intent === "from-config" ||
+        fetcher.data.intent === "preview")
+    ) {
+      return;
+    }
     awaiting.current = false;
+
+    if (!fetcher.data || fetcher.data === dataAtSubmit.current) {
+      shopify.toast.show("Couldn't save", { isError: true });
+      return;
+    }
 
     if (!fetcher.data || fetcher.data === dataAtSubmit.current) {
       shopify.toast.show("Couldn't save", { isError: true });
@@ -428,11 +728,15 @@ export default function TemplateDetailsPage() {
       const err =
         ("error" in fetcher.data && fetcher.data.error) || "Request failed";
       setSaveError(err);
+      if ("validation" in fetcher.data && fetcher.data.validation) {
+        setLiquidValidation(fetcher.data.validation as LiquidCheck);
+      }
       shopify.toast.show(err, { isError: true });
       return;
     }
 
     setSaveError(null);
+    setLiquidValidation(null);
 
     if (
       fetcher.data.intent === "save-as" &&
@@ -461,6 +765,10 @@ export default function TemplateDetailsPage() {
     if (fetcher.data.intent === "save" && result && config) {
       setBaselineName(name.trim() || result.name);
       setBaselineConfig(structuredClone(config));
+      setBaselineLiquid(liquidHtml);
+      setBaselineCss(customCss);
+      setBaselineSourceType(sourceType);
+      setSyncedConfig(structuredClone(config));
       shopify.saveBar.hide(SAVE_BAR_ID);
     }
 
@@ -471,9 +779,96 @@ export default function TemplateDetailsPage() {
     );
     setShowSaveAs(false);
     setSaveAsName("");
-  }, [fetcher.state, fetcher.data, navigate, shopify, result, config, name]);
+  }, [
+    fetcher.state,
+    fetcher.data,
+    navigate,
+    shopify,
+    result,
+    config,
+    name,
+    liquidHtml,
+    customCss,
+    sourceType,
+  ]);
 
-  // Live preview (debounced) — Group 7 layout renderer.
+  // Config → Liquid sync when editing code templates from the visual sidebar.
+  useEffect(() => {
+    if (!result || !config || !codeEditorAllowed) return;
+    if (sourceType === "layout" || sourceType === "imported") return;
+    if (applyingCode.current || applyingForm.current) return;
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => {
+      const body = new FormData();
+      body.set("intent", "from-config");
+      body.set("templateId", result.id);
+      body.set("configJson", JSON.stringify(config));
+      body.set(
+        "previousConfigJson",
+        JSON.stringify(syncedConfig ?? result.config),
+      );
+      body.set("liquidHtml", liquidHtml);
+      syncFetcher.submit(body, { method: "post" });
+    }, 280);
+    return () => {
+      if (syncTimer.current) clearTimeout(syncTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncFetcher identity churns
+  }, [result?.id, config, sourceType, codeEditorAllowed]);
+
+  useEffect(() => {
+    if (syncFetcher.state !== "idle" || !syncFetcher.data) return;
+    if (syncFetcher.data.intent !== "from-config" || !syncFetcher.data.ok) return;
+    if (!("liquidHtml" in syncFetcher.data)) return;
+    applyingForm.current = true;
+    setLiquidHtml(syncFetcher.data.liquidHtml);
+    if (config) setSyncedConfig(structuredClone(config));
+    applyingForm.current = false;
+  }, [syncFetcher.state, syncFetcher.data, config]);
+
+  useEffect(() => {
+    if (validateFetcher.state !== "idle" || !validateFetcher.data) return;
+    if (validateFetcher.data.intent !== "validate") return;
+    if (validateFetcher.data.ok && "validation" in validateFetcher.data) {
+      setLiquidValidation(validateFetcher.data.validation as LiquidCheck);
+      const errs = (validateFetcher.data.validation as LiquidCheck).errors;
+      shopify.toast.show(
+        errs.length ? "Liquid has issues to fix" : "Liquid looks valid",
+        { isError: errs.length > 0 },
+      );
+    } else if (!validateFetcher.data.ok) {
+      shopify.toast.show(
+        ("error" in validateFetcher.data && validateFetcher.data.error) ||
+          "Validation failed",
+        { isError: true },
+      );
+    }
+  }, [validateFetcher.state, validateFetcher.data, shopify]);
+
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data) return;
+    if (
+      fetcher.data.intent !== "load-source" &&
+      fetcher.data.intent !== "load-starter"
+    ) {
+      return;
+    }
+    if (!fetcher.data.ok) return;
+    if ("liquidHtml" in fetcher.data) {
+      applyingForm.current = true;
+      setLiquidHtml(fetcher.data.liquidHtml);
+      if ("customCss" in fetcher.data) setCustomCss(fetcher.data.customCss);
+      if (fetcher.data.intent === "load-starter") {
+        setSourceType("code");
+      } else if ("sourceType" in fetcher.data) {
+        setSourceType(fetcher.data.sourceType as EditorSourceType);
+      }
+      applyingForm.current = false;
+      setEditorView("code");
+    }
+  }, [fetcher.state, fetcher.data]);
+
+  // Live preview (debounced) — Group 7 layout or Liquid path.
   useEffect(() => {
     if (!result || !config) return;
     if (previewTimer.current) clearTimeout(previewTimer.current);
@@ -482,13 +877,23 @@ export default function TemplateDetailsPage() {
       body.set("intent", "preview");
       body.set("templateId", result.id);
       body.set("configJson", JSON.stringify(config));
+      body.set(
+        "sourceType",
+        sourceType === "code"
+          ? "code"
+          : sourceType === "imported"
+            ? "imported"
+            : "layout",
+      );
+      body.set("liquidHtml", liquidHtml);
+      body.set("customCss", customCss);
       previewFetcher.submit(body, { method: "post" });
     }, 400);
     return () => {
       if (previewTimer.current) clearTimeout(previewTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- previewFetcher identity changes each render
-  }, [result?.id, config]);
+  }, [result?.id, config, liquidHtml, customCss, sourceType]);
 
   useEffect(() => {
     if (previewFetcher.state !== "idle" || !previewFetcher.data) return;
@@ -514,6 +919,29 @@ export default function TemplateDetailsPage() {
     onLoad();
     return () => iframe.removeEventListener("load", onLoad);
   }, [previewHtml]);
+
+  const onConfigChange = (next: TemplateConfig) => {
+    if (applyingCode.current) {
+      setConfig(next);
+      return;
+    }
+    setConfig(next);
+  };
+
+  const onLiquidChange = (next: string) => {
+    setLiquidHtml(next);
+    if (applyingForm.current) return;
+    if (sourceType === "layout") setSourceType("code");
+    if (extractTimer.current) clearTimeout(extractTimer.current);
+    extractTimer.current = setTimeout(() => {
+      if (!config) return;
+      applyingCode.current = true;
+      const extracted = extractVisualConfigFromLiquid(next, config);
+      setConfig(extracted);
+      setSyncedConfig(structuredClone(extracted));
+      applyingCode.current = false;
+    }, 450);
+  };
 
   if (!result || !config) {
     return (
@@ -549,6 +977,12 @@ export default function TemplateDetailsPage() {
     body.set("templateId", result.id);
     body.set("documentType", result.documentType);
     body.set("configJson", JSON.stringify(config));
+    if (sourceType === "code" || sourceType === "layout") {
+      body.set("sourceType", sourceType);
+    }
+    body.set("liquidHtml", liquidHtml);
+    body.set("customCss", customCss);
+    body.set("editorMode", editorView === "code" ? "code" : "visual");
     for (const [key, value] of Object.entries(fields)) {
       body.set(key, value);
     }
@@ -567,9 +1001,66 @@ export default function TemplateDetailsPage() {
     if (!baselineConfig) return;
     setName(baselineName);
     setConfig(structuredClone(baselineConfig));
+    setSyncedConfig(structuredClone(baselineConfig));
+    setLiquidHtml(baselineLiquid);
+    setCustomCss(baselineCss);
+    setSourceType(baselineSourceType);
+    setLiquidValidation(null);
     setLogoResetToken((n) => n + 1);
     setSaveError(null);
     shopify.saveBar.hide(SAVE_BAR_ID);
+  };
+
+  const runValidate = () => {
+    const body = new FormData();
+    body.set("intent", "validate");
+    body.set("templateId", result.id);
+    body.set("liquidHtml", liquidHtml);
+    validateFetcher.submit(body, { method: "post" });
+  };
+
+  const openCodeEditor = () => {
+    if (!codeEditorAllowed) return;
+    if (sourceType === "layout" && !liquidHtml.trim()) {
+      const body = new FormData();
+      body.set("intent", "load-source");
+      body.set("templateId", result.id);
+      fetcher.submit(body, { method: "post" });
+      setSourceType("code");
+    }
+    setEditorView("code");
+  };
+
+  const loadStarter = () => {
+    if (
+      !window.confirm(
+        "Replace the current HTML / Liquid with the default starter template for this document type? Style, Layout, Content, and Fields options are kept, but any custom code is overwritten.",
+      )
+    ) {
+      return;
+    }
+    const body = new FormData();
+    body.set("intent", "load-starter");
+    body.set("templateId", result.id);
+    fetcher.submit(body, { method: "post" });
+  };
+
+  const insertLiquidToken = (token: string) => {
+    const area = liquidAreaRef.current;
+    if (!area) {
+      onLiquidChange(liquidHtml + token);
+      return;
+    }
+    const start = area.selectionStart || 0;
+    const end = area.selectionEnd || 0;
+    const next =
+      liquidHtml.slice(0, start) + token + liquidHtml.slice(end);
+    onLiquidChange(next);
+    requestAnimationFrame(() => {
+      area.focus();
+      const pos = start + token.length;
+      area.setSelectionRange(pos, pos);
+    });
   };
 
   return (
@@ -702,53 +1193,196 @@ export default function TemplateDetailsPage() {
         >
           <TemplateVisualConfigEditor
             config={config}
-            onChange={setConfig}
+            onChange={onConfigChange}
             baseLayoutCode={result.baseLayoutCode}
             documentType={result.documentType}
-            sourceType={result.sourceType}
+            sourceType={sourceType}
             disabled={result.isSystem}
             logoResetToken={logoResetToken}
           />
 
-          <s-section heading="Preview" subheading="Sample document · Group 7 layout renderer">
+          <s-section
+            heading={editorView === "code" ? "Edit code" : "Preview"}
+            subheading={
+              editorView === "code"
+                ? "HTML / Liquid · Extra CSS optional"
+                : "Sample document · Group 7 renderer"
+            }
+          >
             <s-stack gap="base">
-              {previewing && !previewHtml ? (
-                <s-spinner accessibilityLabel="Updating preview" />
-              ) : null}
-              {previewFetcher.data &&
-              !previewFetcher.data.ok &&
-              previewFetcher.data.intent === "preview" ? (
-                <s-banner tone="critical" heading="Preview failed">
-                  {"error" in previewFetcher.data
-                    ? previewFetcher.data.error
-                    : "Failed to render preview"}
+              <s-stack direction="inline" gap="small">
+                {codeEditorAllowed ? (
+                  <s-button
+                    variant={editorView === "code" ? "primary" : "secondary"}
+                    onClick={openCodeEditor}
+                    {...(result.isSystem ? { disabled: true } : {})}
+                  >
+                    Edit code
+                  </s-button>
+                ) : null}
+                <s-button
+                  variant={editorView === "preview" ? "primary" : "secondary"}
+                  onClick={() => setEditorView("preview")}
+                >
+                  Preview
+                </s-button>
+                {codeEditorAllowed && editorView === "code" ? (
+                  <>
+                    <s-button
+                      variant="secondary"
+                      onClick={runValidate}
+                      {...(validateFetcher.state !== "idle"
+                        ? { loading: true, disabled: true }
+                        : result.isSystem
+                          ? { disabled: true }
+                          : {})}
+                    >
+                      Validate
+                    </s-button>
+                    <s-button
+                      variant="secondary"
+                      onClick={loadStarter}
+                      {...(busy || result.isSystem ? { disabled: true } : {})}
+                    >
+                      Load starter
+                    </s-button>
+                  </>
+                ) : null}
+              </s-stack>
+
+              {!codeEditorAllowed ? (
+                <s-banner tone="info" heading="Fixed layout">
+                  This layout keeps field positions fixed. Style, content, and
+                  fields still apply. Code editing is not available.
                 </s-banner>
               ) : null}
-              <s-box
-                border="base"
-                borderRadius="base"
-                overflow="hidden"
-                background="subdued"
-              >
-                <iframe
-                  ref={iframeRef}
-                  title="Template preview"
-                  srcDoc={previewHtml || undefined}
-                  sandbox="allow-same-origin allow-modals"
-                  style={{
-                    width: "100%",
-                    minHeight: 480,
-                    border: 0,
-                    background: "transparent",
-                    display: "block",
-                  }}
-                />
-              </s-box>
-              <s-text color="subdued">
-                Preview uses template configuration only (store Branding is
-                applied when documents are generated). Liquid code preview is
-                Phase C.
-              </s-text>
+
+              {liquidValidation ? (
+                <s-banner
+                  tone={
+                    liquidValidation.errors.length
+                      ? "critical"
+                      : liquidValidation.warnings.length
+                        ? "warning"
+                        : "success"
+                  }
+                  heading={
+                    liquidValidation.errors.length
+                      ? "Cannot save until these are fixed"
+                      : liquidValidation.warnings.length
+                        ? "Template parses. Recommended fields missing"
+                        : "Template is valid"
+                  }
+                  dismissible
+                  onDismiss={() => setLiquidValidation(null)}
+                >
+                  <s-stack gap="small">
+                    {liquidValidation.checks.map((check) => (
+                      <s-text key={check.id}>
+                        {check.ok ? "✓" : check.level === "error" ? "✗" : "!"}{" "}
+                        {check.label}
+                        {!check.ok
+                          ? check.level === "error"
+                            ? " (required)"
+                            : " (recommended)"
+                          : ""}
+                      </s-text>
+                    ))}
+                    {liquidValidation.errors.concat(liquidValidation.warnings).map(
+                      (msg) => (
+                        <s-text key={msg}>{msg}</s-text>
+                      ),
+                    )}
+                  </s-stack>
+                </s-banner>
+              ) : null}
+
+              {editorView === "code" && codeEditorAllowed ? (
+                <s-stack gap="base">
+                  <s-stack direction="inline" gap="small">
+                    {LIQUID_VARIABLE_HELP.map((item) => (
+                      <s-button
+                        key={item.token}
+                        variant="tertiary"
+                        onClick={() => insertLiquidToken(item.token)}
+                        {...(result.isSystem ? { disabled: true } : {})}
+                      >
+                        {item.token}
+                      </s-button>
+                    ))}
+                  </s-stack>
+                  <s-text-area
+                    label="HTML / Liquid"
+                    value={liquidHtml}
+                    rows={18}
+                    details="Validated with the same rules as the old template editor."
+                    {...(result.isSystem ? { disabled: true } : {})}
+                    onInput={(event: Event) => {
+                      const target = event.currentTarget as HTMLTextAreaElement;
+                      liquidAreaRef.current = target;
+                      onLiquidChange(target.value ?? "");
+                    }}
+                    onChange={(event: Event) => {
+                      const target = event.currentTarget as HTMLTextAreaElement;
+                      liquidAreaRef.current = target;
+                      onLiquidChange(target.value ?? "");
+                    }}
+                  />
+                  <s-text-area
+                    label="Extra CSS (optional)"
+                    value={customCss}
+                    rows={4}
+                    {...(result.isSystem ? { disabled: true } : {})}
+                    onInput={(event: Event) => {
+                      setCustomCss(
+                        (event.currentTarget as HTMLTextAreaElement).value ??
+                          "",
+                      );
+                      if (sourceType === "layout") setSourceType("code");
+                    }}
+                  />
+                </s-stack>
+              ) : (
+                <s-stack gap="base">
+                  {previewing && !previewHtml ? (
+                    <s-spinner accessibilityLabel="Updating preview" />
+                  ) : null}
+                  {previewFetcher.data &&
+                  !previewFetcher.data.ok &&
+                  previewFetcher.data.intent === "preview" ? (
+                    <s-banner tone="critical" heading="Preview failed">
+                      {"error" in previewFetcher.data
+                        ? previewFetcher.data.error
+                        : "Failed to render preview"}
+                    </s-banner>
+                  ) : null}
+                  <s-box
+                    border="base"
+                    borderRadius="base"
+                    overflow="hidden"
+                    background="subdued"
+                  >
+                    <iframe
+                      ref={iframeRef}
+                      title="Template preview"
+                      srcDoc={previewHtml || undefined}
+                      sandbox="allow-same-origin allow-modals"
+                      style={{
+                        width: "100%",
+                        minHeight: 480,
+                        border: 0,
+                        background: "transparent",
+                        display: "block",
+                      }}
+                    />
+                  </s-box>
+                  <s-text color="subdued">
+                    {sourceType === "code" || sourceType === "imported"
+                      ? "Preview uses the Liquid / custom HTML path through Group 7."
+                      : "Preview uses the layout renderer. Store Branding is applied when documents are generated."}
+                  </s-text>
+                </s-stack>
+              )}
             </s-stack>
           </s-section>
         </s-grid>

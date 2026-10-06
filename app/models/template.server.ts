@@ -26,9 +26,17 @@ import {
 } from "./template-config.types";
 import {
   buildLiquidFromConfig,
+  defaultLiquidSource,
   starterLiquidFor,
   templateSourceKind,
+  validateLiquidSource,
+  type LiquidValidation,
 } from "./template-liquid.server";
+import { applyConfigToExistingLiquid } from "./template-liquid-sync.server";
+import {
+  sourceHasInvoiceNumber,
+  stripInvoiceNumberOutputs,
+} from "./template-liquid-extract.server";
 
 const SYSTEM_CODES = SYSTEM_TEMPLATES.map((t) => t.code);
 
@@ -951,16 +959,152 @@ export function parseConfigJsonFromForm(
   return mergeDraftTemplateConfig(existing, raw, documentType);
 }
 
+/** Blocking Liquid errors when saving from the code editor (old parity). */
+export function blockingLiquidErrorsForEditor(
+  check: LiquidValidation,
+  editorMode: "code" | "visual",
+): string[] {
+  if (editorMode === "code") {
+    return check.errors.filter((msg) =>
+      /syntax|missing ">"|Unclosed|cannot be empty|too large/i.test(msg),
+    );
+  }
+  return check.errors;
+}
+
 /**
- * Group 14 Phase B — visual config preview via Group 7 layout renderer.
- * Matches old `renderTemplatePreviewById` for config: no store branding merge.
- * Liquid/code draft preview is Phase C — this always uses the layout engine so
- * Style/Layout/Content/Fields changes are visible regardless of sourceType.
+ * Load Liquid source for the editor (old GET /templates/:id/source).
+ */
+export async function getTemplateLiquidSourceForShop(
+  shopDomain: string,
+  templateId: string,
+  options: { starter?: boolean } = {},
+): Promise<{
+  liquidHtml: string;
+  customCss: string;
+  sourceType: "layout" | "imported" | "code";
+  documentType: DocumentType;
+} | null> {
+  const result = await getTemplateByIdForShop(shopDomain, templateId);
+  if (!result) return null;
+
+  const sourceKind = templateSourceKind(result.template);
+  const savedLiquid =
+    typeof result.template.customHtml === "string"
+      ? result.template.customHtml
+      : "";
+  const savedCss =
+    typeof result.template.customCss === "string"
+      ? result.template.customCss
+      : "";
+  const layout = asBaseLayoutCode(result.template.baseLayoutCode);
+
+  let liquidHtml = "";
+  if (options.starter) {
+    liquidHtml = defaultLiquidSource(result.documentType);
+  } else if (sourceKind === "imported") {
+    liquidHtml = starterLiquidFor(result.documentType, savedLiquid || null);
+  } else if (savedLiquid.trim()) {
+    liquidHtml = savedLiquid;
+  } else {
+    liquidHtml = buildLiquidFromConfig(result.config, result.documentType, layout);
+  }
+
+  return {
+    liquidHtml,
+    customCss: options.starter ? "" : savedCss,
+    sourceType: sourceKind === "imported" ? "imported" : "code",
+    documentType: result.documentType,
+  };
+}
+
+/**
+ * Validate Liquid for a shop-owned template (old POST /validate).
+ */
+export async function validateTemplateLiquidForShop(
+  shopDomain: string,
+  templateId: string,
+  liquidHtml: string,
+): Promise<LiquidValidation | null> {
+  const result = await getTemplateByIdForShop(shopDomain, templateId);
+  if (!result) return null;
+  return validateLiquidSource(liquidHtml, result.documentType);
+}
+
+/**
+ * Config → Liquid sync (old POST /from-config).
+ * Patches only changed groups when previousConfig is provided.
+ */
+export async function syncConfigToLiquidForShop(
+  shopDomain: string,
+  templateId: string,
+  input: {
+    config?: unknown;
+    previousConfig?: unknown;
+    liquidHtml?: string;
+  },
+): Promise<{ liquidHtml: string } | null> {
+  const result = await getTemplateByIdForShop(shopDomain, templateId);
+  if (!result) return null;
+
+  let config = result.config;
+  if (input.config) {
+    config = mergeDraftTemplateConfig(
+      result.config,
+      input.config,
+      result.documentType,
+    );
+  }
+
+  let previousConfig: TemplateConfig | null = null;
+  if (input.previousConfig) {
+    try {
+      previousConfig = templateConfigSchema.parse({
+        ...result.config,
+        ...templateConfigSchema.partial().parse(input.previousConfig),
+      });
+    } catch {
+      previousConfig = result.config;
+    }
+  }
+
+  const currentHtml =
+    typeof input.liquidHtml === "string"
+      ? input.liquidHtml
+      : typeof result.template.customHtml === "string"
+        ? result.template.customHtml
+        : "";
+
+  const keepInvoiceNumber = sourceHasInvoiceNumber(currentHtml);
+  let liquidHtml = applyConfigToExistingLiquid(
+    currentHtml,
+    config,
+    result.documentType,
+    previousConfig,
+  );
+  if (!keepInvoiceNumber) {
+    liquidHtml = stripInvoiceNumberOutputs(liquidHtml);
+  }
+
+  return { liquidHtml };
+}
+
+export type PreviewTemplateDraft = {
+  config?: unknown;
+  liquidHtml?: string;
+  customCss?: string;
+  sourceType?: "layout" | "code" | "imported";
+};
+
+/**
+ * Group 14 Phase C — template preview (old renderTemplatePreviewById).
+ * Uses Group 7 via renderDocumentHtml. No store branding merge (editor parity).
+ * Honors draft Liquid / sourceType for code templates.
  */
 export async function previewTemplateVisualConfig(
   shopDomain: string,
   templateId: string,
-  draftConfig?: unknown,
+  draftConfigOrDraft?: unknown | PreviewTemplateDraft,
 ): Promise<string | null> {
   const { renderDocumentHtml, sampleRenderDataForDocumentType } = await import(
     "./render.server"
@@ -970,18 +1114,48 @@ export async function previewTemplateVisualConfig(
   const result = await getTemplateByIdForShop(shopDomain, templateId);
   if (!result) return null;
 
+  const draft: PreviewTemplateDraft =
+    draftConfigOrDraft &&
+    typeof draftConfigOrDraft === "object" &&
+    ("liquidHtml" in (draftConfigOrDraft as object) ||
+      "sourceType" in (draftConfigOrDraft as object) ||
+      "customCss" in (draftConfigOrDraft as object) ||
+      "config" in (draftConfigOrDraft as object))
+      ? (draftConfigOrDraft as PreviewTemplateDraft)
+      : { config: draftConfigOrDraft };
+
   let config = result.config;
-  if (draftConfig !== undefined && draftConfig !== null) {
+  if (draft.config !== undefined && draft.config !== null) {
     try {
       config = mergeDraftTemplateConfig(
         result.config,
-        draftConfig,
+        draft.config,
         result.documentType,
       );
     } catch {
       // Invalid draft → fall back to saved config (old preview parity).
     }
   }
+
+  const savedKind = templateSourceKind(result.template);
+  const kind = draft.sourceType ?? savedKind;
+  const savedHtml =
+    typeof result.template.customHtml === "string"
+      ? result.template.customHtml
+      : null;
+  const customHtml =
+    kind === "code"
+      ? typeof draft.liquidHtml === "string"
+        ? draft.liquidHtml
+        : (savedHtml ?? "")
+      : kind === "imported"
+        ? savedHtml
+        : null;
+  const customCss =
+    draft.customCss ??
+    (typeof result.template.customCss === "string"
+      ? result.template.customCss
+      : null);
 
   const layout = asBaseLayoutCode(result.template.baseLayoutCode);
   const html = await renderDocumentHtml({
@@ -990,7 +1164,9 @@ export async function previewTemplateVisualConfig(
     config,
     data: sampleRenderDataForDocumentType(result.documentType),
     branding: null,
-    sourceType: "layout",
+    customHtml,
+    sourceType: kind === "layout" ? "layout" : kind,
+    customCss,
   });
 
   return wrapA4EmbedHtml(html);

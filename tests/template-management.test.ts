@@ -446,6 +446,7 @@ describe("Group 14 Phase A — UI wiring", () => {
     assert.match(details, /Save as/);
     assert.match(details, /TemplateVisualConfigEditor|previewTemplateVisualConfig/);
     assert.match(details, /configJson/);
-    assert.doesNotMatch(details, /Liquid validate|thumbnail|from-config|Load starter/);
+    assert.match(details, /validateTemplateLiquidForShop|Edit code/);
+    assert.doesNotMatch(details, /thumbnail|JPEG|Phase D/);
   });
 });

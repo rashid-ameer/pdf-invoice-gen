@@ -16,7 +16,7 @@ import {
 } from "./template-import-stub.server";
 import { formatRegionCountryDisplay } from "./address-format.server";
 import { DEFAULT_CURRENCY } from "../constants/app";
-import { renderLiquidTemplate } from "./template-liquid-stub.server";
+import { renderLiquidTemplate } from "./template-liquid.server";
 
 export interface TemplateRenderInvoiceData {
   invoiceNumber: string;
