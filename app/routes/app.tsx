@@ -23,6 +23,7 @@ export default function App() {
         <s-link href="/app/invoices">Invoices</s-link>
         <s-link href="/app/packing-slips">Packing slips</s-link>
         <s-link href="/app/credit-notes">Credit notes</s-link>
+        <s-link href="/app/templates">Templates</s-link>
         <s-link href="/app/delivery">Email</s-link>
         <s-link href="/app/branding">Branding</s-link>
         <s-link href="/app/settings">Company setup</s-link>

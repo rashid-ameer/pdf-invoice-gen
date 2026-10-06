@@ -1,21 +1,38 @@
-import { Prisma, type InvoiceTemplate } from "@prisma/client";
+import { Prisma, type InvoiceTemplate, type Store } from "@prisma/client";
 
 import prisma from "../db.server";
 import type { DocumentType } from "../types/index";
+import { getBrandingInputForShop } from "./branding.server";
+import {
+  sanitizeTemplateConfigContent,
+  sanitizeTemplateTranslations,
+} from "./rich-text.server";
 import {
   SYSTEM_TEMPLATE_CATALOG_VERSION,
   SYSTEM_TEMPLATES,
 } from "./system-template-catalog";
-import { getDefaultConfigForLayout } from "./template-config.defaults";
 import {
+  getDefaultConfigForLayout,
+  mergeConfigWithBranding,
+} from "./template-config.defaults";
+import {
+  BASE_LAYOUT_CODES,
   enforceComplianceLocks,
   parseTemplateConfig,
+  templateConfigSchema,
   type BaseLayoutCode,
   type ComplianceLockOptions,
   type TemplateConfig,
 } from "./template-config.types";
+import {
+  buildLiquidFromConfig,
+  starterLiquidFor,
+  templateSourceKind,
+} from "./template-liquid.server";
 
 const SYSTEM_CODES = SYSTEM_TEMPLATES.map((t) => t.code);
+
+export const SYSTEM_TEMPLATES_PAGE_SIZE = 12;
 
 let ensurePromise: Promise<void> | null = null;
 let ensuredCatalogVersion: number | null = null;
@@ -32,8 +49,20 @@ function asDocumentType(value: string | null | undefined): DocumentType {
   return "tax_invoice";
 }
 
+export function parseDocumentType(value: unknown): DocumentType {
+  return asDocumentType(typeof value === "string" ? value : undefined);
+}
+
 function asBaseLayoutCode(value: string | null | undefined): BaseLayoutCode {
-  return (value ?? "modern") as BaseLayoutCode;
+  const code = (value ?? "modern") as BaseLayoutCode;
+  return BASE_LAYOUT_CODES.includes(code) ? code : "modern";
+}
+
+export function parseBaseLayoutCode(value: unknown): BaseLayoutCode | null {
+  if (typeof value !== "string") return null;
+  return BASE_LAYOUT_CODES.includes(value as BaseLayoutCode)
+    ? (value as BaseLayoutCode)
+    : null;
 }
 
 export function resolveConfig(
@@ -182,11 +211,628 @@ export async function getActiveStoreForShop(shopDomain: string) {
   });
 }
 
+/** Alias matching old getStoreForShop. */
+export const getStoreForShop = getActiveStoreForShop;
+
 export type ResolvedShopTemplate = {
   template: InvoiceTemplate;
   config: TemplateConfig;
   documentType: DocumentType;
 };
+
+export type TemplateListItem = {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  baseLayoutCode: BaseLayoutCode;
+  documentType: DocumentType;
+  theme: { primary: string; accent: string; secondary: string };
+  tags: string[];
+  isDefault: boolean;
+  isSystem: boolean;
+  isCustom: boolean;
+  updatedAt?: string;
+};
+
+function defaultIdForType(
+  store: {
+    defaultTemplateId?: string | null;
+    defaultPackingSlipTemplateId?: string | null;
+    defaultCreditNoteTemplateId?: string | null;
+    defaultRefundDocumentTemplateId?: string | null;
+  },
+  documentType: DocumentType,
+): string {
+  if (documentType === "packing_slip") {
+    return store.defaultPackingSlipTemplateId ?? "";
+  }
+  if (documentType === "credit_note") {
+    return store.defaultCreditNoteTemplateId ?? "";
+  }
+  if (documentType === "refund_document") {
+    return store.defaultRefundDocumentTemplateId ?? "";
+  }
+  return store.defaultTemplateId ?? "";
+}
+
+function themeForListItem(
+  template: { config?: unknown },
+  system?: { theme: { primary: string; accent: string; secondary: string } },
+): { primary: string; accent: string; secondary: string } {
+  if (system?.theme) return system.theme;
+  if (template.config && typeof template.config === "object") {
+    const branding = (
+      template.config as {
+        branding?: {
+          primaryColor?: string;
+          accentColor?: string;
+          secondaryColor?: string;
+        };
+      }
+    ).branding;
+    if (branding?.primaryColor) {
+      return {
+        primary: branding.primaryColor,
+        accent: branding.accentColor || branding.primaryColor,
+        secondary: branding.secondaryColor || "#6d7175",
+      };
+    }
+  }
+  return { primary: "#008060", accent: "#004c3f", secondary: "#6d7175" };
+}
+
+function documentTypeWhere(
+  documentType: DocumentType,
+): Prisma.InvoiceTemplateWhereInput {
+  // New schema always stores documentType; exact match is sufficient.
+  return { documentType };
+}
+
+function mapTemplateListItem(
+  template: InvoiceTemplate,
+  store: Store,
+  meta: Record<string, (typeof SYSTEM_TEMPLATES)[number]>,
+  documentType: DocumentType,
+): TemplateListItem {
+  const system = meta[template.code];
+  const layout = asBaseLayoutCode(
+    template.baseLayoutCode ?? system?.baseLayoutCode,
+  );
+  const docType = asDocumentType(
+    template.documentType ?? system?.documentType ?? documentType,
+  );
+  const defaultId = defaultIdForType(store, docType);
+  return {
+    id: template.id,
+    code: template.code,
+    name: template.name,
+    description: template.description ?? system?.description ?? "",
+    baseLayoutCode: layout,
+    documentType: docType,
+    theme: themeForListItem(template, system),
+    tags: template.isSystem
+      ? [...(system?.tags ?? ["Document"])]
+      : templateSourceKind(template) === "code"
+        ? ["Liquid", "Custom"]
+        : templateSourceKind(template) === "imported"
+          ? ["Imported", "Custom"]
+          : ["Custom", layout],
+    isDefault: template.id === defaultId,
+    isSystem: Boolean(template.isSystem),
+    isCustom: !template.isSystem,
+    updatedAt: template.updatedAt
+      ? new Date(template.updatedAt).toISOString()
+      : "",
+  };
+}
+
+function customCode(
+  storeId: string,
+  baseLayoutCode: string,
+  documentType: DocumentType,
+): string {
+  const prefix =
+    documentType === "packing_slip"
+      ? "ps"
+      : documentType === "credit_note"
+        ? "cn"
+        : documentType === "refund_document"
+          ? "rd"
+          : "inv";
+  return `${prefix}-${storeId.slice(-6)}-${baseLayoutCode}-${Date.now().toString(36)}`;
+}
+
+export async function getTemplatesForShop(
+  shopDomain: string,
+  documentType?: DocumentType,
+  options?: { skipEnsure?: boolean },
+) {
+  if (!options?.skipEnsure) {
+    await ensureSystemTemplates();
+  }
+
+  const store = await getActiveStoreForShop(shopDomain);
+  if (!store) return null;
+
+  const meta = Object.fromEntries(SYSTEM_TEMPLATES.map((t) => [t.code, t]));
+
+  if (documentType) {
+    const typeWhere = documentTypeWhere(documentType);
+    const [systemTemplates, customTemplates] = await Promise.all([
+      prisma.invoiceTemplate.findMany({
+        where: { isSystem: true, isActive: true, ...typeWhere },
+        orderBy: { name: "asc" },
+      }),
+      prisma.invoiceTemplate.findMany({
+        where: {
+          storeId: store.id,
+          isSystem: false,
+          isActive: true,
+          ...typeWhere,
+        },
+        orderBy: { updatedAt: "desc" },
+      }),
+    ]);
+    const systemItems = systemTemplates.map((t) =>
+      mapTemplateListItem(t, store, meta, documentType),
+    );
+    const customItems = customTemplates.map((t) =>
+      mapTemplateListItem(t, store, meta, documentType),
+    );
+    return {
+      store,
+      systemItems,
+      customItems,
+      items: [...customItems, ...systemItems],
+    };
+  }
+
+  const [systemTemplates, customTemplates] = await Promise.all([
+    prisma.invoiceTemplate.findMany({
+      where: { isSystem: true, isActive: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.invoiceTemplate.findMany({
+      where: { storeId: store.id, isSystem: false, isActive: true },
+      orderBy: { updatedAt: "desc" },
+    }),
+  ]);
+
+  const systemItems = systemTemplates.map((template) => {
+    const system = meta[template.code];
+    const docType = asDocumentType(
+      template.documentType ?? system?.documentType,
+    );
+    return mapTemplateListItem(template, store, meta, docType);
+  });
+  const customItems = customTemplates.map((template) => {
+    const docType = asDocumentType(template.documentType);
+    return mapTemplateListItem(template, store, meta, docType);
+  });
+
+  return {
+    store,
+    systemItems,
+    customItems,
+    items: [...customItems, ...systemItems],
+  };
+}
+
+export type TemplatesPanelPagination = {
+  page: number;
+  limit: number;
+  totalSystem: number;
+  totalCustom: number;
+  hasMore: boolean;
+  loadedSystem: number;
+};
+
+export async function getTemplatesPanelForShop(
+  shopDomain: string,
+  documentType: DocumentType,
+  options?: { page?: number; limit?: number; skipEnsure?: boolean },
+) {
+  const page = Math.max(1, options?.page ?? 1);
+  const limit = Math.min(
+    40,
+    Math.max(1, options?.limit ?? SYSTEM_TEMPLATES_PAGE_SIZE),
+  );
+
+  if (!options?.skipEnsure) {
+    await ensureSystemTemplates();
+  }
+
+  const store = await getActiveStoreForShop(shopDomain);
+  if (!store) return null;
+
+  const typeWhere = documentTypeWhere(documentType);
+  const meta = Object.fromEntries(SYSTEM_TEMPLATES.map((t) => [t.code, t]));
+
+  const [customTemplates, systemTotal, customTotal] = await Promise.all([
+    page === 1
+      ? prisma.invoiceTemplate.findMany({
+          where: {
+            storeId: store.id,
+            isSystem: false,
+            isActive: true,
+            ...typeWhere,
+          },
+          orderBy: { updatedAt: "desc" },
+        })
+      : Promise.resolve([] as InvoiceTemplate[]),
+    prisma.invoiceTemplate.count({
+      where: { isSystem: true, isActive: true, ...typeWhere },
+    }),
+    page === 1
+      ? prisma.invoiceTemplate.count({
+          where: {
+            storeId: store.id,
+            isSystem: false,
+            isActive: true,
+            ...typeWhere,
+          },
+        })
+      : Promise.resolve(0),
+  ]);
+
+  const systemTemplates = await prisma.invoiceTemplate.findMany({
+    where: { isSystem: true, isActive: true, ...typeWhere },
+    orderBy: { name: "asc" },
+    skip: (page - 1) * limit,
+    take: limit,
+  });
+
+  const customItems =
+    page === 1
+      ? customTemplates.map((t) =>
+          mapTemplateListItem(t, store, meta, documentType),
+        )
+      : [];
+  const systemItems = systemTemplates.map((t) =>
+    mapTemplateListItem(t, store, meta, documentType),
+  );
+
+  const loadedSystem = (page - 1) * limit + systemItems.length;
+  return {
+    store,
+    documentType,
+    customItems,
+    systemItems,
+    pagination: {
+      page,
+      limit,
+      totalSystem: systemTotal,
+      totalCustom: page === 1 ? customTotal : 0,
+      hasMore: loadedSystem < systemTotal,
+      loadedSystem,
+    } satisfies TemplatesPanelPagination,
+  };
+}
+
+export async function getTemplateByIdForShop(
+  shopDomain: string,
+  templateId: string,
+) {
+  const store = await getActiveStoreForShop(shopDomain);
+  if (!store) return null;
+
+  const template = await prisma.invoiceTemplate.findUnique({
+    where: { id: templateId },
+  });
+  if (!template || !template.isActive) return null;
+
+  if (!template.isSystem && template.storeId !== store.id) {
+    return null;
+  }
+
+  const layout = asBaseLayoutCode(template.baseLayoutCode);
+  return {
+    store,
+    template,
+    config: resolveConfig(template, layout),
+    documentType: asDocumentType(template.documentType),
+  };
+}
+
+export async function createCustomTemplate(
+  shopDomain: string,
+  input: {
+    name: string;
+    baseLayoutCode: BaseLayoutCode;
+    documentType?: DocumentType;
+    sourceTemplateId?: string;
+    sourceType?: "layout" | "code";
+    liquidHtml?: string;
+  },
+) {
+  await ensureSystemTemplates();
+  const store = await getActiveStoreForShop(shopDomain);
+  if (!store) return null;
+
+  let documentType = input.documentType ?? "tax_invoice";
+  let baseConfig = getDefaultConfigForLayout(input.baseLayoutCode, documentType);
+  let description = `Custom template based on ${input.baseLayoutCode}`;
+
+  let sourceType: "layout" | "imported" | "code" = "layout";
+  let customHtml: string | null = null;
+  let customCss: string | null = null;
+  let importMeta: Prisma.InputJsonValue | undefined;
+
+  if (input.sourceTemplateId) {
+    const source = await getTemplateByIdForShop(
+      shopDomain,
+      input.sourceTemplateId,
+    );
+    if (source) {
+      documentType = source.documentType;
+      baseConfig = structuredClone(source.config);
+      description = source.template.description ?? description;
+      sourceType = templateSourceKind(source.template);
+      customHtml =
+        typeof source.template.customHtml === "string"
+          ? source.template.customHtml
+          : null;
+      customCss =
+        typeof source.template.customCss === "string"
+          ? source.template.customCss
+          : null;
+      if (source.template.importMeta != null) {
+        importMeta = source.template.importMeta as Prisma.InputJsonValue;
+      }
+    }
+  }
+
+  if (input.sourceType === "code") {
+    sourceType = "code";
+    customHtml = typeof input.liquidHtml === "string" ? input.liquidHtml : "";
+    customCss = "";
+    description = "Custom HTML / Liquid template";
+  }
+
+  const branding = await getBrandingInputForShop(shopDomain);
+  const config = mergeConfigWithBranding(baseConfig, branding, documentType);
+
+  if (sourceType === "code" && !String(customHtml || "").trim()) {
+    customHtml = buildLiquidFromConfig(
+      config,
+      documentType,
+      input.baseLayoutCode,
+    );
+  }
+
+  return prisma.invoiceTemplate.create({
+    data: {
+      code: customCode(store.id, input.baseLayoutCode, documentType),
+      name: input.name.trim() || "Untitled template",
+      description,
+      baseLayoutCode: input.baseLayoutCode,
+      config: config as unknown as Prisma.InputJsonValue,
+      documentType,
+      sourceType,
+      customHtml,
+      customCss,
+      ...(importMeta !== undefined ? { importMeta } : {}),
+      storeId: store.id,
+      merchantId: store.merchantId,
+      isSystem: false,
+      isActive: true,
+      version: 1,
+    },
+  });
+}
+
+export async function saveTemplateConfig(
+  shopDomain: string,
+  templateId: string,
+  input: {
+    name?: string;
+    config: unknown;
+    sourceType?: "layout" | "code";
+    liquidHtml?: string;
+    customCss?: string;
+  },
+) {
+  const result = await getTemplateByIdForShop(shopDomain, templateId);
+  if (!result || result.template.isSystem) return null;
+
+  const parsed = enforceComplianceLocks(
+    templateConfigSchema.parse({
+      ...result.config,
+      ...templateConfigSchema.partial().parse(input.config),
+    }),
+    result.documentType,
+  );
+  parsed.content = sanitizeTemplateConfigContent(parsed.content);
+  if (parsed.translations) {
+    parsed.translations = sanitizeTemplateTranslations(parsed.translations);
+  }
+
+  const currentKind = templateSourceKind(result.template);
+  const nextKind =
+    input.sourceType ?? (currentKind === "imported" ? "imported" : currentKind);
+
+  const data: Prisma.InvoiceTemplateUpdateInput = {
+    name: input.name?.trim() || result.template.name,
+    config: parsed as unknown as Prisma.InputJsonValue,
+  };
+
+  if (nextKind === "code") {
+    const liquid =
+      (input.liquidHtml ?? "").trim() ||
+      starterLiquidFor(result.documentType, null);
+    data.sourceType = "code";
+    data.customHtml = liquid;
+    data.customCss = input.customCss ?? "";
+  } else if (nextKind === "layout") {
+    data.sourceType = "layout";
+    data.customHtml = null;
+    data.customCss = null;
+  }
+
+  return prisma.invoiceTemplate.update({
+    where: { id: result.template.id },
+    data,
+  });
+}
+
+export async function saveTemplateAsNew(
+  shopDomain: string,
+  sourceTemplateId: string,
+  input: { name: string; config: unknown },
+) {
+  const result = await getTemplateByIdForShop(shopDomain, sourceTemplateId);
+  if (!result) return null;
+
+  const store = result.store;
+  const layout = asBaseLayoutCode(result.template.baseLayoutCode);
+
+  const parsed = enforceComplianceLocks(
+    templateConfigSchema.parse({
+      ...result.config,
+      ...templateConfigSchema.partial().parse(input.config),
+    }),
+    result.documentType,
+  );
+  parsed.content = sanitizeTemplateConfigContent(parsed.content);
+  if (parsed.translations) {
+    parsed.translations = sanitizeTemplateTranslations(parsed.translations);
+  }
+
+  const sourceKind = templateSourceKind(result.template);
+
+  return prisma.invoiceTemplate.create({
+    data: {
+      code: customCode(store.id, layout, result.documentType),
+      name: input.name.trim() || `${result.template.name} (copy)`,
+      description:
+        result.template.description ?? `Custom template based on ${layout}`,
+      baseLayoutCode: layout,
+      config: parsed as unknown as Prisma.InputJsonValue,
+      documentType: result.documentType,
+      sourceType: sourceKind,
+      customHtml: result.template.customHtml ?? null,
+      customCss: result.template.customCss ?? null,
+      importMeta:
+        result.template.importMeta != null
+          ? (result.template.importMeta as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+      storeId: store.id,
+      merchantId: store.merchantId,
+      isSystem: false,
+      isActive: true,
+      version: 1,
+    },
+  });
+}
+
+export async function duplicateTemplate(
+  shopDomain: string,
+  templateId: string,
+) {
+  const result = await getTemplateByIdForShop(shopDomain, templateId);
+  if (!result) return null;
+
+  const { store, template, config, documentType } = result;
+  const layout = asBaseLayoutCode(template.baseLayoutCode);
+
+  return prisma.invoiceTemplate.create({
+    data: {
+      code: customCode(store.id, layout, documentType),
+      name: `${template.name} (copy)`,
+      description: template.description,
+      baseLayoutCode: layout,
+      config: structuredClone(config) as unknown as Prisma.InputJsonValue,
+      documentType,
+      sourceType: templateSourceKind(template),
+      customHtml: template.customHtml ?? null,
+      customCss: template.customCss ?? null,
+      importMeta:
+        template.importMeta != null
+          ? (template.importMeta as Prisma.InputJsonValue)
+          : Prisma.JsonNull,
+      storeId: store.id,
+      merchantId: store.merchantId,
+      isSystem: false,
+      isActive: true,
+      version: 1,
+    },
+  });
+}
+
+async function systemFallbackId(code: string): Promise<string | null> {
+  const fallback = await prisma.invoiceTemplate.findFirst({
+    where: { isSystem: true, code, isActive: true },
+    select: { id: true },
+  });
+  return fallback?.id ?? null;
+}
+
+export async function deleteCustomTemplate(
+  shopDomain: string,
+  templateId: string,
+): Promise<boolean> {
+  const result = await getTemplateByIdForShop(shopDomain, templateId);
+  if (!result || result.template.isSystem) return false;
+
+  await prisma.invoiceTemplate.update({
+    where: { id: result.template.id },
+    data: { isActive: false },
+  });
+
+  const storeUpdate: Prisma.StoreUpdateInput = {};
+
+  if (result.store.defaultTemplateId === result.template.id) {
+    const fallbackId = await systemFallbackId("modern");
+    if (fallbackId) storeUpdate.defaultTemplateId = fallbackId;
+  }
+  if (result.store.defaultPackingSlipTemplateId === result.template.id) {
+    const fallbackId = await systemFallbackId("packing-slip");
+    if (fallbackId) storeUpdate.defaultPackingSlipTemplateId = fallbackId;
+  }
+  if (result.store.defaultCreditNoteTemplateId === result.template.id) {
+    const fallbackId = await systemFallbackId("credit-note");
+    if (fallbackId) storeUpdate.defaultCreditNoteTemplateId = fallbackId;
+  }
+  if (result.store.defaultRefundDocumentTemplateId === result.template.id) {
+    const fallbackId = await systemFallbackId("refund-document");
+    if (fallbackId) storeUpdate.defaultRefundDocumentTemplateId = fallbackId;
+  }
+
+  if (Object.keys(storeUpdate).length > 0) {
+    await prisma.store.update({
+      where: { id: result.store.id },
+      data: storeUpdate,
+    });
+  }
+
+  return true;
+}
+
+export async function setDefaultTemplate(
+  shopDomain: string,
+  templateId: string,
+) {
+  await ensureSystemTemplates();
+  const result = await getTemplateByIdForShop(shopDomain, templateId);
+  if (!result) return null;
+
+  const data: Prisma.StoreUpdateInput =
+    result.documentType === "packing_slip"
+      ? { defaultPackingSlipTemplateId: result.template.id }
+      : result.documentType === "credit_note"
+        ? { defaultCreditNoteTemplateId: result.template.id }
+        : result.documentType === "refund_document"
+          ? { defaultRefundDocumentTemplateId: result.template.id }
+          : { defaultTemplateId: result.template.id };
+
+  await prisma.store.update({
+    where: { id: result.store.id },
+    data,
+  });
+
+  return result.template;
+}
 
 export async function resolveTemplateForShop(
   shopDomain: string,
