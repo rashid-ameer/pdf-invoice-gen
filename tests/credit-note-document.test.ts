@@ -436,7 +436,7 @@ describe("getCreditNoteDetailsForShop", () => {
 });
 
 describe("Credit note document routes / UI wiring", () => {
-  it("wires details page to G5/G7 preview and Print / Download / Copy", () => {
+  it("wires details page to G5/G7 preview and Print / Download / Copy / Email", () => {
     const source = readFileSync(
       join(process.cwd(), "app/routes/app.credit-notes_.$id.tsx"),
       "utf8",
@@ -448,19 +448,23 @@ describe("Credit note document routes / UI wiring", () => {
     assert.match(source, /href="\/app\/credit-notes"/);
     assert.match(
       source,
-      /slot="secondary-actions"[\s\S]*?>\s*Copy\s*<[\s\S]*?slot="secondary-actions"[\s\S]*?>\s*Download\s*<[\s\S]*?slot="primary-action"[\s\S]*?>\s*Print\s*</,
+      /slot="secondary-actions"[\s\S]*?>\s*Copy\s*<[\s\S]*?slot="secondary-actions"[\s\S]*?>\s*Download\s*<[\s\S]*?slot="secondary-actions"[\s\S]*?>\s*Send email\s*<[\s\S]*?slot="primary-action"[\s\S]*?>\s*Print\s*</,
     );
     assert.match(source, /icon="clipboard"/);
+    assert.match(source, /icon="email"/);
     assert.match(source, /copyCreditNoteNumber/);
     assert.match(source, /openDownload/);
     assert.match(source, /downloadCreditNotePdf/);
+    assert.match(source, /sendCreditNoteEmail/);
+    assert.match(source, /trigger: "manual"/);
+    assert.match(source, /const sendEmail = /);
     assert.match(source, /printCreditNote/);
     assert.match(source, /printInvoiceHtml/);
     assert.match(source, /srcDoc=\{previewHtml\}/);
     assert.match(source, /Credit note not found/);
     assert.match(source, /Back to Credit notes/);
     assert.doesNotMatch(source, /s-modal|s-choice-list|Print credit note/);
-    assert.doesNotMatch(source, /Send email|Copy link|QR code|public link/i);
+    assert.doesNotMatch(source, /Copy link|QR code|public link/i);
     assert.doesNotMatch(source, /DocumentEmailModal/);
     assert.doesNotMatch(source, /refund_document/);
   });

@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 describe("Phase 3 manual email UI wiring", () => {
-  it("wires invoice list Email as direct send (no modal, not details)", () => {
+  it("wires invoice list and details Email as direct send (no modal)", () => {
     const list = readFileSync(
       join(process.cwd(), "app/routes/app.invoices.tsx"),
       "utf8",
@@ -25,11 +25,16 @@ describe("Phase 3 manual email UI wiring", () => {
     assert.doesNotMatch(list, /listTaxInvoiceTemplatesForShop|emailTemplates/);
     assert.doesNotMatch(list, /openEmailModal|Choose a template|Email invoice/);
 
-    assert.match(details, /Send email is not available yet/);
-    assert.match(details, /disabled/);
+    assert.match(details, /sendInvoiceEmail/);
+    assert.match(details, /trigger: "manual"/);
+    assert.match(details, /const sendEmail = /);
+    assert.match(details, /icon="email"/);
+    assert.match(details, />\s*Send email\s*</);
+    assert.doesNotMatch(details, /Send email is not available yet/);
+    assert.doesNotMatch(details, /DocumentEmailModal|s-modal|s-email-field/);
   });
 
-  it("wires credit note and refund document Email as direct send on the list", () => {
+  it("wires credit note and refund Email on list and details", () => {
     const page = readFileSync(
       join(process.cwd(), "app/routes/app.credit-notes.tsx"),
       "utf8",
@@ -53,10 +58,19 @@ describe("Phase 3 manual email UI wiring", () => {
       join(process.cwd(), "app/routes/app.credit-notes_.$id_.refund.tsx"),
       "utf8",
     );
-    assert.doesNotMatch(cnDetails, /DocumentEmailModal|sendCreditNoteEmail/);
+    assert.match(cnDetails, /sendCreditNoteEmail/);
+    assert.match(cnDetails, /trigger: "manual"/);
+    assert.match(cnDetails, /const sendEmail = /);
+    assert.match(cnDetails, />\s*Send email\s*</);
+    assert.doesNotMatch(cnDetails, /DocumentEmailModal|s-modal|s-email-field/);
+
+    assert.match(refundDetails, /sendRefundDocumentEmail/);
+    assert.match(refundDetails, /trigger: "manual"/);
+    assert.match(refundDetails, /const sendEmail = /);
+    assert.match(refundDetails, />\s*Send email\s*</);
     assert.doesNotMatch(
       refundDetails,
-      /DocumentEmailModal|sendRefundDocumentEmail/,
+      /DocumentEmailModal|s-modal|s-email-field/,
     );
   });
 
@@ -117,9 +131,27 @@ describe("Phase 3 manual email action contracts", () => {
       join(process.cwd(), "app/routes/app.credit-notes.tsx"),
       "utf8",
     );
-    assert.doesNotMatch(invoices, /hasEmailSentEvent/);
-    assert.doesNotMatch(creditNotes, /hasEmailSentEvent/);
-    assert.match(invoices, /trigger: "manual"/);
-    assert.match(creditNotes, /trigger: "manual"/);
+    const invoiceDetails = readFileSync(
+      join(process.cwd(), "app/routes/app.invoices_.$id.tsx"),
+      "utf8",
+    );
+    const cnDetails = readFileSync(
+      join(process.cwd(), "app/routes/app.credit-notes_.$id.tsx"),
+      "utf8",
+    );
+    const refundDetails = readFileSync(
+      join(process.cwd(), "app/routes/app.credit-notes_.$id_.refund.tsx"),
+      "utf8",
+    );
+    for (const source of [
+      invoices,
+      creditNotes,
+      invoiceDetails,
+      cnDetails,
+      refundDetails,
+    ]) {
+      assert.doesNotMatch(source, /hasEmailSentEvent/);
+      assert.match(source, /trigger: "manual"/);
+    }
   });
 });

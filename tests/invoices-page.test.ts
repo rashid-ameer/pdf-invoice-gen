@@ -417,6 +417,12 @@ describe("Invoice details page", () => {
     assert.doesNotMatch(source, /slot="accessory"/);
     assert.match(source, /slot="primary-action"/);
     assert.match(source, />\s*Send email\s*</);
+    assert.match(source, /sendInvoiceEmail/);
+    assert.match(source, /trigger: "manual"/);
+    assert.match(source, /const sendEmail = /);
+    assert.match(source, /icon="email"/);
+    assert.doesNotMatch(source, /Send email is not available yet/);
+    assert.doesNotMatch(source, /DocumentEmailModal|s-modal|s-email-field/);
     assert.match(source, /commandFor=\{MORE_MENU_ID\}/);
     assert.match(source, /icon="clipboard"/);
     assert.match(source, /icon="print"/);

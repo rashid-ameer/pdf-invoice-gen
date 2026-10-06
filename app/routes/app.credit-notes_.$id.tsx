@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type {
+  ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
 import {
+  useFetcher,
   useLoaderData,
   useNavigation,
   useRouteError,
@@ -12,6 +14,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { APP_LOCALE } from "../constants/app";
+import { sendCreditNoteEmail } from "../models/document-email.server";
 import { wrapA4EmbedHtml } from "../models/document-preview.server";
 import {
   getCreditNoteDetailsForShop,
@@ -90,6 +93,50 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   };
 };
 
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "");
+
+  if (intent === "send-email") {
+    const creditNoteId = String(
+      params.id ?? formData.get("documentId") ?? "",
+    ).trim();
+    if (!creditNoteId) {
+      return {
+        ok: false as const,
+        intent: "send-email" as const,
+        error: "Credit note not found",
+      };
+    }
+    const result = await sendCreditNoteEmail({
+      shop: session.shop,
+      creditNoteId,
+      trigger: "manual",
+    });
+    if (!result.ok) {
+      return {
+        ok: false as const,
+        intent: "send-email" as const,
+        error: result.error || "Failed to send email",
+        to: result.to,
+      };
+    }
+    return {
+      ok: true as const,
+      intent: "send-email" as const,
+      to: result.to,
+      message: `Email sent to ${result.to}`,
+    };
+  }
+
+  return {
+    ok: false as const,
+    intent: "unknown" as const,
+    error: "Unknown action",
+  };
+};
+
 function formatMoney(amount: number, currency: string): string {
   try {
     return new Intl.NumberFormat(APP_LOCALE, {
@@ -116,6 +163,7 @@ function formatIssueDate(iso: string): string {
 export default function CreditNoteDetailsPage() {
   const { creditNote, previewHtml, selectedTemplateId } =
     useLoaderData<typeof loader>();
+  const emailFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigation = useNavigation();
   const loadingDetailsContent =
@@ -125,6 +173,10 @@ export default function CreditNoteDetailsPage() {
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const emailAwaiting = useRef(false);
+  const emailDataAtSubmit = useRef(emailFetcher.data);
+  const emailSending =
+    emailFetcher.state === "submitting" || emailFetcher.state === "loading";
 
   useEffect(() => {
     if (!loadingDetailsContent) return;
@@ -133,6 +185,27 @@ export default function CreditNoteDetailsPage() {
       shopify.loading(false);
     };
   }, [loadingDetailsContent, shopify]);
+
+  useEffect(() => {
+    if (!emailAwaiting.current || emailFetcher.state !== "idle") return;
+    emailAwaiting.current = false;
+
+    if (!emailFetcher.data || emailFetcher.data === emailDataAtSubmit.current) {
+      shopify.toast.show("Couldn't send", { isError: true });
+      return;
+    }
+
+    if (emailFetcher.data.intent !== "send-email") return;
+
+    if (emailFetcher.data.ok) {
+      shopify.toast.show(emailFetcher.data.message);
+      return;
+    }
+
+    shopify.toast.show(emailFetcher.data.error || "Failed to send email", {
+      isError: true,
+    });
+  }, [emailFetcher.state, emailFetcher.data, shopify]);
 
   useEffect(() => {
     if (!previewHtml) {
@@ -266,6 +339,16 @@ export default function CreditNoteDetailsPage() {
     }
   };
 
+  const sendEmail = () => {
+    if (emailSending) return;
+    emailDataAtSubmit.current = emailFetcher.data;
+    emailAwaiting.current = true;
+    const body = new FormData();
+    body.set("intent", "send-email");
+    body.set("documentId", creditNote.id);
+    emailFetcher.submit(body, { method: "post" });
+  };
+
   return (
     <s-page heading={creditNote.creditNoteNumber}>
       <s-link slot="breadcrumb-actions" href="/app/credit-notes">
@@ -293,6 +376,19 @@ export default function CreditNoteDetailsPage() {
             : {})}
       >
         Download
+      </s-button>
+      <s-button
+        slot="secondary-actions"
+        variant="secondary"
+        icon="email"
+        onClick={sendEmail}
+        {...(emailSending
+          ? { loading: true, disabled: true }
+          : !actionsReady
+            ? { disabled: true }
+            : {})}
+      >
+        Send email
       </s-button>
       <s-button
         slot="primary-action"

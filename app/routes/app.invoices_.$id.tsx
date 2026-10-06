@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type {
+  ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
 import {
+  useFetcher,
   useLoaderData,
   useNavigation,
   useRouteError,
@@ -12,6 +14,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { APP_LOCALE } from "../constants/app";
+import { sendInvoiceEmail } from "../models/document-email.server";
 import { wrapA4EmbedHtml } from "../models/document-preview.server";
 import {
   getInvoiceDetailsForShop,
@@ -50,6 +53,48 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   return { invoice, previewHtml };
 };
 
+export const action = async ({ request, params }: ActionFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "");
+
+  if (intent === "send-email") {
+    const invoiceId = String(params.id ?? formData.get("documentId") ?? "").trim();
+    if (!invoiceId) {
+      return {
+        ok: false as const,
+        intent: "send-email" as const,
+        error: "Invoice not found",
+      };
+    }
+    const result = await sendInvoiceEmail({
+      shop: session.shop,
+      invoiceId,
+      trigger: "manual",
+    });
+    if (!result.ok) {
+      return {
+        ok: false as const,
+        intent: "send-email" as const,
+        error: result.error || "Failed to send email",
+        to: result.to,
+      };
+    }
+    return {
+      ok: true as const,
+      intent: "send-email" as const,
+      to: result.to,
+      message: `Email sent to ${result.to}`,
+    };
+  }
+
+  return {
+    ok: false as const,
+    intent: "unknown" as const,
+    error: "Unknown action",
+  };
+};
+
 function formatMoney(amount: number, currency: string): string {
   try {
     return new Intl.NumberFormat(APP_LOCALE, {
@@ -77,6 +122,7 @@ const MORE_MENU_ID = "invoice-details-more-actions";
 
 export default function InvoiceDetailsPage() {
   const { invoice, previewHtml } = useLoaderData<typeof loader>();
+  const emailFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const navigation = useNavigation();
   // Shopify: host Loading API for route transitions; section spinners only while
@@ -88,6 +134,10 @@ export default function InvoiceDetailsPage() {
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const emailAwaiting = useRef(false);
+  const emailDataAtSubmit = useRef(emailFetcher.data);
+  const emailSending =
+    emailFetcher.state === "submitting" || emailFetcher.state === "loading";
 
   // Host-level indicator only while navigating to (or reloading) details.
   useEffect(() => {
@@ -97,6 +147,27 @@ export default function InvoiceDetailsPage() {
       shopify.loading(false);
     };
   }, [loadingDetailsContent, shopify]);
+
+  useEffect(() => {
+    if (!emailAwaiting.current || emailFetcher.state !== "idle") return;
+    emailAwaiting.current = false;
+
+    if (!emailFetcher.data || emailFetcher.data === emailDataAtSubmit.current) {
+      shopify.toast.show("Couldn't send", { isError: true });
+      return;
+    }
+
+    if (emailFetcher.data.intent !== "send-email") return;
+
+    if (emailFetcher.data.ok) {
+      shopify.toast.show(emailFetcher.data.message);
+      return;
+    }
+
+    shopify.toast.show(emailFetcher.data.error || "Failed to send email", {
+      isError: true,
+    });
+  }, [emailFetcher.state, emailFetcher.data, shopify]);
 
   /**
    * Mark the preview ready once the srcDoc iframe has laid out.
@@ -238,6 +309,16 @@ export default function InvoiceDetailsPage() {
     }
   };
 
+  const sendEmail = () => {
+    if (!invoice || emailSending) return;
+    emailDataAtSubmit.current = emailFetcher.data;
+    emailAwaiting.current = true;
+    const body = new FormData();
+    body.set("intent", "send-email");
+    body.set("documentId", invoice.id);
+    emailFetcher.submit(body, { method: "post" });
+  };
+
   return (
     <s-page heading={invoice.invoiceNumber}>
       <s-link slot="breadcrumb-actions" href="/app/invoices">
@@ -247,8 +328,13 @@ export default function InvoiceDetailsPage() {
       <s-button
         slot="primary-action"
         variant="primary"
-        disabled
-        accessibilityLabel="Send email is not available yet"
+        icon="email"
+        onClick={sendEmail}
+        {...(emailSending
+          ? { loading: true, disabled: true }
+          : !actionsReady
+            ? { disabled: true }
+            : {})}
       >
         Send email
       </s-button>
