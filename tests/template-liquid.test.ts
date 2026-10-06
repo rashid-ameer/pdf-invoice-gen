@@ -29,7 +29,7 @@ import {
   buildLiquidFromConfig,
 } from "../app/models/template-liquid.server";
 import { applyConfigToExistingLiquid } from "../app/models/template-liquid-sync.server";
-import { extractVisualConfigFromLiquid } from "../app/models/template-liquid-extract.server";
+import { extractVisualConfigFromLiquid } from "../app/models/template-liquid-extract";
 import { getDefaultConfigForLayout } from "../app/models/template-config.defaults";
 import {
   renderDocumentHtml,

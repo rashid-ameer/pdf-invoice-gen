@@ -36,7 +36,7 @@ import { applyConfigToExistingLiquid } from "./template-liquid-sync.server";
 import {
   sourceHasInvoiceNumber,
   stripInvoiceNumberOutputs,
-} from "./template-liquid-extract.server";
+} from "./template-liquid-extract";
 
 const SYSTEM_CODES = SYSTEM_TEMPLATES.map((t) => t.code);
 

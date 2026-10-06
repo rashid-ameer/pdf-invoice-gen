@@ -38,11 +38,9 @@ import {
   syncConfigToLiquidForShop,
   validateTemplateLiquidForShop,
 } from "../models/template.server";
-import {
-  LIQUID_VARIABLE_HELP,
-  templateSourceKind,
-} from "../models/template-liquid.server";
-import { extractVisualConfigFromLiquid } from "../models/template-liquid-extract.server";
+import { LIQUID_VARIABLE_HELP } from "../models/template-liquid.defaults";
+import { extractVisualConfigFromLiquid } from "../models/template-liquid-extract";
+import { templateSourceKind } from "../models/template-liquid.server";
 import { scheduleTemplateThumbnailRefresh } from "../models/template-thumbnail.server";
 import { authenticate } from "../shopify.server";
 
