@@ -344,13 +344,6 @@ export default function InvoicesPage() {
     [navigate, searchParams],
   );
 
-  const clearSearchAndFilters = () => {
-    setSearchDraft("");
-    setDateRangeDraft("");
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    navigate("/app/invoices");
-  };
-
   const clearPopoverFilters = () => {
     setDateRangeDraft("");
     updateFilters({ status: null, from: null, to: null });
@@ -673,9 +666,6 @@ export default function InvoicesPage() {
                       <s-divider />
                       <s-stack gap="small-200">
                         <s-text type="strong">Date range</s-text>
-                        {dateRangeLabel ? (
-                          <s-text color="subdued">{dateRangeLabel}</s-text>
-                        ) : null}
                         <s-date-picker
                           type="range"
                           name="invoice-date-range"
@@ -685,16 +675,6 @@ export default function InvoicesPage() {
                           onChange={onDateRangeChange}
                         />
                       </s-stack>
-                      <s-divider />
-                      <s-button
-                        variant="tertiary"
-                        onClick={clearPopoverFilters}
-                        {...(hasAppliedPopoverFilters
-                          ? {}
-                          : { disabled: true })}
-                      >
-                        Clear filters
-                      </s-button>
                     </s-stack>
                   </s-box>
                 </s-popover>
@@ -780,13 +760,6 @@ export default function InvoicesPage() {
                   <s-text slot="subheading">
                     Try changing the filters or search terms for this view
                   </s-text>
-                  <s-button
-                    slot="primary-action"
-                    variant="primary"
-                    onClick={clearSearchAndFilters}
-                  >
-                    Clear search and filters
-                  </s-button>
                 </s-empty-state>
               ) : showTableRows ? (
                 data.items.map((invoice: InvoiceListItem) => {

@@ -212,7 +212,9 @@ describe("Invoices page wiring", () => {
       "utf8",
     );
     assert.match(source, /<s-empty-state heading="No invoices found"/);
-    assert.match(source, /Clear search and filters/);
+    assert.doesNotMatch(source, /Clear search and filters/);
+    assert.match(source, /Clear all/);
+    assert.doesNotMatch(source, /Clear filters/);
     assert.match(source, /type="search"/);
     assert.match(source, /<s-empty-state heading="No invoices yet"/);
     assert.match(
