@@ -1,4 +1,20 @@
 {
-  "name": "order-documents-block",
-  "welcome": "Welcome to the {{target}} extension!"
+  "name": "Order tax invoice",
+  "heading": "Tax invoice",
+  "loading": "Loading invoice…",
+  "sending": "Sending…",
+  "email": "Email",
+  "emailSuccess": "Emailed {{to}}",
+  "emailFailed": "Email failed",
+  "customer": "customer",
+  "customerLinkLabel": "Customer invoice link",
+  "openCustomerLink": "Open customer link",
+  "linkFailed": "Could not create customer link",
+  "openApp": "Open in app",
+  "preview": "Preview invoice",
+  "printTip": "Print from the order Print menu → Print tax documents",
+  "noOrder": "No order selected",
+  "empty": "No invoice for this order yet.",
+  "loadFailed": "Failed to load documents",
+  "timeout": "Request timed out"
 }

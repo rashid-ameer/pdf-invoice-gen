@@ -1,4 +1,20 @@
 {
-  "name": "order-documents-block",
-  "welcome": "Bienvenue dans l'extension {{target}}!"
+  "name": "Facture fiscale de commande",
+  "heading": "Facture fiscale",
+  "loading": "Chargement de la facture…",
+  "sending": "Envoi…",
+  "email": "E-mail",
+  "emailSuccess": "Envoyé à {{to}}",
+  "emailFailed": "Échec de l’envoi",
+  "customer": "client",
+  "customerLinkLabel": "Lien facture client",
+  "openCustomerLink": "Ouvrir le lien client",
+  "linkFailed": "Impossible de créer le lien client",
+  "openApp": "Ouvrir dans l’application",
+  "preview": "Aperçu de la facture",
+  "printTip": "Imprimez via le menu Imprimer de la commande → Print tax documents",
+  "noOrder": "Aucune commande sélectionnée",
+  "empty": "Aucune facture pour cette commande pour le moment.",
+  "loadFailed": "Échec du chargement des documents",
+  "timeout": "Délai de la requête dépassé"
 }
