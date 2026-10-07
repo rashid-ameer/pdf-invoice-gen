@@ -151,6 +151,50 @@ const ORDERS_SYNC_QUERY = `#graphql
   }
 `;
 
+const ORDER_BY_ID_QUERY = `#graphql
+  query OrderById($id: ID!) {
+    order(id: $id) {
+      ${ORDER_INVOICE_FIELDS}
+      refunds {
+        id
+        createdAt
+        note
+        refundLineItems(first: 100) {
+          nodes {
+            quantity
+            restockType
+            subtotalSet { shopMoney { amount } }
+            totalTaxSet { shopMoney { amount } }
+            lineItem {
+              id
+              title
+              name
+              sku
+              quantity
+              variantTitle
+              originalUnitPriceSet { shopMoney { amount } }
+              taxLines { rate priceSet { shopMoney { amount } } }
+            }
+          }
+        }
+        transactions(first: 20) {
+          nodes {
+            amountSet { shopMoney { amount currencyCode } }
+            status
+          }
+        }
+        orderAdjustments(first: 20) {
+          nodes {
+            amountSet { shopMoney { amount } }
+            taxAmountSet { shopMoney { amount } }
+            reason
+          }
+        }
+      }
+    }
+  }
+`;
+
 const ORDER_BY_ID_WITH_REFUNDS_QUERY = `#graphql
   query OrderByIdWithRefunds($id: ID!) {
     order(id: $id) {
@@ -437,6 +481,34 @@ export async function fetchRecentOrders(
   return (data.orders?.nodes ?? [])
     .filter((order): order is GraphqlOrder => Boolean(order?.id))
     .map(mapGraphqlOrderToShopifyOrder);
+}
+
+/**
+ * Fetch one Shopify order by GID/numeric ID (old fetchOrderById).
+ * Used by Group 15 ensure-invoice when no local invoice exists.
+ */
+export async function fetchOrderById(
+  shopDomain: string,
+  shopifyOrderId: string,
+): Promise<{ order: ShopifyOrder; refunds: ShopifyRefund[] } | null> {
+  const accessToken = await getOfflineAccessTokenForShop(shopDomain);
+  if (!accessToken) {
+    throw new Error(
+      "Shopify session missing. Re-authorize the app from Shopify Admin.",
+    );
+  }
+
+  const data = await graphqlRequest<{ order?: GraphqlOrder | null }>(
+    shopDomain,
+    accessToken,
+    ORDER_BY_ID_QUERY,
+    { id: orderGid(shopifyOrderId) },
+  );
+  if (!data.order?.id) return null;
+  return {
+    order: mapGraphqlOrderToShopifyOrder(data.order),
+    refunds: mapGraphqlRefunds(data.order),
+  };
 }
 
 /**

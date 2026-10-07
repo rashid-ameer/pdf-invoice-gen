@@ -14,16 +14,36 @@ type Pages = {
   "/": {
     params: {};
   };
+  "/app/api/orders/:orderId/invoice/customer-link": {
+    params: {
+      "orderId": string;
+    };
+  };
+  "/app/api/orders/:orderId/invoice/preview": {
+    params: {
+      "orderId": string;
+    };
+  };
   "/verify/refund-documents/:id/:signature": {
     params: {
       "id": string;
       "signature": string;
     };
   };
+  "/app/api/orders/:orderId/invoice/email": {
+    params: {
+      "orderId": string;
+    };
+  };
   "/verify/credit-notes/:id/:signature": {
     params: {
       "id": string;
       "signature": string;
+    };
+  };
+  "/app/api/orders/:orderId/documents": {
+    params: {
+      "orderId": string;
     };
   };
   "/public/refund-documents/:token": {
@@ -75,6 +95,9 @@ type Pages = {
     params: {};
   };
   "/webhooks/orders/paid": {
+    params: {};
+  };
+  "/app/print": {
     params: {};
   };
   "/auth/*": {
@@ -213,15 +236,31 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/verify/refund-documents/:id/:signature" | "/verify/credit-notes/:id/:signature" | "/public/refund-documents/:token" | "/public/refund-documents/:token/download" | "/verify/invoices/:id/:signature" | "/public/credit-notes/:token" | "/public/credit-notes/:token/download" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/public/invoices/:token" | "/public/invoices/:token/download" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/auth/*" | "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/refund-documents/bulk" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/delivery/:type" | "/app/invoices/bulk" | "/app/templates/:id" | "/app/templates/:id/thumbnail" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/templates" | "/app/branding" | "/app/delivery" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/" | "/app/api/orders/:orderId/invoice/customer-link" | "/app/api/orders/:orderId/invoice/preview" | "/verify/refund-documents/:id/:signature" | "/app/api/orders/:orderId/invoice/email" | "/verify/credit-notes/:id/:signature" | "/app/api/orders/:orderId/documents" | "/public/refund-documents/:token" | "/public/refund-documents/:token/download" | "/verify/invoices/:id/:signature" | "/public/credit-notes/:token" | "/public/credit-notes/:token/download" | "/webhooks/app/scopes_update" | "/webhooks/app/uninstalled" | "/public/invoices/:token" | "/public/invoices/:token/download" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/app/print" | "/auth/*" | "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/refund-documents/bulk" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/delivery/:type" | "/app/invoices/bulk" | "/app/templates/:id" | "/app/templates/:id/thumbnail" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/templates" | "/app/branding" | "/app/delivery" | "/app/invoices" | "/app/settings" | "/app/help";
+  };
+  "routes/app_.api.orders.$orderId.invoice.customer-link.tsx": {
+    id: "routes/app_.api.orders.$orderId.invoice.customer-link";
+    page: "/app/api/orders/:orderId/invoice/customer-link";
+  };
+  "routes/app_.api.orders.$orderId.invoice.preview.tsx": {
+    id: "routes/app_.api.orders.$orderId.invoice.preview";
+    page: "/app/api/orders/:orderId/invoice/preview";
   };
   "routes/verify.refund-documents_.$id.$signature.tsx": {
     id: "routes/verify.refund-documents_.$id.$signature";
     page: "/verify/refund-documents/:id/:signature";
   };
+  "routes/app_.api.orders.$orderId.invoice.email.tsx": {
+    id: "routes/app_.api.orders.$orderId.invoice.email";
+    page: "/app/api/orders/:orderId/invoice/email";
+  };
   "routes/verify.credit-notes_.$id.$signature.tsx": {
     id: "routes/verify.credit-notes_.$id.$signature";
     page: "/verify/credit-notes/:id/:signature";
+  };
+  "routes/app_.api.orders.$orderId.documents.tsx": {
+    id: "routes/app_.api.orders.$orderId.documents";
+    page: "/app/api/orders/:orderId/documents";
   };
   "routes/public.refund-documents_.$token.tsx": {
     id: "routes/public.refund-documents_.$token";
@@ -270,6 +309,10 @@ type RouteFiles = {
   "routes/webhooks.orders.paid.tsx": {
     id: "routes/webhooks.orders.paid";
     page: "/webhooks/orders/paid";
+  };
+  "routes/app_.print.tsx": {
+    id: "routes/app_.print";
+    page: "/app/print";
   };
   "routes/_index/route.tsx": {
     id: "routes/_index";
@@ -415,8 +458,12 @@ type RouteFiles = {
 
 type RouteModules = {
   "root": typeof import("./app/root.tsx");
+  "routes/app_.api.orders.$orderId.invoice.customer-link": typeof import("./app/routes/app_.api.orders.$orderId.invoice.customer-link.tsx");
+  "routes/app_.api.orders.$orderId.invoice.preview": typeof import("./app/routes/app_.api.orders.$orderId.invoice.preview.tsx");
   "routes/verify.refund-documents_.$id.$signature": typeof import("./app/routes/verify.refund-documents_.$id.$signature.tsx");
+  "routes/app_.api.orders.$orderId.invoice.email": typeof import("./app/routes/app_.api.orders.$orderId.invoice.email.tsx");
   "routes/verify.credit-notes_.$id.$signature": typeof import("./app/routes/verify.credit-notes_.$id.$signature.tsx");
+  "routes/app_.api.orders.$orderId.documents": typeof import("./app/routes/app_.api.orders.$orderId.documents.tsx");
   "routes/public.refund-documents_.$token": typeof import("./app/routes/public.refund-documents_.$token.tsx");
   "routes/public.refund-documents_.$token.download": typeof import("./app/routes/public.refund-documents_.$token.download.tsx");
   "routes/verify.invoices_.$id.$signature": typeof import("./app/routes/verify.invoices_.$id.$signature.tsx");
@@ -429,6 +476,7 @@ type RouteModules = {
   "routes/webhooks.refunds.create": typeof import("./app/routes/webhooks.refunds.create.tsx");
   "routes/webhooks.orders.create": typeof import("./app/routes/webhooks.orders.create.tsx");
   "routes/webhooks.orders.paid": typeof import("./app/routes/webhooks.orders.paid.tsx");
+  "routes/app_.print": typeof import("./app/routes/app_.print.tsx");
   "routes/_index": typeof import("./app/routes/_index/route.tsx");
   "routes/auth.$": typeof import("./app/routes/auth.$.tsx");
   "routes/app": typeof import("./app/routes/app.tsx");
