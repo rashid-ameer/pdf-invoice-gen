@@ -133,10 +133,22 @@ export async function handleAppInstall(
   };
 }
 
+/**
+ * Old `handleAppUninstall` parity:
+ * - mark Store uninstalled (no-op if missing)
+ * - always delete ALL Prisma Session rows for the shop
+ * - do not delete invoices, credit notes, templates, branding, or legal entity
+ */
 export async function handleAppUninstall(shopDomain: string) {
   await prisma.store.updateMany({
     where: { shopifyDomain: shopDomain },
     data: { status: "uninstalled" },
   });
+  await deleteSessionsByShop(shopDomain);
   console.log(`[shopify] app uninstalled: ${shopDomain}`);
+}
+
+/** Old `deleteSessionsByShop` — clears every Session for the shop domain. */
+export async function deleteSessionsByShop(shopDomain: string) {
+  await prisma.session.deleteMany({ where: { shop: shopDomain } });
 }
