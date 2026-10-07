@@ -19,7 +19,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { TemplatePreview } from "../components/template-list-card";
 import { APP_LOCALE } from "../constants/app";
 import {
-  getTemplatesForShop,
+  getSelectedTemplatesByTypeForShop,
   type TemplateListItem,
 } from "../models/template.server";
 import { scheduleTemplateThumbnailRefresh } from "../models/template-thumbnail.server";
@@ -54,39 +54,21 @@ function formatUpdatedAt(iso: string | undefined): string | null {
   });
 }
 
-function selectedForType(
-  items: TemplateListItem[],
-): TemplateListItem | null {
-  return items.find((item) => item.isDefault) ?? null;
-}
-
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const url = new URL(request.url);
   const selectedType =
     parseTemplateTypeParam(url.searchParams.get("type")) ?? "tax_invoice";
 
-  const lists = await Promise.all(
-    TEMPLATE_DOC_TYPES.map(async (doc) => {
-      const list = await getTemplatesForShop(session.shop, doc.value);
-      if (!list) return null;
-      return {
-        documentType: doc.value,
-        selected: selectedForType(list.items),
-      };
-    }),
+  const types = await getSelectedTemplatesByTypeForShop(
+    session.shop,
+    TEMPLATE_DOC_TYPES.map((doc) => doc.value),
   );
-
-  if (lists.some((entry) => entry == null)) {
+  if (!types) {
     throw new Response("Store not found. Please reinstall the app.", {
       status: 404,
     });
   }
-
-  const types = lists as Array<{
-    documentType: DocumentType;
-    selected: TemplateListItem | null;
-  }>;
 
   for (const entry of types) {
     if (!entry.selected) continue;
@@ -125,6 +107,7 @@ export default function TemplatesOverviewPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewRetry, setPreviewRetry] = useState(0);
+  const [pendingNav, setPendingNav] = useState<string | null>(null);
 
   // Full-page spinner only when arriving from another route — not when
   // switching the selected type (query-only) on this page.
@@ -133,6 +116,10 @@ export default function TemplatesOverviewPage() {
     navigation.location != null &&
     isTemplatesOverviewPath(navigation.location.pathname) &&
     !isTemplatesOverviewPath(location.pathname);
+
+  useEffect(() => {
+    if (navigation.state === "idle") setPendingNav(null);
+  }, [navigation.state]);
 
   const selectedType =
     parseTemplateTypeParam(searchParams.get("type")) ?? "tax_invoice";
@@ -185,16 +172,26 @@ export default function TemplatesOverviewPage() {
                       label={doc.label}
                       template={entry?.selected ?? null}
                       selected={selectedType === doc.value}
+                      editLoading={
+                        pendingNav === `edit:${doc.value}` &&
+                        navigation.state !== "idle"
+                      }
+                      changeLoading={
+                        pendingNav === `change:${doc.value}` &&
+                        navigation.state !== "idle"
+                      }
                       onSelect={() => selectType(doc.value)}
                       onEdit={() => {
                         if (!entry?.selected) return;
+                        setPendingNav(`edit:${doc.value}`);
                         navigate(
                           `/app/templates/${encodeURIComponent(entry.selected.id)}`,
                         );
                       }}
-                      onChange={() =>
-                        navigate(templatesChangeHref(doc.value))
-                      }
+                      onChange={() => {
+                        setPendingNav(`change:${doc.value}`);
+                        navigate(templatesChangeHref(doc.value));
+                      }}
                     />
                   );
                 })}
@@ -242,6 +239,8 @@ function DocumentTypeCard({
   label,
   template,
   selected,
+  editLoading,
+  changeLoading,
   onSelect,
   onEdit,
   onChange,
@@ -249,6 +248,8 @@ function DocumentTypeCard({
   label: string;
   template: TemplateListItem | null;
   selected: boolean;
+  editLoading?: boolean;
+  changeLoading?: boolean;
   onSelect: () => void;
   onEdit: () => void;
   onChange: () => void;
@@ -273,7 +274,6 @@ function DocumentTypeCard({
           onClick={onSelect}
           accessibilityLabel={selectLabel}
           borderRadius="base"
-          inlineSize="fill"
         >
           <s-grid
             gridTemplateColumns="1fr auto"
@@ -339,11 +339,19 @@ function DocumentTypeCard({
 
         <s-stack direction="inline" gap="small-200">
           {hasTemplate ? (
-            <s-button variant="secondary" onClick={onEdit}>
+            <s-button
+              variant="secondary"
+              onClick={onEdit}
+              {...(editLoading ? { loading: true } : {})}
+            >
               Edit template
             </s-button>
           ) : null}
-          <s-button variant="secondary" onClick={onChange}>
+          <s-button
+            variant="secondary"
+            onClick={onChange}
+            {...(changeLoading ? { loading: true } : {})}
+          >
             Change template
           </s-button>
         </s-stack>

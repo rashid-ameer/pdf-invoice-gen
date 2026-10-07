@@ -71,7 +71,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     };
   }
 
-  const list = await getTemplatesForShop(session.shop, documentType);
+  // Omit embedded JPEG blobs — gallery cards fetch /thumbnail lazily.
+  // Shipping every thumbnail as base64 was making this navigation feel slow.
+  const list = await getTemplatesForShop(session.shop, documentType, {
+    embedThumbnails: false,
+  });
   if (!list) {
     throw new Response("Store not found. Please reinstall the app.", {
       status: 404,

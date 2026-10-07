@@ -309,6 +309,7 @@ function mapTemplateListItem(
   store: Store,
   meta: Record<string, (typeof SYSTEM_TEMPLATES)[number]>,
   documentType: DocumentType,
+  options?: { embedThumbnails?: boolean },
 ): TemplateListItem {
   const system = meta[template.code];
   const layout = asBaseLayoutCode(
@@ -318,6 +319,7 @@ function mapTemplateListItem(
     template.documentType ?? system?.documentType ?? documentType,
   );
   const defaultId = defaultIdForType(store, docType);
+  const embedThumbnails = options?.embedThumbnails !== false;
   return {
     id: template.id,
     code: template.code,
@@ -346,9 +348,10 @@ function mapTemplateListItem(
       const base = `/app/templates/${encodeURIComponent(template.id)}/thumbnail`;
       return v ? `${base}?v=${encodeURIComponent(v)}` : base;
     })(),
-    thumbnailDataUrl: template.thumbnailJpeg
-      ? `data:image/jpeg;base64,${Buffer.from(template.thumbnailJpeg).toString("base64")}`
-      : null,
+    thumbnailDataUrl:
+      embedThumbnails && template.thumbnailJpeg
+        ? `data:image/jpeg;base64,${Buffer.from(template.thumbnailJpeg).toString("base64")}`
+        : null,
   };
 }
 
@@ -371,7 +374,7 @@ function customCode(
 export async function getTemplatesForShop(
   shopDomain: string,
   documentType?: DocumentType,
-  options?: { skipEnsure?: boolean },
+  options?: { skipEnsure?: boolean; embedThumbnails?: boolean },
 ) {
   if (!options?.skipEnsure) {
     await ensureSystemTemplates();
@@ -381,6 +384,12 @@ export async function getTemplatesForShop(
   if (!store) return null;
 
   const meta = Object.fromEntries(SYSTEM_TEMPLATES.map((t) => [t.code, t]));
+  const embedThumbnails = options?.embedThumbnails !== false;
+  // Skip loading JPEG blobs when the UI will fetch /thumbnail lazily.
+  const listOmit = embedThumbnails
+    ? undefined
+    : ({ thumbnailJpeg: true } as const);
+  const mapOpts = { embedThumbnails };
 
   if (documentType) {
     const typeWhere = documentTypeWhere(documentType);
@@ -388,6 +397,7 @@ export async function getTemplatesForShop(
       prisma.invoiceTemplate.findMany({
         where: { isSystem: true, isActive: true, ...typeWhere },
         orderBy: { name: "asc" },
+        ...(listOmit ? { omit: listOmit } : {}),
       }),
       prisma.invoiceTemplate.findMany({
         where: {
@@ -397,13 +407,14 @@ export async function getTemplatesForShop(
           ...typeWhere,
         },
         orderBy: { updatedAt: "desc" },
+        ...(listOmit ? { omit: listOmit } : {}),
       }),
     ]);
     const systemItems = systemTemplates.map((t) =>
-      mapTemplateListItem(t, store, meta, documentType),
+      mapTemplateListItem(t as InvoiceTemplate, store, meta, documentType, mapOpts),
     );
     const customItems = customTemplates.map((t) =>
-      mapTemplateListItem(t, store, meta, documentType),
+      mapTemplateListItem(t as InvoiceTemplate, store, meta, documentType, mapOpts),
     );
     return {
       store,
@@ -417,10 +428,12 @@ export async function getTemplatesForShop(
     prisma.invoiceTemplate.findMany({
       where: { isSystem: true, isActive: true },
       orderBy: { name: "asc" },
+      ...(listOmit ? { omit: listOmit } : {}),
     }),
     prisma.invoiceTemplate.findMany({
       where: { storeId: store.id, isSystem: false, isActive: true },
       orderBy: { updatedAt: "desc" },
+      ...(listOmit ? { omit: listOmit } : {}),
     }),
   ]);
 
@@ -429,11 +442,23 @@ export async function getTemplatesForShop(
     const docType = asDocumentType(
       template.documentType ?? system?.documentType,
     );
-    return mapTemplateListItem(template, store, meta, docType);
+    return mapTemplateListItem(
+      template as InvoiceTemplate,
+      store,
+      meta,
+      docType,
+      mapOpts,
+    );
   });
   const customItems = customTemplates.map((template) => {
     const docType = asDocumentType(template.documentType);
-    return mapTemplateListItem(template, store, meta, docType);
+    return mapTemplateListItem(
+      template as InvoiceTemplate,
+      store,
+      meta,
+      docType,
+      mapOpts,
+    );
   });
 
   return {
@@ -442,6 +467,49 @@ export async function getTemplatesForShop(
     customItems,
     items: [...customItems, ...systemItems],
   };
+}
+
+/**
+ * Overview helper: only the selected (default) template per document type.
+ * Avoids loading every system/custom template + JPEG just to render four cards.
+ */
+export async function getSelectedTemplatesByTypeForShop(
+  shopDomain: string,
+  documentTypes: DocumentType[],
+): Promise<Array<{
+  documentType: DocumentType;
+  selected: TemplateListItem | null;
+}> | null> {
+  await ensureSystemTemplates();
+  const store = await getActiveStoreForShop(shopDomain);
+  if (!store) return null;
+
+  const meta = Object.fromEntries(SYSTEM_TEMPLATES.map((t) => [t.code, t]));
+
+  return Promise.all(
+    documentTypes.map(async (documentType) => {
+      const defaultId = defaultIdForType(store, documentType);
+      if (!defaultId) {
+        return { documentType, selected: null };
+      }
+
+      const template = await prisma.invoiceTemplate.findUnique({
+        where: { id: defaultId },
+      });
+      if (
+        !template ||
+        !template.isActive ||
+        (!template.isSystem && template.storeId !== store.id)
+      ) {
+        return { documentType, selected: null };
+      }
+
+      return {
+        documentType,
+        selected: mapTemplateListItem(template, store, meta, documentType),
+      };
+    }),
+  );
 }
 
 export type TemplatesPanelPagination = {

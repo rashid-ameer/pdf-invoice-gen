@@ -431,7 +431,7 @@ describe("Group 14 Phase A — UI wiring", () => {
     assert.match(overview, /heading="Templates"/);
     assert.match(overview, /inlineSize="base"/);
     assert.match(overview, /authenticate\.admin/);
-    assert.match(overview, /getTemplatesForShop/);
+    assert.match(overview, /getSelectedTemplatesByTypeForShop/);
     assert.match(overview, /Change template/);
     assert.match(overview, /Edit template/);
 
