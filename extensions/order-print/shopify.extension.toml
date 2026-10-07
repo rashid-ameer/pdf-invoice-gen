@@ -1,7 +1,7 @@
 api_version = "2026-07"
 
 [[extensions]]
-name = "order-print"
+name = "Print tax documents"
 handle = "order-print"
 uid = "61246ada-09ac-3924-656d-b3db9be270da7aaf59b9"
 type = "ui_extension"
@@ -11,9 +11,5 @@ type = "ui_extension"
 module = "./src/PrintActionExtension.jsx"
 target = "admin.order-details.print-action.render"
 
-# Valid extension targets:
-
-# - admin.order-details.print-action.render
-# - admin.order-index.selection-print-action.render
-# - admin.product-details.print-action.render
-# - admin.product-index.selection-print-action.render
+[extensions.capabilities]
+api_access = true

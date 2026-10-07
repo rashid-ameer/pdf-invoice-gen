@@ -1,7 +1,13 @@
 {
-  "warningTitle": "Title",
-  "warningBody": "Show warning banner when form is in an invalid state.",
-  "documents": "Documents",
-  "document1": "Document 1",
-  "document2": "Document 2"
+  "documents": "Documents to print",
+  "invoice": "Tax invoice",
+  "packingSlip": "Packing slip",
+  "creditNote": "Credit note",
+  "refundDocument": "Refund document",
+  "hint": "Select documents for this order. Preview updates automatically — then use Print.",
+  "orderLabel": "Order {{orderId}}",
+  "noOrder": "No order selected",
+  "loadingTitle": "Preparing print",
+  "loadingBody": "Getting a secure session for the print preview…",
+  "errorTitle": "Unable to print"
 }
