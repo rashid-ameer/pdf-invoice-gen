@@ -1201,6 +1201,9 @@ export async function renderTemplatePreviewHtmlById(
     config,
     result.documentType,
   );
+  // Old pintStrictForShop: compliance mode applies strict column locks on preview.
+  const { pintStrictForShop } = await import("./compliance.server");
+  const pintStrict = await pintStrictForShop(shopDomain);
   return renderDocumentHtml({
     baseLayoutCode: layout,
     documentType: result.documentType,
@@ -1210,6 +1213,7 @@ export async function renderTemplatePreviewHtmlById(
     customHtml,
     sourceType: kind === "layout" ? "layout" : kind,
     customCss,
+    renderOptions: { pintStrict },
   });
 }
 

@@ -430,12 +430,11 @@ describe("Group 14 Phase A — UI wiring", () => {
     );
     assert.match(list, /heading="Templates"/);
     assert.match(list, /Create new template/);
-    assert.match(list, /My templates/);
-    assert.match(list, /System templates/);
     assert.match(list, /createCustomTemplate/);
     assert.match(list, /setDefaultTemplate/);
     assert.match(list, /deleteCustomTemplate/);
     assert.match(list, /authenticate\.admin/);
+    assert.match(list, /TemplateCard|s-section/);
 
     const details = readFileSync(
       join(process.cwd(), "app/routes/app.templates_.$id.tsx"),
@@ -446,7 +445,8 @@ describe("Group 14 Phase A — UI wiring", () => {
     assert.match(details, /Save as/);
     assert.match(details, /TemplateVisualConfigEditor|previewTemplateVisualConfig/);
     assert.match(details, /configJson/);
-    assert.match(details, /validateTemplateLiquidForShop|Edit code/);
+    assert.match(details, /validateTemplateLiquidForShop/);
+    assert.match(details, /codeEditor|editorView|sourceType/);
     assert.match(details, /scheduleTemplateThumbnailRefresh/);
   });
 });

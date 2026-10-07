@@ -121,8 +121,46 @@ model LegalEntity {
 
   merchant       Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
   taxIdentifiers TaxIdentifier[]
+  aspConnections AspConnection[]
 
   @@index([merchantId])
+}
+
+/// ASP provider catalog (Group 16). Old: AspProvider in customer.model.ts.
+model AspProvider {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  status       String   @default("active")
+  /// string[] JSON — e.g. submit_invoice, submit_credit_note
+  capabilities Json     @default("[]")
+  apiVersion   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  connections AspConnection[]
+}
+
+/// Per-legal-entity ASP connection (Group 16). credentialsRef never sent to client.
+model AspConnection {
+  id              String    @id @default(cuid())
+  legalEntityId   String
+  providerId      String
+  status          String    @default("pending")
+  /// Encrypted ASP API key (never select for page loaders).
+  credentialsRef  String?
+  participantId   String?
+  endpointScheme  String?
+  connectedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  legalEntity LegalEntity @relation(fields: [legalEntityId], references: [id], onDelete: Cascade)
+  provider    AspProvider @relation(fields: [providerId], references: [id], onDelete: Restrict)
+
+  @@index([legalEntityId])
+  @@index([providerId])
+  @@index([status])
 }
 
 model TaxIdentifier {

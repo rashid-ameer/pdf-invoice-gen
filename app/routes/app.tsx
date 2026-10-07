@@ -26,6 +26,7 @@ export default function App() {
         <s-link href="/app/templates">Templates</s-link>
         <s-link href="/app/delivery">Email</s-link>
         <s-link href="/app/branding">Branding</s-link>
+        <s-link href="/app/compliance">Compliance</s-link>
         <s-link href="/app/settings">Company setup</s-link>
         <s-link href="/app/help">Help &amp; Support</s-link>
       </s-app-nav>
