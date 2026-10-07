@@ -27,9 +27,9 @@ import { authenticate } from "../shopify.server";
 import type { DocumentType } from "../types/index";
 import {
   TEMPLATE_DOC_TYPES,
-  documentTypeToSlug,
   parseTemplateTypeParam,
   templatesChangeHref,
+  templatesOverviewHref,
 } from "../utils/template-type-slug";
 
 /** Narrower card list; large preview gets the rest. */
@@ -104,7 +104,7 @@ export default function TemplatesOverviewPage() {
   const navigate = useNavigate();
   const navigation = useNavigation();
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewRetry, setPreviewRetry] = useState(0);
   const [pendingNav, setPendingNav] = useState<string | null>(null);
@@ -121,8 +121,16 @@ export default function TemplatesOverviewPage() {
     if (navigation.state === "idle") setPendingNav(null);
   }, [navigation.state]);
 
-  const selectedType =
+  const urlSelectedType =
     parseTemplateTypeParam(searchParams.get("type")) ?? "tax_invoice";
+  // Local state so preview updates immediately on card click (URL sync is secondary).
+  const [selectedType, setSelectedType] =
+    useState<DocumentType>(urlSelectedType);
+
+  useEffect(() => {
+    setSelectedType(urlSelectedType);
+  }, [urlSelectedType]);
+
   const selectedEntry = useMemo(
     () =>
       data.types.find((entry) => entry.documentType === selectedType) ??
@@ -135,12 +143,13 @@ export default function TemplatesOverviewPage() {
     (type: DocumentType) => {
       if (type === selectedType) return;
       setPreviewError(null);
-      const next = new URLSearchParams(searchParams);
-      if (type === "tax_invoice") next.delete("type");
-      else next.set("type", documentTypeToSlug(type));
-      setSearchParams(next, { replace: true, preventScrollReset: true });
+      setSelectedType(type);
+      navigate(templatesOverviewHref(type), {
+        replace: true,
+        preventScrollReset: true,
+      });
     },
-    [searchParams, selectedType, setSearchParams],
+    [navigate, selectedType],
   );
 
   useEffect(() => {
@@ -169,35 +178,58 @@ export default function TemplatesOverviewPage() {
                   return (
                     <DocumentTypeCard
                       key={doc.value}
+                      documentType={doc.value}
                       label={doc.label}
                       template={entry?.selected ?? null}
                       selected={selectedType === doc.value}
-                      editLoading={
-                        pendingNav === `edit:${doc.value}` &&
-                        navigation.state !== "idle"
-                      }
-                      changeLoading={
-                        pendingNav === `change:${doc.value}` &&
-                        navigation.state !== "idle"
-                      }
-                      onSelect={() => selectType(doc.value)}
-                      onEdit={() => {
-                        if (!entry?.selected) return;
-                        setPendingNav(`edit:${doc.value}`);
-                        navigate(
-                          `/app/templates/${encodeURIComponent(entry.selected.id)}`,
-                        );
-                      }}
-                      onChange={() => {
-                        setPendingNav(`change:${doc.value}`);
-                        navigate(templatesChangeHref(doc.value));
-                      }}
+                      onSelect={selectType}
                     />
                   );
                 })}
               </s-stack>
 
               <s-stack gap="base">
+                <s-stack
+                  direction="inline"
+                  gap="base"
+                  alignItems="center"
+                  justifyContent="space-between"
+                >
+                  <s-heading>Preview</s-heading>
+                  <s-stack direction="inline" gap="small-200">
+                    {selectedTemplate ? (
+                      <s-button
+                        variant="secondary"
+                        onClick={() => {
+                          setPendingNav(`edit:${selectedType}`);
+                          navigate(
+                            `/app/templates/${encodeURIComponent(selectedTemplate.id)}`,
+                          );
+                        }}
+                        {...(pendingNav === `edit:${selectedType}` &&
+                        navigation.state !== "idle"
+                          ? { loading: true }
+                          : {})}
+                      >
+                        Edit template
+                      </s-button>
+                    ) : null}
+                    <s-button
+                      variant="secondary"
+                      onClick={() => {
+                        setPendingNav(`change:${selectedType}`);
+                        navigate(templatesChangeHref(selectedType));
+                      }}
+                      {...(pendingNav === `change:${selectedType}` &&
+                      navigation.state !== "idle"
+                        ? { loading: true }
+                        : {})}
+                    >
+                      Change template
+                    </s-button>
+                  </s-stack>
+                </s-stack>
+
                 {previewError ? (
                   <s-banner tone="critical" heading="Preview unavailable">
                     <s-stack gap="base">
@@ -236,127 +268,95 @@ export default function TemplatesOverviewPage() {
 }
 
 function DocumentTypeCard({
+  documentType,
   label,
   template,
   selected,
-  editLoading,
-  changeLoading,
   onSelect,
-  onEdit,
-  onChange,
 }: {
+  documentType: DocumentType;
   label: string;
   template: TemplateListItem | null;
   selected: boolean;
-  editLoading?: boolean;
-  changeLoading?: boolean;
-  onSelect: () => void;
-  onEdit: () => void;
-  onChange: () => void;
+  onSelect: (type: DocumentType) => void;
 }) {
   const updatedLabel = formatUpdatedAt(template?.updatedAt);
   const hasTemplate = template != null;
+  const clickableRef = useRef<HTMLElement | null>(null);
+
+  // Polaris web components emit native `click`; bind via DOM for reliable card hits.
+  useEffect(() => {
+    const el = clickableRef.current;
+    if (!el) return;
+    const handleClick = () => {
+      onSelect(documentType);
+    };
+    el.addEventListener("click", handleClick);
+    return () => el.removeEventListener("click", handleClick);
+  }, [documentType, onSelect]);
 
   const selectLabel = `${label}${selected ? ", selected" : ""}${
     hasTemplate ? `, ${template.name}` : ", no template selected"
   }`;
 
   return (
-    <s-box
+    <s-clickable
+      ref={clickableRef as never}
+      accessibilityLabel={selectLabel}
       padding="base"
       background={selected ? "subdued" : "base"}
       border={selected ? "large strong" : "base"}
       borderRadius="base"
     >
-      <s-stack gap="base">
-        {/* Selection target only — buttons stay outside so they never select. */}
-        <s-clickable
-          onClick={onSelect}
-          accessibilityLabel={selectLabel}
-          borderRadius="base"
-        >
-          <s-grid
-            gridTemplateColumns="1fr auto"
-            gap="base"
-            alignItems="start"
-          >
-            <s-query-container>
-              {hasTemplate ? (
-                <s-grid
-                  gridTemplateColumns={TYPE_CARD_BODY_COLUMNS}
-                  gap="base"
-                  alignItems="start"
-                >
-                  <TemplatePreview
-                    dataUrl={template.thumbnailDataUrl}
-                    fetchUrl={template.thumbnailUrl}
-                    name={template.name}
-                    objectFit="contain"
-                  />
-                  <s-stack gap="small-200">
-                    <s-stack
-                      direction="inline"
-                      gap="small-200"
-                      alignItems="center"
-                    >
-                      <s-text type="strong">{label}</s-text>
-                      <s-badge tone="success">Default</s-badge>
-                    </s-stack>
-                    <s-stack gap="none">
-                      <s-text type="strong">
-                        Current template: {template.name}
-                      </s-text>
-                      {updatedLabel ? (
-                        <s-text color="subdued">
-                          Last updated {updatedLabel}
-                        </s-text>
-                      ) : null}
-                    </s-stack>
-                  </s-stack>
-                </s-grid>
-              ) : (
-                <s-stack gap="small-200">
-                  <s-stack
-                    direction="inline"
-                    gap="small-200"
-                    alignItems="center"
-                  >
-                    <s-text type="strong">{label}</s-text>
-                    <s-badge tone="success">Default</s-badge>
-                  </s-stack>
-                  <s-text color="subdued">No template selected</s-text>
-                </s-stack>
-              )}
-            </s-query-container>
-
-            <s-icon
-              type={selected ? "check-circle" : "circle"}
-              tone={selected ? "info" : "neutral"}
-              color={selected ? "base" : "subdued"}
-            />
-          </s-grid>
-        </s-clickable>
-
-        <s-stack direction="inline" gap="small-200">
+      <s-grid gridTemplateColumns="1fr auto" gap="base" alignItems="start">
+        <s-query-container>
           {hasTemplate ? (
-            <s-button
-              variant="secondary"
-              onClick={onEdit}
-              {...(editLoading ? { loading: true } : {})}
+            <s-grid
+              gridTemplateColumns={TYPE_CARD_BODY_COLUMNS}
+              gap="base"
+              alignItems="start"
             >
-              Edit template
-            </s-button>
-          ) : null}
-          <s-button
-            variant="secondary"
-            onClick={onChange}
-            {...(changeLoading ? { loading: true } : {})}
-          >
-            Change template
-          </s-button>
-        </s-stack>
-      </s-stack>
-    </s-box>
+              <TemplatePreview
+                dataUrl={template.thumbnailDataUrl}
+                fetchUrl={template.thumbnailUrl}
+                name={template.name}
+                objectFit="contain"
+              />
+              <s-stack gap="small-200">
+                <s-stack
+                  direction="inline"
+                  gap="small-200"
+                  alignItems="center"
+                >
+                  <s-text type="strong" fontWeight="semibold" fontSize="base">{label}</s-text>
+                  <s-badge tone="success">Default</s-badge>
+                </s-stack>
+                <s-stack gap="none">
+                  <s-text type="strong">
+                    Current template: {template.name}
+                  </s-text>
+                  {updatedLabel ? (
+                    <s-text color="subdued">
+                      Last updated {updatedLabel}
+                    </s-text>
+                  ) : null}
+                </s-stack>
+              </s-stack>
+            </s-grid>
+          ) : (
+            <s-stack gap="small-200">
+              <s-stack direction="inline" gap="small-200" alignItems="center">
+                <s-text type="strong">{label}</s-text>
+                <s-badge tone="success">Default</s-badge>
+              </s-stack>
+              <s-text color="subdued">No template selected</s-text>
+            </s-stack>
+          )}
+        </s-query-container>
+
+        {selected ? <s-icon type="check-circle" tone="success" /> : null}
+      </s-grid>
+    </s-clickable>
   );
 }
 
