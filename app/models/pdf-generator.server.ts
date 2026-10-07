@@ -189,6 +189,14 @@ export async function htmlToPreviewPng(html: string): Promise<Buffer> {
       timeout: 20_000,
     });
     await waitForImages(page);
+    // JPEG has no alpha — transparent html/body becomes black. Force a white
+    // page so code/starter templates (no layout engine bg) match layout thumbs.
+    await page.evaluate(() => {
+      const root = document.documentElement;
+      const bodyEl = document.body;
+      if (root) root.style.backgroundColor = '#ffffff';
+      if (bodyEl) bodyEl.style.backgroundColor = '#ffffff';
+    });
     const body = await page.$('body');
     if (!body) {
       throw new Error('Preview body missing');

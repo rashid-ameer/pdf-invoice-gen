@@ -39,10 +39,36 @@ function cacheFresh(
   return generatedAt.getTime() + 1000 >= updatedAt.getTime();
 }
 
+/** Starter Liquid used to omit body background; JPEG then screenshots as black. */
+function withLiquidBodyBackground(html: string): string | null {
+  if (!/body\s*\{/i.test(html)) return null;
+  if (/body\s*\{[^}]*background\s*:/i.test(html)) return null;
+  return html.replace(/body\s*\{/i, "body {\n      background: #fff;");
+}
+
 async function generateAndStore(
   shopDomain: string,
   templateId: string,
 ): Promise<Buffer | null> {
+  const doc = await prisma.invoiceTemplate.findUnique({
+    where: { id: templateId },
+    select: { sourceType: true, customHtml: true },
+  });
+  if (
+    doc?.sourceType === "code" &&
+    typeof doc.customHtml === "string" &&
+    doc.customHtml.trim()
+  ) {
+    const patched = withLiquidBodyBackground(doc.customHtml);
+    if (patched) {
+      await prisma.$executeRaw`
+        UPDATE "InvoiceTemplate"
+        SET "customHtml" = ${patched}
+        WHERE "id" = ${templateId}
+      `;
+    }
+  }
+
   const { renderTemplatePreviewHtmlById } = await import("./template.server");
   const html = await renderTemplatePreviewHtmlById(shopDomain, templateId);
   if (!html) return null;
@@ -78,6 +104,8 @@ export async function getTemplateThumbnailJpeg(
         updatedAt: true,
         thumbnailJpeg: true,
         thumbnailGeneratedAt: true,
+        sourceType: true,
+        customHtml: true,
       },
     });
     if (!doc || doc.isActive === false) return null;
@@ -85,7 +113,18 @@ export async function getTemplateThumbnailJpeg(
     const cached = doc.thumbnailJpeg
       ? Buffer.from(doc.thumbnailJpeg)
       : null;
-    if (cached && cacheFresh(doc.thumbnailGeneratedAt, doc.updatedAt)) {
+    // Starter Liquid used to omit body { background }, so JPEG thumbs rendered
+    // black. Heal Liquid + regenerate once; after that customHtml has background.
+    const codeThumbNeedsRefresh =
+      doc.sourceType === "code" &&
+      typeof doc.customHtml === "string" &&
+      Boolean(withLiquidBodyBackground(doc.customHtml));
+
+    if (
+      cached &&
+      cacheFresh(doc.thumbnailGeneratedAt, doc.updatedAt) &&
+      !codeThumbNeedsRefresh
+    ) {
       return cached;
     }
 

@@ -66,9 +66,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Kick off JPEG generation for templates that still lack a cached thumbnail
-  // (old lazy-on-img-request parity). Concurrent limit lives in the thumbnail service.
+  // (old lazy-on-img-request parity). Also refresh Liquid customs so starter
+  // templates that cached a black JPEG (missing body background) heal once.
   for (const item of [...list.customItems, ...list.systemItems]) {
-    if (!item.thumbnailDataUrl) {
+    if (!item.thumbnailDataUrl || item.tags.includes("Liquid")) {
       scheduleTemplateThumbnailRefresh(session.shop, item.id);
     }
   }

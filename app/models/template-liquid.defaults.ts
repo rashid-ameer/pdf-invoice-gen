@@ -167,6 +167,7 @@ export function buildLiquidFromConfig(
     body {
       margin: 0;
       color: #111;
+      background: #fff;
       font-family: ${type.fontFamily}, system-ui, sans-serif;
       font-size: ${type.baseFontSize}px;
     }
