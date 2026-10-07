@@ -1,6 +1,6 @@
 /**
  * GET /app/print — Admin Print Action HTML (Group 15 Phase B).
- * Escapes `app.tsx` layout so App Home `authenticate.admin` is not required.
+ * Escapes `app.tsx` layout so App Home session auth is not required.
  * Auth: Phase A extension session token (Bearer or ?token=).
  * Does NOT record download events.
  */

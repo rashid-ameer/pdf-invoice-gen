@@ -285,8 +285,8 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /Credit notes/);
     assert.match(page, /switchTab/);
     assert.match(page, /refund-documents/);
-    assert.match(page, /background=\{activeTab === "credit-notes" \? "strong"/);
-    assert.match(page, /background=\{isRefundTab \? "strong"/);
+    assert.match(page, /background=\{activeTab === "credit-notes" \? "base"/);
+    assert.match(page, /background=\{isRefundTab \? "base"/);
     assert.doesNotMatch(page, /s-button-group/);
     assert.doesNotMatch(page, /icon=\{.*\? "check"/);
     assert.match(page, /s-date-picker/);
