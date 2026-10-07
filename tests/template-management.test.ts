@@ -429,7 +429,7 @@ describe("Group 14 Phase A — UI wiring", () => {
       "utf8",
     );
     assert.match(overview, /heading="Templates"/);
-    assert.match(overview, /inlineSize="large"/);
+    assert.match(overview, /inlineSize="base"/);
     assert.match(overview, /authenticate\.admin/);
     assert.match(overview, /getTemplatesForShop/);
     assert.match(overview, /Change template/);

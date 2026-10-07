@@ -6,35 +6,30 @@ export const TEMPLATE_DOC_TYPES: Array<{
   slug: string;
   label: string;
   pluralLower: string;
-  description: string;
 }> = [
   {
     value: "tax_invoice",
     slug: "tax-invoice",
     label: "Tax invoices",
     pluralLower: "tax invoices",
-    description: "Standard invoice for regular transactions.",
   },
   {
     value: "credit_note",
     slug: "credit-note",
     label: "Credit notes",
     pluralLower: "credit notes",
-    description: "Issued when correcting or reversing an invoice.",
   },
   {
     value: "refund_document",
     slug: "refund-document",
     label: "Refund documents",
     pluralLower: "refund documents",
-    description: "Confirms money returned to the customer.",
   },
   {
     value: "packing_slip",
     slug: "packing-slip",
     label: "Packing slips",
     pluralLower: "packing slips",
-    description: "Lists items included in a shipment.",
   },
 ];
 

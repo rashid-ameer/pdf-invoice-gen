@@ -33,12 +33,11 @@ import {
 } from "../utils/template-type-slug";
 
 /** Narrower card list; large preview gets the rest. */
-const OVERVIEW_COLUMNS =
-  "@container (inline-size > 768px) 36% 64%, 1fr";
+/** Always side-by-side: type cards | preview (never stacks). */
+const OVERVIEW_COLUMNS = "minmax(0, 36%) minmax(0, 64%)";
 
-/** Thumbnail + details inside the card body. */
-const TYPE_CARD_BODY_COLUMNS =
-  "@container (inline-size > 400px) 72px 1fr, 1fr";
+/** Always horizontal inside each type card: thumbnail | details. */
+const TYPE_CARD_BODY_COLUMNS = "72px minmax(0, 1fr)";
 
 function isTemplatesOverviewPath(pathname: string): boolean {
   return /^\/app\/templates\/?$/.test(pathname);
@@ -162,7 +161,7 @@ export default function TemplatesOverviewPage() {
   }, [selectedTemplate?.id, selectedTemplate?.thumbnailUrl]);
 
   return (
-    <s-page heading="Templates" inlineSize="large">
+    <s-page heading="Templates" inlineSize="base">
       {loading ? (
         <s-stack alignItems="center" gap="base" padding="large">
           <s-spinner
@@ -172,83 +171,68 @@ export default function TemplatesOverviewPage() {
           <s-text>Loading templates...</s-text>
         </s-stack>
       ) : (
-        <s-stack gap="base">
-          <s-text color="subdued">
-            Manage the template used for each document type. Each type has its
-            own template, settings, and actions.
-          </s-text>
+        <s-section padding="base">
+          <s-query-container>
+            <s-grid gridTemplateColumns={OVERVIEW_COLUMNS} gap="large-200">
+              <s-stack gap="base">
+                {TEMPLATE_DOC_TYPES.map((doc) => {
+                  const entry = data.types.find(
+                    (t) => t.documentType === doc.value,
+                  );
+                  return (
+                    <DocumentTypeCard
+                      key={doc.value}
+                      label={doc.label}
+                      template={entry?.selected ?? null}
+                      selected={selectedType === doc.value}
+                      onSelect={() => selectType(doc.value)}
+                      onEdit={() => {
+                        if (!entry?.selected) return;
+                        navigate(
+                          `/app/templates/${encodeURIComponent(entry.selected.id)}`,
+                        );
+                      }}
+                      onChange={() =>
+                        navigate(templatesChangeHref(doc.value))
+                      }
+                    />
+                  );
+                })}
+              </s-stack>
 
-          <s-section padding="base">
-            <s-query-container>
-              <s-grid gridTemplateColumns={OVERVIEW_COLUMNS} gap="large-200">
-                <s-stack gap="base">
-                  {TEMPLATE_DOC_TYPES.map((doc) => {
-                    const entry = data.types.find(
-                      (t) => t.documentType === doc.value,
-                    );
-                    return (
-                      <DocumentTypeCard
-                        key={doc.value}
-                        label={doc.label}
-                        description={doc.description}
-                        template={entry?.selected ?? null}
-                        selected={selectedType === doc.value}
-                        onSelect={() => selectType(doc.value)}
-                        onEdit={() => {
-                          if (!entry?.selected) return;
-                          navigate(
-                            `/app/templates/${encodeURIComponent(entry.selected.id)}`,
-                          );
+              <s-stack gap="base">
+                {previewError ? (
+                  <s-banner tone="critical" heading="Preview unavailable">
+                    <s-stack gap="base">
+                      <s-text>{previewError}</s-text>
+                      <s-button
+                        variant="secondary"
+                        onClick={() => {
+                          setPreviewError(null);
+                          setPreviewRetry((n) => n + 1);
                         }}
-                        onChange={() =>
-                          navigate(templatesChangeHref(doc.value))
-                        }
-                      />
-                    );
-                  })}
-                </s-stack>
+                      >
+                        Try again
+                      </s-button>
+                    </s-stack>
+                  </s-banner>
+                ) : null}
 
-                <s-box
-                  padding="base"
-                  background="base"
-                  border="base"
-                  borderRadius="base"
-                >
-                  <s-stack gap="base">
-                    {previewError ? (
-                      <s-banner tone="critical" heading="Preview unavailable">
-                        <s-stack gap="base">
-                          <s-text>{previewError}</s-text>
-                          <s-button
-                            variant="secondary"
-                            onClick={() => {
-                              setPreviewError(null);
-                              setPreviewRetry((n) => n + 1);
-                            }}
-                          >
-                            Try again
-                          </s-button>
-                        </s-stack>
-                      </s-banner>
-                    ) : null}
-
-                    {!selectedTemplate ? (
-                      <s-text color="subdued">
-                        Choose a template to see a preview
-                      </s-text>
-                    ) : previewError ? null : (
-                      <OverviewTemplatePreview
-                        key={`${selectedTemplate.id}-${previewRetry}`}
-                        template={selectedTemplate}
-                        onError={setPreviewError}
-                      />
-                    )}
-                  </s-stack>
-                </s-box>
-              </s-grid>
-            </s-query-container>
-          </s-section>
-        </s-stack>
+                {!selectedTemplate ? (
+                  <s-text color="subdued">
+                    Choose a template to see a preview
+                  </s-text>
+                ) : previewError ? null : (
+                  <OverviewTemplatePreview
+                    key={`${selectedTemplate.id}-${previewRetry}`}
+                    template={selectedTemplate}
+                    onError={setPreviewError}
+                  />
+                )}
+              </s-stack>
+            </s-grid>
+          </s-query-container>
+        </s-section>
       )}
     </s-page>
   );
@@ -256,7 +240,6 @@ export default function TemplatesOverviewPage() {
 
 function DocumentTypeCard({
   label,
-  description,
   template,
   selected,
   onSelect,
@@ -264,7 +247,6 @@ function DocumentTypeCard({
   onChange,
 }: {
   label: string;
-  description: string;
   template: TemplateListItem | null;
   selected: boolean;
   onSelect: () => void;
@@ -320,7 +302,6 @@ function DocumentTypeCard({
                       <s-text type="strong">{label}</s-text>
                       <s-badge tone="success">Default</s-badge>
                     </s-stack>
-                    <s-text color="subdued">{description}</s-text>
                     <s-stack gap="none">
                       <s-text type="strong">
                         Current template: {template.name}
@@ -343,7 +324,6 @@ function DocumentTypeCard({
                     <s-text type="strong">{label}</s-text>
                     <s-badge tone="success">Default</s-badge>
                   </s-stack>
-                  <s-text color="subdued">{description}</s-text>
                   <s-text color="subdued">No template selected</s-text>
                 </s-stack>
               )}
