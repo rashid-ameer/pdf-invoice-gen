@@ -1177,13 +1177,13 @@ export default function TemplateDetailsPage() {
         </s-banner>
       ) : null}
 
-      <s-query-container>
-        <s-grid
-          gridTemplateColumns={EDITOR_LAYOUT_COLS}
-          gap="large"
-          alignItems="start"
-        >
-          <s-stack gap="base">
+      <s-section padding="base">
+        <s-query-container>
+          <s-grid
+            gridTemplateColumns={EDITOR_LAYOUT_COLS}
+            gap="large"
+            alignItems="start"
+          >
             <TemplateVisualConfigEditor
               config={config}
               onChange={onConfigChange}
@@ -1192,9 +1192,7 @@ export default function TemplateDetailsPage() {
               sourceType={sourceType}
               logoResetToken={logoResetToken}
             />
-          </s-stack>
 
-          <s-section heading="Preview">
             <s-stack gap="base">
               {previewFailed ? (
                 <s-banner tone="critical" heading="Preview failed">
@@ -1214,25 +1212,18 @@ export default function TemplateDetailsPage() {
                 <s-spinner accessibilityLabel="Updating preview" />
               ) : null}
               {!previewFailed && previewHtml ? (
-                <s-box
-                  border="base"
-                  borderRadius="base"
-                  overflow="hidden"
-                  background="subdued"
-                >
-                  <iframe
-                    ref={iframeRef}
-                    title="Template preview"
-                    srcDoc={previewHtml}
-                    sandbox="allow-same-origin allow-modals"
-                    width="100%"
-                  />
-                </s-box>
+                <iframe
+                  ref={iframeRef}
+                  title="Template preview"
+                  srcDoc={previewHtml}
+                  sandbox="allow-same-origin allow-modals"
+                  width="100%"
+                />
               ) : null}
             </s-stack>
-          </s-section>
-        </s-grid>
-      </s-query-container>
+          </s-grid>
+        </s-query-container>
+      </s-section>
 
       <s-modal
         id={SAVE_MODAL_ID}

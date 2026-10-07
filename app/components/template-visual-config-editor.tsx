@@ -120,7 +120,7 @@ export function TemplateVisualConfigEditor({
               paddingInline="large"
               border="none"
               borderRadius="base"
-              background={selected ? "base" : "transparent"}
+              background={selected ? "subdued" : "transparent"}
               accessibilityLabel={`${label}${selected ? ", selected" : ""}`}
               onClick={() => setTab(value)}
             >
@@ -130,6 +130,8 @@ export function TemplateVisualConfigEditor({
         })}
       </s-grid>
 
+      <s-divider />
+
       {tab === "layout" && (!caps.codeEditor || isImported) ? (
         <s-banner tone="info">
           The layout of this template is fixed. You can still change its style,
@@ -138,7 +140,8 @@ export function TemplateVisualConfigEditor({
       ) : null}
 
       {tab === "style" ? (
-        <s-section heading="Style">
+        <s-stack gap="base">
+          <s-heading>Style</s-heading>
           <s-stack gap="base">
             <LogoEditor
               logoUrl={config.branding.logoUrl}
@@ -267,11 +270,12 @@ export function TemplateVisualConfigEditor({
               }}
             />
           </s-stack>
-        </s-section>
+        </s-stack>
       ) : null}
 
       {tab === "layout" && showLayoutTab && caps.codeEditor ? (
-        <s-section heading="Layout">
+        <s-stack gap="base">
+          <s-heading>Layout</s-heading>
           <s-stack gap="base">
             <s-select
               label="Base layout"
@@ -364,11 +368,12 @@ export function TemplateVisualConfigEditor({
               />
             ) : null}
           </s-stack>
-        </s-section>
+        </s-stack>
       ) : null}
 
       {tab === "content" ? (
-        <s-section heading="Content">
+        <s-stack gap="base">
+          <s-heading>Content</s-heading>
           <s-stack gap="base">
             <s-select
               label="Language"
@@ -608,11 +613,12 @@ export function TemplateVisualConfigEditor({
               </s-stack>
             ) : null}
           </s-stack>
-        </s-section>
+        </s-stack>
       ) : null}
 
       {tab === "fields" ? (
-        <s-section heading="Fields">
+        <s-stack gap="base">
+          <s-heading>Fields</s-heading>
           <s-stack gap="base">
             <s-heading>
               {isPackingSlip
@@ -958,7 +964,7 @@ export function TemplateVisualConfigEditor({
               document — the label is hidden too.
             </s-text>
           </s-stack>
-        </s-section>
+        </s-stack>
       ) : null}
     </s-stack>
   );
