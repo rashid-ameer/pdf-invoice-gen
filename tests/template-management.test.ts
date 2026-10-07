@@ -158,7 +158,7 @@ describe("Group 14 Phase A — create", () => {
   it("rejects invalid base layout at the route parse layer", () => {
     // Service requires typed BaseLayoutCode; route uses parseBaseLayoutCode.
     const source = readFileSync(
-      join(process.cwd(), "app/routes/app.templates.tsx"),
+      join(process.cwd(), "app/routes/app.templates_.$type_.change.tsx"),
       "utf8",
     );
     assert.match(source, /parseBaseLayoutCode/);
@@ -424,17 +424,28 @@ describe("Group 14 Phase A — UI wiring", () => {
     const nav = readFileSync(join(process.cwd(), "app/routes/app.tsx"), "utf8");
     assert.match(nav, /href="\/app\/templates"/);
 
-    const list = readFileSync(
+    const overview = readFileSync(
       join(process.cwd(), "app/routes/app.templates.tsx"),
       "utf8",
     );
-    assert.match(list, /heading="Templates"/);
-    assert.match(list, /Create new template/);
-    assert.match(list, /createCustomTemplate/);
-    assert.match(list, /setDefaultTemplate/);
-    assert.match(list, /deleteCustomTemplate/);
-    assert.match(list, /authenticate\.admin/);
-    assert.match(list, /TemplateCard|s-section/);
+    assert.match(overview, /heading="Templates"/);
+    assert.match(overview, /inlineSize="large"/);
+    assert.match(overview, /authenticate\.admin/);
+    assert.match(overview, /getTemplatesForShop/);
+    assert.match(overview, /Change template/);
+    assert.match(overview, /Edit template/);
+
+    const change = readFileSync(
+      join(process.cwd(), "app/routes/app.templates_.$type_.change.tsx"),
+      "utf8",
+    );
+    assert.match(change, /heading="Choose a template"/);
+    assert.match(change, /Create new template/);
+    assert.match(change, /createCustomTemplate/);
+    assert.match(change, /setDefaultTemplate/);
+    assert.match(change, /deleteCustomTemplate/);
+    assert.match(change, /authenticate\.admin/);
+    assert.match(change, /TemplateCard/);
 
     const details = readFileSync(
       join(process.cwd(), "app/routes/app.templates_.$id.tsx"),

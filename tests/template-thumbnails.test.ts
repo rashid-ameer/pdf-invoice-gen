@@ -293,13 +293,26 @@ describe("Group 14 Phase D — system + isolation + wiring", () => {
   });
 
   it("list items expose thumbnailUrl; routes wire schedule + thumbnail endpoint", () => {
-    const list = readFileSync(
+    const overview = readFileSync(
       join(process.cwd(), "app/routes/app.templates.tsx"),
       "utf8",
     );
-    assert.match(list, /thumbnailDataUrl|TemplateThumb|\/thumbnail/);
-    assert.match(list, /scheduleTemplateThumbnailRefresh/);
-    assert.match(list, /MiniPreview|thumbnailDataUrl/);
+    assert.match(overview, /thumbnailDataUrl|TemplatePreview|\/thumbnail/);
+    assert.match(overview, /scheduleTemplateThumbnailRefresh/);
+
+    const change = readFileSync(
+      join(process.cwd(), "app/routes/app.templates_.$type_.change.tsx"),
+      "utf8",
+    );
+    assert.match(change, /scheduleTemplateThumbnailRefresh/);
+    assert.match(change, /TemplateCard/);
+
+    const card = readFileSync(
+      join(process.cwd(), "app/components/template-list-card.tsx"),
+      "utf8",
+    );
+    assert.match(card, /thumbnailDataUrl/);
+    assert.match(card, /TemplatePreview/);
 
     const details = readFileSync(
       join(process.cwd(), "app/routes/app.templates_.$id.tsx"),
