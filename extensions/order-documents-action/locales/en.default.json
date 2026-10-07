@@ -1,4 +1,22 @@
 {
-  "name": "order-documents-action",
-  "welcome": "Welcome to the {{target}} extension!"
+  "name": "Tax documents",
+  "heading": "Tax documents for this order",
+  "close": "Close",
+  "email": "Email tax invoice",
+  "openInvoices": "Open invoices in app",
+  "printHint": "Tip: use the order Print menu → Print tax documents for preview & print.",
+  "printInvoice": "Print invoice",
+  "preview": "Preview invoice",
+  "loading": "Loading…",
+  "emailSuccess": "Invoice emailed to {{email}}",
+  "emailFailed": "Could not send email",
+  "emailTimeout": "Email request timed out",
+  "customer": "customer",
+  "customerLinkLabel": "Customer invoice link",
+  "openCustomerLink": "Open customer link",
+  "linkFailed": "Could not create customer link",
+  "noOrder": "No order selected",
+  "empty": "No invoice data returned for this order.",
+  "loadFailed": "Failed to load documents",
+  "timeout": "Request timed out"
 }

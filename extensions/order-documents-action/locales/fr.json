@@ -1,4 +1,22 @@
 {
-  "name": "order-documents-action",
-  "welcome": "Bienvenue dans l'extension {{target}}!"
+  "name": "Documents fiscaux",
+  "heading": "Documents fiscaux pour cette commande",
+  "close": "Fermer",
+  "email": "Envoyer la facture fiscale",
+  "openInvoices": "Ouvrir les factures dans l’application",
+  "printHint": "Astuce : utilisez le menu Imprimer de la commande → Print tax documents pour l’aperçu et l’impression.",
+  "printInvoice": "Imprimer la facture",
+  "preview": "Aperçu de la facture",
+  "loading": "Chargement…",
+  "emailSuccess": "Facture envoyée à {{email}}",
+  "emailFailed": "Impossible d’envoyer l’e-mail",
+  "emailTimeout": "Délai d’envoi de l’e-mail dépassé",
+  "customer": "client",
+  "customerLinkLabel": "Lien facture client",
+  "openCustomerLink": "Ouvrir le lien client",
+  "linkFailed": "Impossible de créer le lien client",
+  "noOrder": "Aucune commande sélectionnée",
+  "empty": "Aucune donnée de facture pour cette commande.",
+  "loadFailed": "Échec du chargement des documents",
+  "timeout": "Délai de la requête dépassé"
 }
