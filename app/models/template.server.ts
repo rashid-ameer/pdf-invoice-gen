@@ -1114,6 +1114,29 @@ export type PreviewTemplateDraft = {
 };
 
 /**
+ * Old `attachSampleVerificationIfEnabled` — preview only shows a QR when the
+ * checkbox is on and the document type supports verification (not packing slips).
+ */
+async function attachSampleVerificationIfEnabled(
+  data: import("./template-render-engine.server").TemplateRenderInvoiceData,
+  config: TemplateConfig,
+  documentType: DocumentType,
+): Promise<import("./template-render-engine.server").TemplateRenderInvoiceData> {
+  const {
+    buildSampleVerification,
+    verificationKindFromDocumentType,
+  } = await import("./verification.server");
+  const next = { ...data };
+  if (
+    config.sections.qrCode?.visible &&
+    verificationKindFromDocumentType(documentType)
+  ) {
+    next.verification = await buildSampleVerification(documentType);
+  }
+  return next;
+}
+
+/**
  * Raw template preview HTML (old `renderTemplatePreviewById`).
  * No A4 wrap / embed chrome — used by thumbnails and then wrapped for UI preview.
  */
@@ -1173,11 +1196,16 @@ export async function renderTemplatePreviewHtmlById(
       : null);
 
   const layout = asBaseLayoutCode(result.template.baseLayoutCode);
+  const data = await attachSampleVerificationIfEnabled(
+    sampleRenderDataForDocumentType(result.documentType),
+    config,
+    result.documentType,
+  );
   return renderDocumentHtml({
     baseLayoutCode: layout,
     documentType: result.documentType,
     config,
-    data: sampleRenderDataForDocumentType(result.documentType),
+    data,
     branding: null,
     customHtml,
     sourceType: kind === "layout" ? "layout" : kind,
