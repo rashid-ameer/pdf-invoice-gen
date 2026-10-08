@@ -59,11 +59,22 @@ export function parseTemplateTypeParam(
   return null;
 }
 
+/** Templates live under Settings so the Settings nav item stays active. */
+export const TEMPLATES_BASE_PATH = "/app/settings/templates";
+
 export function templatesOverviewHref(type?: DocumentType): string {
-  if (!type || type === "tax_invoice") return "/app/templates";
-  return `/app/templates?type=${encodeURIComponent(documentTypeToSlug(type))}`;
+  if (!type || type === "tax_invoice") return TEMPLATES_BASE_PATH;
+  return `${TEMPLATES_BASE_PATH}?type=${encodeURIComponent(documentTypeToSlug(type))}`;
 }
 
 export function templatesChangeHref(type: DocumentType): string {
-  return `/app/templates/${encodeURIComponent(documentTypeToSlug(type))}/change`;
+  return `${TEMPLATES_BASE_PATH}/${encodeURIComponent(documentTypeToSlug(type))}/change`;
+}
+
+export function templatesEditHref(templateId: string): string {
+  return `${TEMPLATES_BASE_PATH}/${encodeURIComponent(templateId)}`;
+}
+
+export function templatesThumbnailHref(templateId: string): string {
+  return `${TEMPLATES_BASE_PATH}/${encodeURIComponent(templateId)}/thumbnail`;
 }

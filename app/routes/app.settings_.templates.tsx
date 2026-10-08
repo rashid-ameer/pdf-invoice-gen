@@ -1,6 +1,6 @@
 /**
  * Templates overview (Screen 1): four document-type cards + large preview.
- * Gallery / create / select / delete live on `/app/templates/:type/change`.
+ * Gallery / create / select / delete live on `/app/settings/templates/:type/change`.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
@@ -40,7 +40,7 @@ const OVERVIEW_COLUMNS = "minmax(0, 36%) minmax(0, 64%)";
 const TYPE_CARD_BODY_COLUMNS = "72px minmax(0, 1fr)";
 
 function isTemplatesOverviewPath(pathname: string): boolean {
-  return /^\/app\/templates\/?$/.test(pathname);
+  return /^\/app\/settings\/templates\/?$/.test(pathname);
 }
 
 function formatUpdatedAt(iso: string | undefined): string | null {
@@ -158,6 +158,9 @@ export default function TemplatesOverviewPage() {
 
   return (
     <s-page heading="Templates" inlineSize="base">
+      <s-link slot="breadcrumb-actions" href="/app/settings">
+        Settings
+      </s-link>
       {loading ? (
         <s-stack alignItems="center" gap="base" padding="large">
           <s-spinner
@@ -204,7 +207,7 @@ export default function TemplatesOverviewPage() {
                           console.log("Clicked")
                           setPendingNav(`edit:${selectedType}`);
                           navigate(
-                            `/app/templates/${encodeURIComponent(selectedTemplate.id)}`,
+                            `/app/settings/templates/${encodeURIComponent(selectedTemplate.id)}`,
                           );
                         }}
                         {...(pendingNav === `edit:${selectedType}` &&

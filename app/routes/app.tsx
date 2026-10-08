@@ -20,11 +20,13 @@ export default function App() {
   return (
     <AppProvider apiKey={apiKey}>
       <s-app-nav>
-        <s-link href="/app">Home</s-link>
+        {/* rel="home" is valid on s-app-nav children; Polaris JSX types omit it. */}
+        <s-link href="/app" {...({ rel: "home" } as Record<string, string>)}>
+          Home
+        </s-link>
         <s-link href="/app/invoices">Invoices</s-link>
         <s-link href="/app/packing-slips">Packing slips</s-link>
         <s-link href="/app/credit-notes">Credit notes</s-link>
-        <s-link href="/app/templates">Templates</s-link>
         <s-link href="/app/delivery">Email</s-link>
         <s-link href="/app/branding">Branding</s-link>
         {SHOW_COMPLIANCE_PAGE ? (

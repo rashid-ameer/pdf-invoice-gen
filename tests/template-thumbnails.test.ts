@@ -294,14 +294,14 @@ describe("Group 14 Phase D — system + isolation + wiring", () => {
 
   it("list items expose thumbnailUrl; routes wire schedule + thumbnail endpoint", () => {
     const overview = readFileSync(
-      join(process.cwd(), "app/routes/app.templates.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.templates.tsx"),
       "utf8",
     );
     assert.match(overview, /thumbnailDataUrl|TemplatePreview|\/thumbnail/);
     assert.match(overview, /scheduleTemplateThumbnailRefresh/);
 
     const change = readFileSync(
-      join(process.cwd(), "app/routes/app.templates_.$type_.change.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.templates_.$type_.change.tsx"),
       "utf8",
     );
     assert.match(change, /scheduleTemplateThumbnailRefresh/);
@@ -315,14 +315,14 @@ describe("Group 14 Phase D — system + isolation + wiring", () => {
     assert.match(card, /TemplatePreview/);
 
     const details = readFileSync(
-      join(process.cwd(), "app/routes/app.templates_.$id.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.templates_.$id.tsx"),
       "utf8",
     );
     assert.match(details, /scheduleTemplateThumbnailRefresh/);
     assert.match(details, /intent === "customize"/);
 
     const route = readFileSync(
-      join(process.cwd(), "app/routes/app.templates_.$id.thumbnail.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.templates_.$id.thumbnail.tsx"),
       "utf8",
     );
     assert.match(route, /getTemplateThumbnailJpeg/);

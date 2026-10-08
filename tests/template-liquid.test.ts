@@ -501,7 +501,7 @@ describe("Group 14 Phase C — Phase B + wiring regression markers", () => {
 
   it("details route wires Liquid validate / from-config / code editor", () => {
     const details = readFileSync(
-      join(process.cwd(), "app/routes/app.templates_.$id.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.templates_.$id.tsx"),
       "utf8",
     );
     assert.match(details, /validateTemplateLiquidForShop|intent === "validate"/);

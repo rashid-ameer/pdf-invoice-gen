@@ -34,6 +34,7 @@ const SETTINGS_AREAS: SettingsArea[] = [
     id: "templates",
     title: "Templates",
     description: "Choose and edit the template for each document type.",
+    href: "/app/settings/templates",
   },
   {
     id: "email",

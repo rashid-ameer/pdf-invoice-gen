@@ -609,7 +609,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       ok: true as const,
       intent: "delete" as const,
       message: "Template deleted",
-      redirectTo: `/app/templates?type=${encodeURIComponent(
+      redirectTo: `/app/settings/templates?type=${encodeURIComponent(
         String(formData.get("documentType") ?? "tax_invoice"),
       )}`,
     };
@@ -791,8 +791,8 @@ export default function TemplateDetailsPage() {
     setSavingInModal(false);
 
     const listPath = result
-      ? `/app/templates?type=${encodeURIComponent(result.documentType)}`
-      : "/app/templates";
+      ? `/app/settings/templates?type=${encodeURIComponent(result.documentType)}`
+      : "/app/settings/templates";
 
     if (fetcher.data.intent === "save-as" || fetcher.data.intent === "save") {
       shopify.saveBar.hide(SAVE_BAR_ID);
@@ -813,7 +813,7 @@ export default function TemplateDetailsPage() {
     ) {
       shopify.toast.show(fetcher.data.message);
       navigate(
-        `/app/templates/${encodeURIComponent(fetcher.data.templateId)}?new=1`,
+        `/app/settings/templates/${encodeURIComponent(fetcher.data.templateId)}?new=1`,
       );
       return;
     }
@@ -992,7 +992,10 @@ export default function TemplateDetailsPage() {
   if (!result || !config) {
     return (
       <s-page heading="Template not found" inlineSize="base">
-        <s-link slot="breadcrumb-actions" href="/app/templates">
+        <s-link slot="breadcrumb-actions" href="/app/settings">
+          Settings
+        </s-link>
+        <s-link slot="breadcrumb-actions" href="/app/settings/templates">
           Templates
         </s-link>
         <s-section accessibilityLabel="Template not found">
@@ -1000,7 +1003,7 @@ export default function TemplateDetailsPage() {
             This template could not be loaded. It may have been deleted or does
             not belong to this store.
           </s-banner>
-          <s-button variant="primary" href="/app/templates">
+          <s-button variant="primary" href="/app/settings/templates">
             Back to templates
           </s-button>
         </s-section>
@@ -1008,7 +1011,7 @@ export default function TemplateDetailsPage() {
     );
   }
 
-  const listHref = `/app/templates?type=${encodeURIComponent(result.documentType)}`;
+  const listHref = `/app/settings/templates?type=${encodeURIComponent(result.documentType)}`;
   const isUntitled =
     isNew || searchParams.get("new") === "1";
   const pageHeading = isUntitled
@@ -1141,6 +1144,9 @@ export default function TemplateDetailsPage() {
 
   return (
     <s-page heading={pageHeading} inlineSize="base">
+      <s-link slot="breadcrumb-actions" href="/app/settings">
+        Settings
+      </s-link>
       <s-link slot="breadcrumb-actions" href={listHref}>
         Templates
       </s-link>

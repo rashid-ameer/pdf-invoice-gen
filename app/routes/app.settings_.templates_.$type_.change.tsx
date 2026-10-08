@@ -54,7 +54,7 @@ function documentTypeLabel(type: DocumentType): string {
 }
 
 function isChangePath(pathname: string): boolean {
-  return /^\/app\/templates\/[^/]+\/change\/?$/.test(pathname);
+  return /^\/app\/settings\/templates\/[^/]+\/change\/?$/.test(pathname);
 }
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -284,7 +284,7 @@ export default function ChooseTemplatePage() {
     ) {
       shopify.toast.show(fetcher.data.message);
       navigate(
-        `/app/templates/${encodeURIComponent(fetcher.data.templateId)}?new=1`,
+        `/app/settings/templates/${encodeURIComponent(fetcher.data.templateId)}?new=1`,
       );
       return;
     }
@@ -352,6 +352,9 @@ export default function ChooseTemplatePage() {
   if (!data.ok || !data.documentType) {
     return (
       <s-page heading="Choose a template">
+        <s-link slot="breadcrumb-actions" href="/app/settings">
+          Settings
+        </s-link>
         <s-link slot="breadcrumb-actions" href={templatesOverviewHref()}>
           Templates
         </s-link>
@@ -399,6 +402,9 @@ export default function ChooseTemplatePage() {
 
   return (
     <s-page heading="Choose a template">
+      <s-link slot="breadcrumb-actions" href="/app/settings">
+        Settings
+      </s-link>
       <s-link slot="breadcrumb-actions" href={overviewHref}>
         Templates
       </s-link>
@@ -521,7 +527,7 @@ export default function ChooseTemplatePage() {
                   item={item}
                   selectLoading={selectingId === item.id && busy}
                   onEdit={() =>
-                    navigate(`/app/templates/${encodeURIComponent(item.id)}`)
+                    navigate(`/app/settings/templates/${encodeURIComponent(item.id)}`)
                   }
                   onSelect={() => {
                     setActionError(null);

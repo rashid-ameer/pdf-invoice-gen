@@ -5,7 +5,7 @@ import { getTemplateThumbnailJpeg } from "../models/template-thumbnail.server";
 import { authenticate } from "../shopify.server";
 
 /**
- * GET /app/templates/:id/thumbnail
+ * GET /app/settings/templates/:id/thumbnail
  * Old parity: session-scoped JPEG (or 404). Cache-Control private, max-age=120.
  */
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {

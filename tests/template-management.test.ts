@@ -158,7 +158,7 @@ describe("Group 14 Phase A — create", () => {
   it("rejects invalid base layout at the route parse layer", () => {
     // Service requires typed BaseLayoutCode; route uses parseBaseLayoutCode.
     const source = readFileSync(
-      join(process.cwd(), "app/routes/app.templates_.$type_.change.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.templates_.$type_.change.tsx"),
       "utf8",
     );
     assert.match(source, /parseBaseLayoutCode/);
@@ -420,12 +420,19 @@ describe("Group 14 Phase A — store isolation", () => {
 });
 
 describe("Group 14 Phase A — UI wiring", () => {
-  it("registers Templates nav and Polaris list/details routes", () => {
+  it("registers Templates via Settings hub and Polaris list/details routes", () => {
     const nav = readFileSync(join(process.cwd(), "app/routes/app.tsx"), "utf8");
-    assert.match(nav, /href="\/app\/templates"/);
+    assert.doesNotMatch(nav, /href="\/app\/settings\/templates"/);
+    assert.doesNotMatch(nav, /href="\/app\/templates"/);
+
+    const settings = readFileSync(
+      join(process.cwd(), "app/routes/app.settings.tsx"),
+      "utf8",
+    );
+    assert.match(settings, /href:\s*"\/app\/settings\/templates"/);
 
     const overview = readFileSync(
-      join(process.cwd(), "app/routes/app.templates.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.templates.tsx"),
       "utf8",
     );
     assert.match(overview, /heading="Templates"/);
@@ -436,7 +443,7 @@ describe("Group 14 Phase A — UI wiring", () => {
     assert.match(overview, /Edit template/);
 
     const change = readFileSync(
-      join(process.cwd(), "app/routes/app.templates_.$type_.change.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.templates_.$type_.change.tsx"),
       "utf8",
     );
     assert.match(change, /heading="Choose a template"/);
@@ -448,7 +455,7 @@ describe("Group 14 Phase A — UI wiring", () => {
     assert.match(change, /TemplateCard/);
 
     const details = readFileSync(
-      join(process.cwd(), "app/routes/app.templates_.$id.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.templates_.$id.tsx"),
       "utf8",
     );
     assert.match(details, /saveTemplateConfig/);

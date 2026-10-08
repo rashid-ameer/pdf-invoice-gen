@@ -345,7 +345,7 @@ function mapTemplateListItem(
       const v = template.updatedAt
         ? new Date(template.updatedAt).toISOString()
         : "";
-      const base = `/app/templates/${encodeURIComponent(template.id)}/thumbnail`;
+      const base = `/app/settings/templates/${encodeURIComponent(template.id)}/thumbnail`;
       return v ? `${base}?v=${encodeURIComponent(v)}` : base;
     })(),
     thumbnailDataUrl:
