@@ -448,7 +448,7 @@ export default function CompanySetupPage() {
                           paddingBlock="small-400"
                           paddingInline="base"
                           borderRadius="base"
-                          background={selected ? "subdued" : "transparent"}
+                          background={selected ? "strong" : "transparent"}
                           accessibilityLabel={`${section.label}${selected ? ", selected" : ""}${incomplete ? ", incomplete" : ""}`}
                           onClick={() => selectSection(index)}
                         >
