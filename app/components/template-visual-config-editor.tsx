@@ -116,7 +116,7 @@ export function TemplateVisualConfigEditor({
           return (
             <s-clickable
               key={value}
-              paddingBlock="small"
+              paddingBlock="small-200"
               paddingInline="large"
               border="none"
               borderRadius="base"
@@ -124,7 +124,7 @@ export function TemplateVisualConfigEditor({
               accessibilityLabel={`${label}${selected ? ", selected" : ""}`}
               onClick={() => setTab(value)}
             >
-              <s-text type="strong">{label}</s-text>
+              <s-text type="strong" fontWeight="semibold">{label}</s-text>
             </s-clickable>
           );
         })}
