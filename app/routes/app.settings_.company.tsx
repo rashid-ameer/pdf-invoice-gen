@@ -460,6 +460,7 @@ export default function CompanySetupPage() {
                         Object.keys(collectStepErrors(index, form)).length > 0;
                       return (
                         <s-clickable
+                          key={section.label}
                           paddingBlock="small-400"
                           paddingInline="base"
                           borderRadius="base"
