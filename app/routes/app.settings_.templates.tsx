@@ -32,9 +32,9 @@ import {
   templatesOverviewHref,
 } from "../utils/template-type-slug";
 
-/** Narrower card list; large preview gets the rest. */
-/** Always side-by-side: type cards | preview (never stacks). */
-const OVERVIEW_COLUMNS = "minmax(0, 36%) minmax(0, 64%)";
+/** Side-by-side only when there is comfortable width; otherwise stack. */
+const OVERVIEW_COLUMNS =
+  "@container (inline-size > 900px) 2fr 3fr, 1fr";
 
 /** Always horizontal inside each type card: thumbnail | details. */
 const TYPE_CARD_BODY_COLUMNS = "72px minmax(0, 1fr)";
@@ -170,10 +170,16 @@ export default function TemplatesOverviewPage() {
           <s-text>Loading templates...</s-text>
         </s-stack>
       ) : (
-        <s-section padding="base">
-          <s-query-container>
-            <s-grid gridTemplateColumns={OVERVIEW_COLUMNS} gap="large-200">
+        <s-query-container>
+          <s-grid gridTemplateColumns={OVERVIEW_COLUMNS} gap="large-200">
+            <s-section>
               <s-stack gap="base">
+                <s-stack gap="none">
+                  <s-heading>Documents templates</s-heading>
+                  <s-text color="subdued">
+                    Select a document type to preview the template it uses.
+                  </s-text>
+                </s-stack>
                 {TEMPLATE_DOC_TYPES.map((doc) => {
                   const entry = data.types.find(
                     (t) => t.documentType === doc.value,
@@ -190,13 +196,15 @@ export default function TemplatesOverviewPage() {
                   );
                 })}
               </s-stack>
+            </s-section>
 
+            <s-section>
               <s-stack gap="base">
                 <s-stack
                   direction="inline"
                   gap="base"
-                  alignItems="center"
                   justifyContent="space-between"
+                  alignItems="center"
                 >
                   <s-heading>Preview</s-heading>
                   <s-stack direction="inline" gap="small-200">
@@ -204,7 +212,6 @@ export default function TemplatesOverviewPage() {
                       <s-button
                         variant="secondary"
                         onClick={() => {
-                          console.log("Clicked")
                           setPendingNav(`edit:${selectedType}`);
                           navigate(
                             `/app/settings/templates/${encodeURIComponent(selectedTemplate.id)}`,
@@ -263,9 +270,9 @@ export default function TemplatesOverviewPage() {
                   />
                 )}
               </s-stack>
-            </s-grid>
-          </s-query-container>
-        </s-section>
+            </s-section>
+          </s-grid>
+        </s-query-container>
       )}
     </s-page>
   );
@@ -333,26 +340,21 @@ function DocumentTypeCard({
                   alignItems="center"
                 >
                   <s-text type="strong" fontWeight="semibold" fontSize="base">{label}</s-text>
-                  <s-badge tone="success">Default</s-badge>
+                  <s-badge tone="neutral">
+                    {template.isSystem ? "System" : "Custom"}
+                  </s-badge>
                 </s-stack>
-                <s-stack gap="none">
-                  <s-text type="strong">
-                    Current template: {template.name}
+                <s-text type="strong">{template.name}</s-text>
+                {updatedLabel ? (
+                  <s-text color="subdued">
+                    Last updated {updatedLabel}
                   </s-text>
-                  {updatedLabel ? (
-                    <s-text color="subdued">
-                      Last updated {updatedLabel}
-                    </s-text>
-                  ) : null}
-                </s-stack>
+                ) : null}
               </s-stack>
             </s-grid>
           ) : (
             <s-stack gap="small-200">
-              <s-stack direction="inline" gap="small-200" alignItems="center">
-                <s-text type="strong">{label}</s-text>
-                <s-badge tone="success">Default</s-badge>
-              </s-stack>
+              <s-text type="strong">{label}</s-text>
               <s-text color="subdued">No template selected</s-text>
             </s-stack>
           )}
