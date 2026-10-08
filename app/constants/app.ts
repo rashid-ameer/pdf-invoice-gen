@@ -6,3 +6,6 @@ export const APP_LOCALE = "en-US";
 
 /** Fallback currency when the store has none set. */
 export const DEFAULT_CURRENCY = "USD";
+
+/** Set false to hide Compliance from nav (route remains available). Old parity. */
+export const SHOW_COMPLIANCE_PAGE = false;

@@ -482,7 +482,7 @@ describe("Group 16 — store isolation + route wiring", () => {
     assert.equal(pageB?.asp.connected, false);
   });
 
-  it("compliance route and nav are wired; credentials never in page source", () => {
+  it("compliance route is wired; nav hidden when SHOW_COMPLIANCE_PAGE is false", () => {
     const route = readFileSync(
       join(process.cwd(), "app/routes/app.compliance.tsx"),
       "utf8",
@@ -494,10 +494,17 @@ describe("Group 16 — store isolation + route wiring", () => {
     assert.match(route, /setInvoiceMode/);
     assert.doesNotMatch(route, /credentialsRef/);
 
+    const constants = readFileSync(
+      join(process.cwd(), "app/constants/app.ts"),
+      "utf8",
+    );
+    assert.match(constants, /SHOW_COMPLIANCE_PAGE\s*=\s*false/);
+
     const nav = readFileSync(
       join(process.cwd(), "app/routes/app.tsx"),
       "utf8",
     );
+    assert.match(nav, /SHOW_COMPLIANCE_PAGE/);
     assert.match(nav, /href="\/app\/compliance"/);
   });
 });

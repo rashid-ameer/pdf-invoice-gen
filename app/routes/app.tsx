@@ -3,6 +3,7 @@ import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
+import { SHOW_COMPLIANCE_PAGE } from "../constants/app";
 import { authenticate } from "../shopify.server";
 import { isNetworkFetchError } from "../utils/network-error";
 
@@ -26,7 +27,9 @@ export default function App() {
         <s-link href="/app/templates">Templates</s-link>
         <s-link href="/app/delivery">Email</s-link>
         <s-link href="/app/branding">Branding</s-link>
-        <s-link href="/app/compliance">Compliance</s-link>
+        {SHOW_COMPLIANCE_PAGE ? (
+          <s-link href="/app/compliance">Compliance</s-link>
+        ) : null}
         <s-link href="/app/settings">Company setup</s-link>
         <s-link href="/app/help">Help &amp; Support</s-link>
       </s-app-nav>
