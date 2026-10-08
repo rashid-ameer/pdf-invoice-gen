@@ -12,7 +12,7 @@ type SettingsArea = {
   id: string;
   title: string;
   description: string;
-  /** Set later to enable navigation (e.g. "/app/company-setup"). */
+  /** Set later to enable navigation (e.g. "/app/settings/company"). */
   href?: string;
   status?: "incomplete";
 };
@@ -23,6 +23,7 @@ const SETTINGS_AREAS: SettingsArea[] = [
     title: "Company",
     description:
       "Business name, address, tax details, and contact information.",
+    href: "/app/settings/company",
   },
   {
     id: "branding",

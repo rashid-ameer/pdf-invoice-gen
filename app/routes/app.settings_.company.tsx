@@ -438,6 +438,9 @@ export default function CompanySetupPage() {
 
   return (
     <s-page heading="Company setup" inlineSize="base">
+      <s-link slot="breadcrumb-actions" href="/app/settings">
+        Settings
+      </s-link>
       <ui-save-bar id={SAVE_BAR_ID}>
         <button
           variant="primary"

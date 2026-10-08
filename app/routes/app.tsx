@@ -31,7 +31,6 @@ export default function App() {
           <s-link href="/app/compliance">Compliance</s-link>
         ) : null}
         <s-link href="/app/settings">Settings</s-link>
-        <s-link href="/app/company-setup">Company setup</s-link>
         <s-link href="/app/help">Help &amp; Support</s-link>
       </s-app-nav>
       <Outlet />
