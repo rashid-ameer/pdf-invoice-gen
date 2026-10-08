@@ -15,6 +15,7 @@ import {
   useNavigation,
   useParams,
   useRouteError,
+  useSearchParams,
 } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -26,6 +27,11 @@ import {
   DELETE_MODAL_ID,
   TemplateCard,
 } from "../components/template-list-card";
+import {
+  initialSetupTemplateHref,
+  isInitialSetupQuery,
+} from "../models/initial-setup";
+import { getInitialSetupState } from "../models/initial-setup.server";
 import {
   createCustomTemplate,
   deleteCustomTemplate,
@@ -176,10 +182,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         error: "Template not found",
       };
     }
+
+    // Onboarding-only progression: never redirect during normal template use.
+    let setupNextHref: string | null = null;
+    if (isInitialSetupQuery(String(formData.get("setup") ?? ""))) {
+      const setup = await getInitialSetupState(session.shop);
+      if (setup?.locked) {
+        setupNextHref = setup.nextTemplateType
+          ? initialSetupTemplateHref(setup.nextTemplateType)
+          : "/app";
+      }
+    }
+
     return {
       ok: true as const,
       intent: "set-default" as const,
       message: `Default ${documentTypeLabel(parseDocumentType(updated.documentType)).toLowerCase().replace(/s$/, "")} template updated.`,
+      setupNextHref,
     };
   }
 
@@ -221,6 +240,8 @@ export default function ChooseTemplatePage() {
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const navigation = useNavigation();
+  const [searchParams] = useSearchParams();
+  const setupMode = isInitialSetupQuery(searchParams.get("setup"));
   const [kindFilter, setKindFilter] = useState<"all" | "custom" | "system">(
     "all",
   );
@@ -299,6 +320,13 @@ export default function ChooseTemplatePage() {
 
     if (fetcher.data.intent === "set-default") {
       shopify.toast.show("Template selected");
+      if (
+        "setupNextHref" in fetcher.data &&
+        typeof fetcher.data.setupNextHref === "string" &&
+        fetcher.data.setupNextHref
+      ) {
+        navigate(fetcher.data.setupNextHref);
+      }
       return;
     }
 
@@ -509,7 +537,10 @@ export default function ChooseTemplatePage() {
                   onSelect={() => {
                     setActionError(null);
                     setSelectingId(item.id);
-                    submitIntent("set-default", { templateId: item.id });
+                    submitIntent("set-default", {
+                      templateId: item.id,
+                      ...(setupMode ? { setup: "1" } : {}),
+                    });
                   }}
                   onRequestDelete={() => setDeleteTarget(item)}
                 />

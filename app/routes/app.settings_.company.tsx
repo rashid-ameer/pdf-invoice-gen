@@ -5,6 +5,7 @@ import type {
   LoaderFunctionArgs,
 } from "react-router";
 import {
+  redirect,
   useActionData,
   useLoaderData,
   useNavigation,
@@ -13,6 +14,7 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { getInitialSetupState } from "../models/initial-setup.server";
 import {
   OnboardingError,
   loadCompanySetup,
@@ -274,13 +276,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   try {
     await saveCompanySetup(session.shop, body);
-    return { ok: true as const };
   } catch (error) {
     if (error instanceof OnboardingError) {
       return { error: error.message };
     }
     throw error;
   }
+
+  // During initial setup only: return to the Home setup checklist.
+  const setup = await getInitialSetupState(session.shop);
+  if (setup?.locked) {
+    throw redirect("/app");
+  }
+
+  return { ok: true as const };
 };
 
 export default function CompanySetupPage() {

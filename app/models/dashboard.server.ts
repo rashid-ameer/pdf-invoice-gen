@@ -9,25 +9,46 @@ import { authenticate } from "../shopify.server";
 import {
   parseHomeCompare,
   parseHomeDateRange,
+  type HomeActionData,
   type HomeChartActionData,
   type HomeChartPoint,
   type HomeChartSeries,
   type HomeCompare,
   type HomeDateRange,
+  type HomeInitialSetup,
   type HomeLoaderData,
   type HomeTotals,
 } from "./dashboard";
+import {
+  finishInitialSetup,
+  getInitialSetupState,
+} from "./initial-setup.server";
 import { getActiveStoreForShop } from "./template.server";
 
 export type {
+  HomeActionData,
   HomeChartActionData,
   HomeChartPoint,
   HomeChartSeries,
   HomeCompare,
   HomeDateRange,
+  HomeFinishSetupActionData,
+  HomeInitialSetup,
   HomeLoaderData,
   HomeTotals,
 } from "./dashboard";
+
+function toHomeInitialSetup(
+  state: NonNullable<Awaited<ReturnType<typeof getInitialSetupState>>>,
+): HomeInitialSetup {
+  return {
+    locked: state.locked,
+    companyComplete: state.companyComplete,
+    templatesComplete: state.templatesComplete,
+    stagesComplete: state.stagesComplete,
+    nextTemplateType: state.nextTemplateType,
+  };
+}
 
 const DEFAULT_RANGE: HomeDateRange = "30";
 const DEFAULT_COMPARE: HomeCompare = "previous";
@@ -185,11 +206,24 @@ export async function getHomeChartSeries(
   };
 }
 
-/** Initial page load: totals + default chart (30 days, previous period). */
+/** Initial page load: setup gate, or totals + default chart. */
 export async function loader({
   request,
 }: LoaderFunctionArgs): Promise<HomeLoaderData> {
   const { session } = await authenticate.admin(request);
+  const setupState = await getInitialSetupState(session.shop);
+  const initialSetup =
+    setupState?.locked === true ? toHomeInitialSetup(setupState) : null;
+
+  if (initialSetup) {
+    return {
+      initialSetup,
+      totals: null,
+      totalsError: null,
+      chart: null,
+      chartError: null,
+    };
+  }
 
   let totals: HomeTotals | null = null;
   let totalsError: string | null = null;
@@ -220,16 +254,29 @@ export async function loader({
     chartError = "We couldn't load the chart";
   }
 
-  return { totals, totalsError, chart, chartError };
+  return { initialSetup: null, totals, totalsError, chart, chartError };
 }
 
-/** Chart-only refresh from filters (no URL search params). */
+/** Chart refresh or Finish setup. */
 export async function action({
   request,
-}: ActionFunctionArgs): Promise<HomeChartActionData> {
+}: ActionFunctionArgs): Promise<HomeActionData> {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
+
+  if (intent === "finish-setup") {
+    const result = await finishInitialSetup(session.shop);
+    if (!result.ok) {
+      return {
+        intent: "finish-setup",
+        ok: false,
+        error: result.error,
+      };
+    }
+    return { intent: "finish-setup", ok: true, error: null };
+  }
+
   if (intent !== "chart") {
     return {
       intent: "chart",

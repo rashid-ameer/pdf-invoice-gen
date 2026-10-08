@@ -1,5 +1,7 @@
 /** Client-safe Home dashboard types and filter parsers. */
 
+import type { DocumentType } from "../types/index";
+
 export type HomeDateRange = "7" | "30";
 export type HomeCompare = "previous" | "none";
 
@@ -31,7 +33,17 @@ export type HomeChartSeries = {
   emptyCurrentPeriod: boolean;
 };
 
+/** Client-safe slice of initial setup for the Home onboarding UI. */
+export type HomeInitialSetup = {
+  locked: boolean;
+  companyComplete: boolean;
+  templatesComplete: boolean;
+  stagesComplete: boolean;
+  nextTemplateType: DocumentType | null;
+};
+
 export type HomeLoaderData = {
+  initialSetup: HomeInitialSetup | null;
   totals: HomeTotals | null;
   totalsError: string | null;
   chart: HomeChartSeries | null;
@@ -45,6 +57,14 @@ export type HomeChartActionData = {
   range: HomeDateRange;
   compare: HomeCompare;
 };
+
+export type HomeFinishSetupActionData = {
+  intent: "finish-setup";
+  ok: boolean;
+  error: string | null;
+};
+
+export type HomeActionData = HomeChartActionData | HomeFinishSetupActionData;
 
 export function parseHomeDateRange(value: string | null | undefined): HomeDateRange {
   return value === "7" ? "7" : "30";

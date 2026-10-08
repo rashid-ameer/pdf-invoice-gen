@@ -5,15 +5,19 @@ import {
   useLoaderData,
   useNavigation,
 } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { HomeInvoiceChart } from "../components/home-invoice-chart";
 import {
+  type HomeActionData,
   type HomeChartActionData,
   type HomeCompare,
   type HomeDateRange,
+  type HomeInitialSetup,
   type HomeLoaderData,
 } from "../models/dashboard";
+import { initialSetupTemplateHref } from "../models/initial-setup";
 
 export { action, loader } from "../models/dashboard.server";
 
@@ -44,6 +48,171 @@ const COMPARE_LABELS: Record<HomeCompare, string> = {
 
 export default function HomePage() {
   const loaderData = useLoaderData<HomeLoaderData>();
+
+  if (loaderData.initialSetup?.locked) {
+    return <InitialSetupPage setup={loaderData.initialSetup} />;
+  }
+
+  return <HomeDashboard loaderData={loaderData} />;
+}
+
+function InitialSetupPage({ setup }: { setup: HomeInitialSetup }) {
+  const shopify = useAppBridge();
+  const finishFetcher = useFetcher<HomeActionData>();
+  const finishing =
+    finishFetcher.state === "submitting" || finishFetcher.state === "loading";
+
+  const completedCount =
+    (setup.companyComplete ? 1 : 0) + (setup.templatesComplete ? 1 : 0);
+
+  const templatesHref = setup.nextTemplateType
+    ? initialSetupTemplateHref(setup.nextTemplateType)
+    : "/app/settings/templates?setup=1";
+
+  useEffect(() => {
+    if (finishFetcher.state !== "idle" || !finishFetcher.data) return;
+    if (finishFetcher.data.intent !== "finish-setup") return;
+    if (finishFetcher.data.ok) {
+      shopify.toast.show("Setup complete");
+      // Full navigation so app layout reloads and restores the sidebar.
+      window.location.assign("/app");
+      return;
+    }
+    shopify.toast.show(
+      finishFetcher.data.error || "Couldn't finish setup",
+      { isError: true },
+    );
+  }, [finishFetcher.state, finishFetcher.data, shopify]);
+
+  const finishSetup = () => {
+    if (finishing || !setup.stagesComplete) return;
+    const body = new FormData();
+    body.set("intent", "finish-setup");
+    finishFetcher.submit(body, { method: "post" });
+  };
+
+  return (
+    <s-page heading="Initial setup">
+      <s-section>
+        <s-stack gap="base">
+          <s-stack gap="small-200">
+            <s-heading>Get your app ready</s-heading>
+            <s-paragraph>
+              Complete these required steps before using invoices and other
+              features.
+            </s-paragraph>
+            <s-text color="subdued">
+              {completedCount} of 2 steps completed
+            </s-text>
+          </s-stack>
+
+          {finishFetcher.data?.intent === "finish-setup" &&
+          !finishFetcher.data.ok &&
+          finishFetcher.data.error ? (
+            <s-banner tone="critical" heading="Couldn't finish setup">
+              {finishFetcher.data.error}
+            </s-banner>
+          ) : null}
+
+          <s-box border="base" borderRadius="base" background="base">
+            <s-stack gap="none">
+              <SetupStepRow
+                complete={setup.companyComplete}
+                title="Company setup"
+                description="Add your legal name, tax IDs, address, and invoice defaults."
+                actionLabel={
+                  setup.companyComplete ? "Review company" : "Complete company setup"
+                }
+                actionHref="/app/settings/company"
+              />
+              <s-divider />
+              <SetupStepRow
+                complete={setup.templatesComplete}
+                title="Default templates"
+                description="Choose a default template for invoices, packing slips, credit notes, and refund documents."
+                actionLabel={
+                  setup.templatesComplete
+                    ? "Review templates"
+                    : setup.companyComplete
+                      ? "Choose templates"
+                      : "Complete company setup first"
+                }
+                actionHref={
+                  setup.companyComplete ? templatesHref : "/app/settings/company"
+                }
+                actionDisabled={!setup.companyComplete && !setup.templatesComplete}
+              />
+            </s-stack>
+          </s-box>
+
+          <s-stack direction="inline" gap="base" justifyContent="end">
+            <s-button
+              variant="primary"
+              onClick={finishSetup}
+              {...(setup.stagesComplete && !finishing
+                ? {}
+                : { disabled: true })}
+              {...(finishing ? { loading: true } : {})}
+            >
+              Finish setup
+            </s-button>
+          </s-stack>
+        </s-stack>
+      </s-section>
+    </s-page>
+  );
+}
+
+function SetupStepRow({
+  complete,
+  title,
+  description,
+  actionLabel,
+  actionHref,
+  actionDisabled,
+}: {
+  complete: boolean;
+  title: string;
+  description: string;
+  actionLabel: string;
+  actionHref: string;
+  actionDisabled?: boolean;
+}) {
+  return (
+    <s-box padding="base">
+      <s-grid
+        gridTemplateColumns="auto 1fr auto"
+        gap="base"
+        alignItems="center"
+      >
+        <s-checkbox
+          label={title}
+          checked={complete || undefined}
+          disabled
+          accessibilityLabel={
+            complete ? `${title}: completed` : `${title}: incomplete`
+          }
+        />
+        <s-stack gap="none">
+          <s-text color="subdued">{description}</s-text>
+        </s-stack>
+        {complete ? (
+          <s-badge tone="success">Completed</s-badge>
+        ) : (
+          <s-button
+            variant="primary"
+            href={actionHref}
+            {...(actionDisabled ? { disabled: true } : {})}
+          >
+            {actionLabel}
+          </s-button>
+        )}
+      </s-grid>
+    </s-box>
+  );
+}
+
+function HomeDashboard({ loaderData }: { loaderData: HomeLoaderData }) {
   const navigation = useNavigation();
   const chartFetcher = useFetcher<HomeChartActionData>();
 
@@ -123,7 +292,12 @@ export default function HomePage() {
           </s-banner>
         ) : null}
 
-        <s-box padding="base" background="subdued" border="base" borderRadius="large">
+        <s-box
+          padding="base"
+          background="subdued"
+          border="base"
+          borderRadius="large"
+        >
           <s-grid
             gridTemplateColumns="1fr auto"
             gap="base"
