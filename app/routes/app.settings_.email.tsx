@@ -15,11 +15,13 @@ import {
   type DeliverySettings,
   type EmailInvoiceWhen,
 } from "../models/document-email.server";
+import type { EmailLayout } from "../models/email-template.server";
 import { authenticate } from "../shopify.server";
 
 /**
  * Email configuration — which document emails auto-send, and when.
- * Template editing lives at /app/settings/email/:type. Layout lives on Branding.
+ * Template editing lives at /app/settings/email/:type.
+ * Email layout (shared across types) lives here, matching the old Delivery page.
  */
 
 const SAVE_BAR_ID = "email-config-save-bar";
@@ -33,6 +35,7 @@ type ConfigForm = {
   fromName: string;
   replyTo: string;
   ccStaff: string;
+  emailLayout: EmailLayout;
 };
 
 type ActionResult =
@@ -79,6 +82,10 @@ const DOCUMENT_TYPES: DocumentTypeConfig[] = [
   },
 ];
 
+function normalizeEmailLayout(value: string | undefined): EmailLayout {
+  return value === "minimal" || value === "card" ? value : "classic";
+}
+
 function toConfigForm(settings: DeliverySettings): ConfigForm {
   return {
     invoiceAutoSend: settings.invoiceAutoSend,
@@ -88,6 +95,7 @@ function toConfigForm(settings: DeliverySettings): ConfigForm {
     fromName: settings.fromName,
     replyTo: settings.replyTo,
     ccStaff: settings.ccStaff,
+    emailLayout: normalizeEmailLayout(settings.emailLayout),
   };
 }
 
@@ -147,6 +155,7 @@ export const action = async ({
     fromName: readString(formData, "fromName"),
     replyTo,
     ccStaff: readString(formData, "ccStaff"),
+    emailLayout: normalizeEmailLayout(readString(formData, "emailLayout")),
   });
 
   if (!saved) {
@@ -270,6 +279,7 @@ export default function EmailConfigPage() {
     body.set("fromName", form.fromName);
     body.set("replyTo", form.replyTo);
     body.set("ccStaff", form.ccStaff);
+    body.set("emailLayout", form.emailLayout);
     saveFetcher.submit(body, { method: "post" });
   };
 
@@ -354,6 +364,34 @@ export default function EmailConfigPage() {
             }
           />
         ))}
+
+        <s-section
+          heading="Email layout"
+          subheading="Uses logo and colors from Branding. Applies to all email types."
+        >
+          <s-choice-list
+            label="Email layout"
+            name="emailLayout"
+            values={[form.emailLayout]}
+            onChange={(event: Event) => {
+              const values = (
+                event.currentTarget as unknown as { values?: string[] }
+              ).values;
+              const next = values?.[0];
+              patch("emailLayout", normalizeEmailLayout(next));
+            }}
+          >
+            <s-choice value="minimal">
+              Minimal: clean white layout with logo header
+            </s-choice>
+            <s-choice value="classic">
+              Classic: brand-colored header bar (recommended)
+            </s-choice>
+            <s-choice value="card">
+              Card: centered card on a soft background
+            </s-choice>
+          </s-choice-list>
+        </s-section>
       </s-stack>
 
       <s-box slot="aside">

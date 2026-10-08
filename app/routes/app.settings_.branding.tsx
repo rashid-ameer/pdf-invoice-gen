@@ -21,11 +21,6 @@ import {
   getBrandingInputForShop,
   saveBrandingForShop,
 } from "../models/branding.server";
-import {
-  getDeliverySettings,
-  saveDeliverySettings,
-} from "../models/document-email.server";
-import type { EmailLayout } from "../models/email-template.server";
 import { authenticate } from "../shopify.server";
 import { buildBrandingPreviewSrcDoc } from "../utils/branding-preview";
 import { isNetworkFetchError } from "../utils/network-error";
@@ -45,11 +40,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       status: 404,
     });
   }
-  const delivery = await getDeliverySettings(session.shop);
-  return {
-    branding,
-    emailLayout: (delivery?.emailLayout ?? "classic") as EmailLayout,
-  };
+  return { branding };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -57,11 +48,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const formData = await request.formData();
   const logoData = String(formData.get("logoData") ?? "").trim();
   const logoUrl = String(formData.get("logoUrl") ?? "").trim();
-  const emailLayoutRaw = String(formData.get("emailLayout") ?? "classic").trim();
-  const emailLayout: EmailLayout =
-    emailLayoutRaw === "minimal" || emailLayoutRaw === "card"
-      ? emailLayoutRaw
-      : "classic";
 
   const result = await saveBrandingForShop(
     session.shop,
@@ -83,15 +69,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return {
       error: result.error,
       branding: result.branding,
-      emailLayout,
     };
   }
 
-  const delivery = await saveDeliverySettings(session.shop, { emailLayout });
   return {
     ok: true as const,
     branding: result.branding,
-    emailLayout: (delivery?.emailLayout ?? emailLayout) as EmailLayout,
   };
 };
 
@@ -108,21 +91,10 @@ export default function BrandingPage() {
     fetcher.data && "branding" in fetcher.data
       ? fetcher.data.branding
       : loaderData.branding;
-  const serverEmailLayout: EmailLayout =
-    fetcher.data && "emailLayout" in fetcher.data && fetcher.data.emailLayout
-      ? fetcher.data.emailLayout
-      : loaderData.emailLayout;
-  const serverKey = JSON.stringify({
-    branding: serverBranding,
-    emailLayout: serverEmailLayout,
-  });
+  const serverKey = JSON.stringify(serverBranding);
 
   const [baseline, setBaseline] = useState<StoreBrandingFormData>(serverBranding);
   const [form, setForm] = useState<StoreBrandingFormData>(serverBranding);
-  const [emailLayout, setEmailLayout] =
-    useState<EmailLayout>(serverEmailLayout);
-  const [baselineEmailLayout, setBaselineEmailLayout] =
-    useState<EmailLayout>(serverEmailLayout);
   const [logo, setLogo] = useState<InvoiceLogoValue>(() =>
     invoiceLogoFromStoredUrl(serverBranding.logoUrl),
   );
@@ -137,8 +109,6 @@ export default function BrandingPage() {
   useEffect(() => {
     setForm(serverBranding);
     setBaseline(serverBranding);
-    setEmailLayout(serverEmailLayout);
-    setBaselineEmailLayout(serverEmailLayout);
     const nextLogo = invoiceLogoFromStoredUrl(serverBranding.logoUrl);
     setLogo(nextLogo);
     setBaselineLogo(nextLogo);
@@ -163,7 +133,7 @@ export default function BrandingPage() {
 
     if ("ok" in fetcher.data && fetcher.data.ok) {
       setSaveError("");
-      shopify.toast.show("Invoice branding saved");
+      shopify.toast.show("Branding saved");
       shopify.saveBar.hide(SAVE_BAR_ID);
       return;
     }
@@ -183,10 +153,9 @@ export default function BrandingPage() {
   const dirty = useMemo(
     () =>
       JSON.stringify(form) !== JSON.stringify(baseline) ||
-      emailLayout !== baselineEmailLayout ||
       logo.src !== baselineLogo.src ||
       logo.source !== baselineLogo.source,
-    [form, baseline, emailLayout, baselineEmailLayout, logo, baselineLogo],
+    [form, baseline, logo, baselineLogo],
   );
 
   useEffect(() => {
@@ -211,7 +180,6 @@ export default function BrandingPage() {
   const discardChanges = () => {
     if (saving) return;
     setForm(baseline);
-    setEmailLayout(baselineEmailLayout);
     setLogo(baselineLogo);
     setLogoResetToken((token) => token + 1);
     setHexError("");
@@ -240,14 +208,13 @@ export default function BrandingPage() {
     body.set("secondaryColor", form.secondaryColor);
     body.set("accentColor", form.accentColor);
     body.set("footerText", form.footerText);
-    body.set("emailLayout", emailLayout);
     dataAtSubmit.current = fetcher.data;
     awaitingResult.current = true;
     fetcher.submit(body, { method: "post" });
   };
 
   return (
-    <s-page heading="Invoice branding" inlineSize="base">
+    <s-page heading="Branding" inlineSize="base">
       <s-link slot="breadcrumb-actions" href="/app/settings">
         Settings
       </s-link>
@@ -358,35 +325,6 @@ export default function BrandingPage() {
               />
             </s-section>
 
-            <s-section
-              heading="Email layout"
-              subheading="Choose how your emails look. Applies to all email types."
-            >
-              <s-choice-list
-                label="Email layout"
-                name="emailLayout"
-                values={[emailLayout]}
-                onChange={(event: Event) => {
-                  const values = (
-                    event.currentTarget as unknown as { values?: string[] }
-                  ).values;
-                  const next = values?.[0];
-                  setEmailLayout(
-                    next === "minimal" || next === "card" ? next : "classic",
-                  );
-                }}
-              >
-                <s-choice value="minimal">
-                  Minimal: clean white layout with logo header
-                </s-choice>
-                <s-choice value="classic">
-                  Classic: brand-colored header bar (recommended)
-                </s-choice>
-                <s-choice value="card">
-                  Card: centered card on a soft background
-                </s-choice>
-              </s-choice-list>
-            </s-section>
           </s-stack>
 
           <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
@@ -495,7 +433,7 @@ function InvoiceBrandingPreview({
       >
         <iframe
           ref={iframeRef}
-          title="Invoice branding live preview"
+          title="Branding live preview"
           srcDoc={srcDoc}
           sandbox="allow-same-origin"
           onLoad={fitIframe}
@@ -581,7 +519,7 @@ export function ErrorBoundary() {
 
   if (isNetworkFetchError(error)) {
     return (
-      <s-page heading="Invoice branding" inlineSize="base">
+      <s-page heading="Branding" inlineSize="base">
         <s-link slot="breadcrumb-actions" href="/app/settings">
           Settings
         </s-link>

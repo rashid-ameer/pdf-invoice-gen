@@ -53,7 +53,7 @@ describe("Email config page UI wiring", () => {
     assert.match(settings, /href:\s*"\/app\/settings\/email"/);
   });
 
-  it("is configuration-only: switches, sender, recipients — no templates or layout", () => {
+  it("is configuration-only: switches, sender, recipients, and shared email layout", () => {
     const page = readFileSync(
       join(process.cwd(), "app/routes/app.settings_.email.tsx"),
       "utf8",
@@ -80,10 +80,14 @@ describe("Email config page UI wiring", () => {
 
     assert.doesNotMatch(page, /Live preview/);
     assert.doesNotMatch(page, /Email templates/);
-    assert.doesNotMatch(page, /emailLayout/);
     assert.doesNotMatch(page, /Subject line/);
     assert.doesNotMatch(page, /s-checkbox[\s\S]*Enabled|Disabled/);
     assert.doesNotMatch(page, /name=["']RESEND_API_KEY["']/);
+    assert.match(page, /Email layout/);
+    assert.match(page, /emailLayout/);
+    assert.match(page, /Minimal: clean white layout/);
+    assert.match(page, /Classic: brand-colored header bar/);
+    assert.match(page, /Card: centered card on a soft background/);
   });
 
   it("wires edit-template route for all three types and invalid type", () => {
@@ -140,18 +144,23 @@ describe("Email config page UI wiring", () => {
     assert.doesNotMatch(editor, /image/);
   });
 
-  it("moves email layout to Branding page", () => {
+  it("keeps email layout on the Email page (not Branding)", () => {
     const branding = readFileSync(
       join(process.cwd(), "app/routes/app.settings_.branding.tsx"),
       "utf8",
     );
-    assert.match(branding, /Email layout/);
-    assert.match(branding, /Applies to all email types/);
-    assert.match(branding, /Minimal: clean white layout/);
-    assert.match(branding, /Classic: brand-colored header bar/);
-    assert.match(branding, /Card: centered card on a soft background/);
-    assert.match(branding, /saveDeliverySettings/);
-    assert.match(branding, /getDeliverySettings/);
+    assert.doesNotMatch(branding, /Email layout/);
+    assert.doesNotMatch(branding, /emailLayout/);
+    assert.doesNotMatch(branding, /saveDeliverySettings/);
+    assert.match(branding, /heading="Branding"/);
+
+    const email = readFileSync(
+      join(process.cwd(), "app/routes/app.settings_.email.tsx"),
+      "utf8",
+    );
+    assert.match(email, /Email layout/);
+    assert.match(email, /emailLayout/);
+    assert.match(email, /Uses logo and colors from Branding/);
   });
 });
 
