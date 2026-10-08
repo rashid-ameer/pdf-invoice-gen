@@ -1,23 +1,17 @@
 /**
- * Settings hub — lists settings areas. No forms; rows do not navigate yet.
- * Set `href` on a row's s-clickable when that destination is ready.
+ * Settings hub — lists settings areas.
  */
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import {
+  SettingsNavRow,
+  type SettingsNavItem,
+} from "../components/settings-nav-row";
 import { authenticate } from "../shopify.server";
 
-type SettingsArea = {
-  id: string;
-  title: string;
-  description: string;
-  /** Set later to enable navigation (e.g. "/app/settings/company"). */
-  href?: string;
-  status?: "incomplete";
-};
-
-const SETTINGS_AREAS: SettingsArea[] = [
+const SETTINGS_AREAS: SettingsNavItem[] = [
   {
     id: "company",
     title: "Company",
@@ -61,7 +55,7 @@ export default function SettingsPage() {
             <s-stack gap="none">
               {SETTINGS_AREAS.map((area, index) => (
                 <s-stack key={area.id} gap="none">
-                  <SettingsAreaRow area={area} />
+                  <SettingsNavRow item={area} />
                   {index < SETTINGS_AREAS.length - 1 ? <s-divider /> : null}
                 </s-stack>
               ))}
@@ -70,34 +64,6 @@ export default function SettingsPage() {
         </s-stack>
       </s-section>
     </s-page>
-  );
-}
-
-function SettingsAreaRow({ area }: { area: SettingsArea }) {
-  const accessibilityLabel = `${area.title}: ${area.description}`;
-  const clickableProps = area.href
-    ? { href: area.href, accessibilityLabel }
-    : { accessibilityLabel };
-
-  return (
-    <s-clickable padding="base" {...clickableProps}>
-      <s-grid
-        gridTemplateColumns="1fr auto"
-        gap="base"
-        alignItems="center"
-      >
-        <s-stack gap="none">
-          <s-stack direction="inline" gap="small-200" alignItems="center">
-            <s-heading>{area.title}</s-heading>
-            {area.status === "incomplete" ? (
-              <s-badge tone="warning">Incomplete</s-badge>
-            ) : null}
-          </s-stack>
-          <s-text color="subdued">{area.description}</s-text>
-        </s-stack>
-        <s-icon type="chevron-right" />
-      </s-grid>
-    </s-clickable>
   );
 }
 

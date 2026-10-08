@@ -33,14 +33,13 @@ async function seedStore() {
       shopifyDomain: `delivery-ui-${randomUUID()}.myshopify.com`,
       accessToken: encryptSecret("tok")!,
       status: "active",
-      currency: "AED",
     },
   });
   cleanup.push({ merchantId: merchant.id, storeId: store.id });
   return store;
 }
 
-describe("Email config page UI wiring", () => {
+describe("Email hub UI wiring", () => {
   it("exposes Email via Settings hub, not sidebar", () => {
     const nav = readFileSync(join(process.cwd(), "app/routes/app.tsx"), "utf8");
     assert.doesNotMatch(nav, /href="\/app\/settings\/email"/);
@@ -51,9 +50,10 @@ describe("Email config page UI wiring", () => {
       "utf8",
     );
     assert.match(settings, /href:\s*"\/app\/settings\/email"/);
+    assert.match(settings, /SettingsNavRow/);
   });
 
-  it("is configuration-only: switches, sender, recipients, and shared email layout", () => {
+  it("is a hub with three rows matching Settings hub structure", () => {
     const page = readFileSync(
       join(process.cwd(), "app/routes/app.settings_.email.tsx"),
       "utf8",
@@ -61,33 +61,82 @@ describe("Email config page UI wiring", () => {
 
     assert.match(page, /heading="Email"/);
     assert.match(page, /breadcrumb-actions[\s\S]*Settings/);
+    assert.match(page, /Choose an email setting/);
+    assert.match(page, /SettingsNavRow/);
+    assert.match(page, /EmailSandboxBanner/);
+    assert.match(page, /Automated emails/);
+    assert.match(page, /Sender and recipients/);
+    assert.match(page, /Email templates/);
+    assert.match(page, /\/app\/settings\/email\/automated-emails/);
+    assert.match(page, /\/app\/settings\/email\/sender-recipients/);
+    assert.match(page, /\/app\/settings\/email\/templates/);
+    assert.match(page, /Sandbox mode|EmailSandboxBanner/);
+
+    assert.doesNotMatch(page, /s-switch/);
+    assert.doesNotMatch(page, /Edit template/);
+    assert.doesNotMatch(page, /Minimal: clean white layout/);
+    assert.doesNotMatch(page, /slot="aside"/);
+    assert.doesNotMatch(page, /From name/);
+  });
+
+  it("wires Automated emails page with toggles only", () => {
+    const page = readFileSync(
+      join(
+        process.cwd(),
+        "app/routes/app.settings_.email_.automated-emails.tsx",
+      ),
+      "utf8",
+    );
+    assert.match(page, /heading="Automated emails"/);
+    assert.match(page, /href="\/app\/settings\/email"/);
     assert.match(page, /Tax invoices/);
     assert.match(page, /Credit notes/);
     assert.match(page, /Refund documents/);
-    assert.match(page, /Sender/);
-    assert.match(page, /Recipients/);
     assert.match(page, /s-switch/);
     assert.match(page, /Send when/);
-    assert.match(page, /Edit template/);
+    assert.match(page, /ui-save-bar/);
+    assert.match(page, /saveDeliverySettings/);
+    assert.doesNotMatch(page, /Edit template/);
+    assert.doesNotMatch(page, /From name/);
+    assert.doesNotMatch(page, /EmailSandboxBanner/);
+    assert.doesNotMatch(page, /emailLayout/);
+  });
+
+  it("wires Sender and recipients page with fields and sandbox banner", () => {
+    const page = readFileSync(
+      join(
+        process.cwd(),
+        "app/routes/app.settings_.email_.sender-recipients.tsx",
+      ),
+      "utf8",
+    );
+    assert.match(page, /heading="Sender and recipients"/);
+    assert.match(page, /href="\/app\/settings\/email"/);
+    assert.match(page, /From name/);
+    assert.match(page, /Reply-to/);
+    assert.match(page, /CC staff/);
+    assert.match(page, /EmailSandboxBanner/);
+    assert.match(page, /ui-save-bar/);
+    assert.match(page, /saveDeliverySettings/);
+    assert.doesNotMatch(page, /s-switch/);
+    assert.doesNotMatch(page, /emailLayout/);
+  });
+
+  it("wires Email templates list page to existing editors", () => {
+    const page = readFileSync(
+      join(process.cwd(), "app/routes/app.settings_.email_.templates.tsx"),
+      "utf8",
+    );
+    assert.match(page, /heading="Email templates"/);
+    assert.match(page, /href="\/app\/settings\/email"/);
+    assert.match(page, /Tax invoice email/);
+    assert.match(page, /Credit note email/);
+    assert.match(page, /Refund document email/);
     assert.match(page, /\/app\/settings\/email\/invoice/);
     assert.match(page, /\/app\/settings\/email\/credit-note/);
     assert.match(page, /\/app\/settings\/email\/refund/);
-    assert.match(page, /enabled", "1"/);
-    assert.match(page, /ui-save-bar/);
-    assert.match(page, /slot="aside"/);
-    assert.match(page, /Sandbox mode/);
-    assert.match(page, /resend\.com\/domains/);
-
-    assert.doesNotMatch(page, /Live preview/);
-    assert.doesNotMatch(page, /Email templates/);
-    assert.doesNotMatch(page, /Subject line/);
-    assert.doesNotMatch(page, /s-checkbox[\s\S]*Enabled|Disabled/);
-    assert.doesNotMatch(page, /name=["']RESEND_API_KEY["']/);
-    assert.match(page, /Email layout/);
-    assert.match(page, /emailLayout/);
-    assert.match(page, /Minimal: clean white layout/);
-    assert.match(page, /Classic: brand-colored header bar/);
-    assert.match(page, /Card: centered card on a soft background/);
+    assert.doesNotMatch(page, /ui-save-bar/);
+    assert.doesNotMatch(page, /s-switch/);
   });
 
   it("wires edit-template route for all three types and invalid type", () => {
@@ -118,6 +167,7 @@ describe("Email config page UI wiring", () => {
     assert.match(page, /s-query-container/);
     assert.match(page, /s-grid/);
     assert.match(page, /3fr 2fr/);
+    assert.match(page, /href="\/app\/settings\/email"/);
     assert.doesNotMatch(page, /data-save-bar/);
     assert.doesNotMatch(page, /slot="aside"/);
     assert.doesNotMatch(page, /<details>/);
@@ -144,7 +194,7 @@ describe("Email config page UI wiring", () => {
     assert.doesNotMatch(editor, /image/);
   });
 
-  it("keeps email layout on the Email page (not Branding)", () => {
+  it("keeps email layout off Branding and Email area UI", () => {
     const branding = readFileSync(
       join(process.cwd(), "app/routes/app.settings_.branding.tsx"),
       "utf8",
@@ -154,13 +204,12 @@ describe("Email config page UI wiring", () => {
     assert.doesNotMatch(branding, /saveDeliverySettings/);
     assert.match(branding, /heading="Branding"/);
 
-    const email = readFileSync(
+    const hub = readFileSync(
       join(process.cwd(), "app/routes/app.settings_.email.tsx"),
       "utf8",
     );
-    assert.match(email, /Email layout/);
-    assert.match(email, /emailLayout/);
-    assert.match(email, /Uses logo and colors from Branding/);
+    assert.doesNotMatch(hub, /Minimal: clean white layout/);
+    assert.doesNotMatch(hub, /emailLayout/);
   });
 });
 
@@ -176,79 +225,55 @@ describe("Delivery settings UI persistence", () => {
     assert.equal(defaults!.refundDocumentAutoSend, false);
     assert.equal(defaults!.emailLayout, "classic");
     assert.equal(defaults!.showViewButton, true);
-    assert.equal(defaults!.invoiceBodyMode, "designed");
-    assert.equal(defaults!.creditNoteBodyMode, "designed");
-    assert.equal(defaults!.refundBodyMode, "designed");
   });
 
-  it("saves master, automation, sender, CC, layout, and document email content", async () => {
+  it("partial save keeps other fields and layout unchanged", async () => {
     const store = await seedStore();
-    const partial = normalizeDeliverySettings({
-      enabled: true,
+    await saveDeliverySettings(store.shopifyDomain, {
+      emailLayout: "card",
+      fromName: "Acme",
+      replyTo: "ops@example.com",
       invoiceAutoSend: true,
+      invoiceWhen: "created",
+    });
+
+    const afterAutomation = await saveDeliverySettings(store.shopifyDomain, {
+      invoiceAutoSend: false,
       invoiceWhen: "paid",
       creditNoteAutoSend: true,
       refundDocumentAutoSend: false,
-      ccStaff: "ops@example.com",
-      fromName: "Store From",
-      replyTo: "hello@example.com",
-      emailLayout: "card",
-      showViewButton: false,
-      invoiceBodyMode: "custom_html",
-      invoiceSubject: "Tax {{invoice_number}}",
-      invoiceBody: "<p>designed</p>",
-      invoiceBodyCustom: "<p>custom invoice</p>",
-      creditNoteBodyMode: "designed",
-      creditNoteSubject: "CN {{credit_note_number}}",
-      creditNoteBody: "<p>cn body</p>",
-      creditNoteBodyCustom: "",
-      refundBodyMode: "designed",
-      refundSubject: "RD {{order_number}}",
-      refundBody: "<p>rd</p>",
-      refundBodyCustom: "",
     });
+    assert.ok(afterAutomation);
+    assert.equal(afterAutomation!.emailLayout, "card");
+    assert.equal(afterAutomation!.fromName, "Acme");
+    assert.equal(afterAutomation!.replyTo, "ops@example.com");
+    assert.equal(afterAutomation!.invoiceAutoSend, false);
+    assert.equal(afterAutomation!.creditNoteAutoSend, true);
 
-    const saved = await saveDeliverySettings(store.shopifyDomain, partial);
-    assert.ok(saved);
-    assert.equal(saved!.enabled, true);
-    assert.equal(saved!.invoiceAutoSend, true);
-    assert.equal(saved!.invoiceWhen, "paid");
-    assert.equal(saved!.creditNoteAutoSend, true);
-    assert.equal(saved!.refundDocumentAutoSend, false);
-    assert.equal(saved!.fromName, "Store From");
-    assert.equal(saved!.replyTo, "hello@example.com");
-    assert.equal(saved!.ccStaff, "ops@example.com");
-    assert.equal(saved!.emailLayout, "card");
-    assert.equal(saved!.showViewButton, false);
-    assert.equal(saved!.invoiceBodyMode, "custom_html");
-    assert.equal(saved!.invoiceBodyCustom, "<p>custom invoice</p>");
-    assert.equal(saved!.creditNoteSubject, "CN {{credit_note_number}}");
-    assert.equal(saved!.refundBody, "<p>rd</p>");
-
-    const again = await getDeliverySettings(store.shopifyDomain);
-    assert.equal(again!.emailLayout, "card");
-    assert.equal(again!.invoiceSubject, "Tax {{invoice_number}}");
-    assert.equal(again!.showViewButton, false);
-    assert.equal(again!.enabled, true);
+    const afterSender = await saveDeliverySettings(store.shopifyDomain, {
+      fromName: "New Name",
+      replyTo: "hello@example.com",
+      ccStaff: "a@example.com",
+    });
+    assert.ok(afterSender);
+    assert.equal(afterSender!.emailLayout, "card");
+    assert.equal(afterSender!.invoiceAutoSend, false);
+    assert.equal(afterSender!.creditNoteAutoSend, true);
+    assert.equal(afterSender!.fromName, "New Name");
+    assert.equal(afterSender!.replyTo, "hello@example.com");
   });
 
-  it("accepts created timing and designed/custom modes for all document kinds", async () => {
-    const store = await seedStore();
-    const saved = await saveDeliverySettings(store.shopifyDomain, {
+  it("normalizes delivery settings", () => {
+    const partial = normalizeDeliverySettings({
+      emailLayout: "card",
       invoiceWhen: "created",
-      invoiceBodyMode: "designed",
-      creditNoteBodyMode: "custom_html",
-      refundBodyMode: "custom_html",
-      creditNoteBodyCustom: "<html>cn</html>",
-      refundBodyCustom: "<p>rd custom</p>",
-      emailLayout: "minimal",
     });
-    assert.ok(saved);
-    assert.equal(saved!.invoiceWhen, "created");
-    assert.equal(saved!.emailLayout, "minimal");
-    assert.equal(saved!.creditNoteBodyMode, "custom_html");
-    assert.equal(saved!.creditNoteBodyCustom, "<html>cn</html>");
-    assert.equal(saved!.refundBodyMode, "custom_html");
-    assert.equal(saved!.refundBodyCustom, "<p>rd custom</p>");
+    assert.equal(partial.emailLayout, "card");
+    assert.equal(partial.invoiceWhen, "created");
+
+    const again = normalizeDeliverySettings({
+      emailLayout: "nope",
+    });
+    assert.equal(again.emailLayout, "classic");
   });
 });
