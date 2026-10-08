@@ -153,8 +153,17 @@ describe("Email hub UI wiring", () => {
     assert.match(page, /Send a test/);
     assert.match(page, /Send test/);
     assert.match(page, /showViewButton/);
+    assert.match(page, /emailLayout/);
+    assert.match(page, /Minimal/);
+    assert.match(page, /Classic/);
+    assert.match(page, /Card/);
+    assert.match(page, /heading="Layout"/);
+    assert.match(
+      page,
+      /bodyMode === "designed"[\s\S]*?heading="Layout"/,
+    );
     assert.match(page, /Unknown template type/);
-    assert.match(page, /breadcrumb-actions/);
+    assert.match(page, /SettingsEmailBreadcrumbs/);
     assert.match(page, /previewDocumentEmail/);
     assert.match(page, /sendDocumentTestEmail/);
     assert.match(page, /insertPlaceholder/);
@@ -163,7 +172,7 @@ describe("Email hub UI wiring", () => {
     assert.match(page, /Email template/);
     assert.match(page, /Which template is sent\?/);
     assert.match(page, /s-email-field/);
-    assert.match(page, /inlineSize="large"/);
+    assert.match(page, /inlineSize="base"/);
     assert.match(page, /s-query-container/);
     assert.match(page, /s-grid/);
     assert.match(page, /3fr 2fr/);
@@ -194,7 +203,7 @@ describe("Email hub UI wiring", () => {
     assert.doesNotMatch(editor, /image/);
   });
 
-  it("keeps email layout off Branding and Email area UI", () => {
+  it("keeps email layout off Branding and Email hub; editor has it", () => {
     const branding = readFileSync(
       join(process.cwd(), "app/routes/app.settings_.branding.tsx"),
       "utf8",
@@ -210,6 +219,15 @@ describe("Email hub UI wiring", () => {
     );
     assert.doesNotMatch(hub, /Minimal: clean white layout/);
     assert.doesNotMatch(hub, /emailLayout/);
+
+    const editor = readFileSync(
+      join(process.cwd(), "app/routes/app.settings_.email_.$type.tsx"),
+      "utf8",
+    );
+    assert.match(editor, /emailLayout/);
+    assert.match(editor, /value="minimal"/);
+    assert.match(editor, /value="classic"/);
+    assert.match(editor, /value="card"/);
   });
 });
 

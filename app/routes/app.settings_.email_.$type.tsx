@@ -36,13 +36,21 @@ import {
 import type {
   EmailBodyMode,
   EmailDocumentKind,
+  EmailLayout,
 } from "../models/email-template.server";
 import { authenticate } from "../shopify.server";
 
 /**
  * Edit email template content for one document type.
- * showViewButton is store-wide (shared across all email types).
+ * emailLayout and showViewButton are store-wide (shared across all email types),
+ * matching the old Delivery page.
+ *
+ * Keep normalizeEmailLayout local — importing value helpers from *.server
+ * into the route module crashes the client bundle (React Router code-split).
  */
+function normalizeEmailLayout(value: string | undefined): EmailLayout {
+  return value === "minimal" || value === "card" ? value : "classic";
+}
 
 const SAVE_BAR_ID = "email-template-save-bar";
 
@@ -71,6 +79,7 @@ type TemplateForm = {
   bodyMode: EmailBodyMode;
   body: string;
   bodyCustom: string;
+  emailLayout: EmailLayout;
   showViewButton: boolean;
 };
 
@@ -122,13 +131,17 @@ function templateFormFromSettings(
   settings: DeliverySettings,
   kind: EmailDocumentKind,
 ): TemplateForm {
+  const shared = {
+    emailLayout: normalizeEmailLayout(settings.emailLayout),
+    showViewButton: settings.showViewButton,
+  };
   if (kind === "credit_note") {
     return {
       subject: settings.creditNoteSubject,
       bodyMode: settings.creditNoteBodyMode,
       body: settings.creditNoteBody,
       bodyCustom: settings.creditNoteBodyCustom,
-      showViewButton: settings.showViewButton,
+      ...shared,
     };
   }
   if (kind === "refund") {
@@ -137,7 +150,7 @@ function templateFormFromSettings(
       bodyMode: settings.refundBodyMode,
       body: settings.refundBody,
       bodyCustom: settings.refundBodyCustom,
-      showViewButton: settings.showViewButton,
+      ...shared,
     };
   }
   return {
@@ -145,7 +158,7 @@ function templateFormFromSettings(
     bodyMode: settings.invoiceBodyMode,
     body: settings.invoiceBody,
     bodyCustom: settings.invoiceBodyCustom,
-    showViewButton: settings.showViewButton,
+    ...shared,
   };
 }
 
@@ -153,13 +166,17 @@ function partialFromTemplateForm(
   kind: EmailDocumentKind,
   form: TemplateForm,
 ): Partial<DeliverySettings> {
+  const shared = {
+    emailLayout: form.emailLayout,
+    showViewButton: form.showViewButton,
+  };
   if (kind === "credit_note") {
     return {
       creditNoteSubject: form.subject,
       creditNoteBodyMode: form.bodyMode,
       creditNoteBody: form.body,
       creditNoteBodyCustom: form.bodyCustom,
-      showViewButton: form.showViewButton,
+      ...shared,
     };
   }
   if (kind === "refund") {
@@ -168,7 +185,7 @@ function partialFromTemplateForm(
       refundBodyMode: form.bodyMode,
       refundBody: form.body,
       refundBodyCustom: form.bodyCustom,
-      showViewButton: form.showViewButton,
+      ...shared,
     };
   }
   return {
@@ -176,7 +193,7 @@ function partialFromTemplateForm(
     invoiceBodyMode: form.bodyMode,
     invoiceBody: form.body,
     invoiceBodyCustom: form.bodyCustom,
-    showViewButton: form.showViewButton,
+    ...shared,
   };
 }
 
@@ -228,6 +245,7 @@ export const action = async ({
         : "designed",
     body: readString(formData, "body"),
     bodyCustom: readString(formData, "bodyCustom"),
+    emailLayout: normalizeEmailLayout(readString(formData, "emailLayout")),
     showViewButton: checkboxOn(formData, "showViewButton"),
   };
 
@@ -480,6 +498,7 @@ function EmailTemplateEditor({
     body.set("bodyMode", form.bodyMode);
     body.set("body", form.body);
     body.set("bodyCustom", form.bodyCustom);
+    body.set("emailLayout", form.emailLayout);
     body.set("showViewButton", form.showViewButton ? "1" : "0");
     return body;
   };
@@ -553,7 +572,7 @@ function EmailTemplateEditor({
   );
 
   return (
-    <s-page heading={meta.title} inlineSize="large">
+    <s-page heading={meta.title} inlineSize="base">
       <SettingsEmailBreadcrumbs menuId="email-template-edit-breadcrumb" />
 
       <ui-save-bar id={SAVE_BAR_ID}>
@@ -630,48 +649,93 @@ function EmailTemplateEditor({
               </s-section>
 
               {form.bodyMode === "designed" ? (
-                <s-section heading="Message">
-                  <s-stack gap="base">
-                    <s-text-field
-                      label="Subject"
-                      name="subject"
-                      value={form.subject}
-                      error={subjectError || undefined}
-                      disabled={saving || undefined}
-                      onInput={(event: Event) =>
-                        patch("subject", fieldValue(event))
-                      }
-                      onChange={(event: Event) =>
-                        patch("subject", fieldValue(event))
-                      }
-                    />
-
-                    {placeholderChips}
-
-                    <EmailBodyRichTextEditor
-                      ref={richTextRef}
-                      label="Message"
-                      value={form.body}
-                      disabled={saving}
-                      onChange={(html) => patch("body", html)}
-                    />
-
-                    <s-checkbox
-                      label='Show "View document" button'
-                      details="Appears when a secure link is available. Links expire after 30 days."
-                      checked={form.showViewButton}
+                <>
+                  <s-section
+                    heading="Layout"
+                    subheading="Uses logo and colors from Branding. Applies to all email types."
+                  >
+                    <s-choice-list
+                      label="Email layout"
+                      name="emailLayout"
+                      values={[form.emailLayout]}
                       disabled={saving || undefined}
                       onChange={(event: Event) => {
+                        const values = (
+                          event.currentTarget as unknown as {
+                            values?: string[];
+                          }
+                        ).values;
                         patch(
-                          "showViewButton",
-                          Boolean(
-                            (event.currentTarget as HTMLInputElement).checked,
-                          ),
+                          "emailLayout",
+                          normalizeEmailLayout(values?.[0]),
                         );
                       }}
-                    />
-                  </s-stack>
-                </s-section>
+                    >
+                      <s-choice value="minimal">
+                        Minimal
+                        <s-text slot="details">
+                          Clean white layout with logo header.
+                        </s-text>
+                      </s-choice>
+                      <s-choice value="classic">
+                        Classic
+                        <s-text slot="details">
+                          Brand-colored header bar — recommended.
+                        </s-text>
+                      </s-choice>
+                      <s-choice value="card">
+                        Card
+                        <s-text slot="details">
+                          Centered card on a soft background.
+                        </s-text>
+                      </s-choice>
+                    </s-choice-list>
+                  </s-section>
+
+                  <s-section heading="Message">
+                    <s-stack gap="base">
+                      <s-text-field
+                        label="Subject"
+                        name="subject"
+                        value={form.subject}
+                        error={subjectError || undefined}
+                        disabled={saving || undefined}
+                        onInput={(event: Event) =>
+                          patch("subject", fieldValue(event))
+                        }
+                        onChange={(event: Event) =>
+                          patch("subject", fieldValue(event))
+                        }
+                      />
+
+                      {placeholderChips}
+
+                      <EmailBodyRichTextEditor
+                        ref={richTextRef}
+                        label="Message"
+                        value={form.body}
+                        disabled={saving}
+                        onChange={(html) => patch("body", html)}
+                      />
+
+                      <s-checkbox
+                        label='Show "View document" button'
+                        details="Appears when a secure link is available. Links expire after 30 days."
+                        checked={form.showViewButton}
+                        disabled={saving || undefined}
+                        onChange={(event: Event) => {
+                          patch(
+                            "showViewButton",
+                            Boolean(
+                              (event.currentTarget as HTMLInputElement)
+                                .checked,
+                            ),
+                          );
+                        }}
+                      />
+                    </s-stack>
+                  </s-section>
+                </>
               ) : (
                 <s-section heading="Custom HTML">
                   <s-stack gap="base">
