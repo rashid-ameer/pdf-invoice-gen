@@ -56,18 +56,28 @@ export default function HomePage() {
   return <HomeDashboard loaderData={loaderData} />;
 }
 
+/** Must match company route — clear a leftover bar after onboarding navigation. */
+const COMPANY_SETUP_SAVE_BAR_ID = "company-setup-save-bar";
+
 function InitialSetupPage({ setup }: { setup: HomeInitialSetup }) {
   const shopify = useAppBridge();
   const finishFetcher = useFetcher<HomeActionData>();
   const finishing =
     finishFetcher.state === "submitting" || finishFetcher.state === "loading";
 
-  const completedCount =
-    (setup.companyComplete ? 1 : 0) + (setup.templatesComplete ? 1 : 0);
-
   const templatesHref = setup.nextTemplateType
     ? initialSetupTemplateHref(setup.nextTemplateType)
     : "/app/settings/templates?setup=1";
+
+  const [expanded, setExpanded] = useState({
+    company: !setup.companyComplete,
+    templates: setup.companyComplete && !setup.templatesComplete,
+  });
+
+  // App Bridge save bar lives outside the React tree; hide if company left it open.
+  useEffect(() => {
+    void shopify.saveBar.hide(COMPANY_SETUP_SAVE_BAR_ID);
+  }, [shopify]);
 
   useEffect(() => {
     if (finishFetcher.state !== "idle" || !finishFetcher.data) return;
@@ -92,18 +102,16 @@ function InitialSetupPage({ setup }: { setup: HomeInitialSetup }) {
   };
 
   return (
-    <s-page heading="Initial setup">
+    <s-page heading="Home">
       <s-section>
         <s-stack gap="base">
           <s-stack gap="small-200">
-            <s-heading>Get your app ready</s-heading>
+            <s-heading>Setup</s-heading>
             <s-paragraph>
-              Complete these required steps before using invoices and other
-              features.
+              Get your store ready for sending invoices. This takes 3–4
+              minutes. You can stop at any point and pick up from where you
+              left.
             </s-paragraph>
-            <s-text color="subdued">
-              {completedCount} of 2 steps completed
-            </s-text>
           </s-stack>
 
           {finishFetcher.data?.intent === "finish-setup" &&
@@ -115,34 +123,35 @@ function InitialSetupPage({ setup }: { setup: HomeInitialSetup }) {
           ) : null}
 
           <s-box border="base" borderRadius="base" background="base">
-            <s-stack gap="none">
-              <SetupStepRow
-                complete={setup.companyComplete}
-                title="Company setup"
-                description="Add your legal name, tax IDs, address, and invoice defaults."
-                actionLabel={
-                  setup.companyComplete ? "Review company" : "Complete company setup"
-                }
-                actionHref="/app/settings/company"
-              />
-              <s-divider />
-              <SetupStepRow
-                complete={setup.templatesComplete}
-                title="Default templates"
-                description="Choose a default template for invoices, packing slips, credit notes, and refund documents."
-                actionLabel={
-                  setup.templatesComplete
-                    ? "Review templates"
-                    : setup.companyComplete
-                      ? "Choose templates"
-                      : "Complete company setup first"
-                }
-                actionHref={
-                  setup.companyComplete ? templatesHref : "/app/settings/company"
-                }
-                actionDisabled={!setup.companyComplete && !setup.templatesComplete}
-              />
-            </s-stack>
+            <SetupAccordionItem
+              complete={setup.companyComplete}
+              title="Company Setup"
+              description="Add your legal name, tax IDs, address, and invoice defaults."
+              actionLabel="Setup company"
+              actionHref="/app/settings/company"
+              expanded={expanded.company}
+              onToggle={() =>
+                setExpanded((prev) => ({
+                  ...prev,
+                  company: !prev.company,
+                }))
+              }
+            />
+            <s-divider />
+            <SetupAccordionItem
+              complete={setup.templatesComplete}
+              title="Default Templates"
+              description="Choose a default template for invoices, packing slips, credit notes, and refund documents."
+              actionLabel="Choose templates"
+              actionHref={templatesHref}
+              expanded={expanded.templates}
+              onToggle={() =>
+                setExpanded((prev) => ({
+                  ...prev,
+                  templates: !prev.templates,
+                }))
+              }
+            />
           </s-box>
 
           <s-stack direction="inline" gap="base" justifyContent="end">
@@ -163,51 +172,87 @@ function InitialSetupPage({ setup }: { setup: HomeInitialSetup }) {
   );
 }
 
-function SetupStepRow({
+function SetupAccordionItem({
   complete,
   title,
   description,
   actionLabel,
   actionHref,
-  actionDisabled,
+  expanded,
+  onToggle,
 }: {
   complete: boolean;
   title: string;
   description: string;
   actionLabel: string;
   actionHref: string;
-  actionDisabled?: boolean;
+  expanded: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <s-box padding="base">
-      <s-grid
-        gridTemplateColumns="auto 1fr auto"
-        gap="base"
-        alignItems="center"
-      >
-        <s-checkbox
-          label={title}
-          checked={complete || undefined}
-          disabled
-          accessibilityLabel={
-            complete ? `${title}: completed` : `${title}: incomplete`
+    <s-box>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        aria-label={`${expanded ? "Collapse" : "Expand"} ${title}`}
+        onClick={onToggle}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onToggle();
           }
-        />
-        <s-stack gap="none">
-          <s-text color="subdued">{description}</s-text>
-        </s-stack>
-        {complete ? (
-          <s-badge tone="success">Completed</s-badge>
-        ) : (
-          <s-button
-            variant="primary"
-            href={actionHref}
-            {...(actionDisabled ? { disabled: true } : {})}
+        }}
+        style={{ cursor: "pointer" }}
+      >
+        <s-box padding="small">
+          <s-grid
+            gridTemplateColumns="1fr auto"
+            gap="base"
+            alignItems="center"
           >
-            {actionLabel}
-          </s-button>
-        )}
-      </s-grid>
+            <s-checkbox
+              label={title}
+              checked={complete || undefined}
+              accessibilityLabel={
+                complete ? `${title}: completed` : `${title}: incomplete`
+              }
+              onClick={(event: Event) => {
+                // Completion is server-driven — keep header looking active, not disabled.
+                event.preventDefault();
+                event.stopPropagation();
+                onToggle();
+              }}
+            />
+            <s-button
+              variant="tertiary"
+              tone="neutral"
+              icon={expanded ? "chevron-up" : "chevron-down"}
+              accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${title}`}
+              onClick={(event: Event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onToggle();
+              }}
+            />
+          </s-grid>
+        </s-box>
+      </div>
+
+      {expanded ? (
+        <s-box padding="small" paddingBlockStart="none">
+          <s-box padding="base" background="subdued" borderRadius="base">
+            <s-stack gap="base">
+              <s-paragraph>{description}</s-paragraph>
+              <s-stack direction="inline" gap="small-200">
+                <s-button variant="primary" href={actionHref}>
+                  {actionLabel}
+                </s-button>
+              </s-stack>
+            </s-stack>
+          </s-box>
+        </s-box>
+      ) : null}
     </s-box>
   );
 }

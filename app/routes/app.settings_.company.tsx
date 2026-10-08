@@ -5,9 +5,9 @@ import type {
   LoaderFunctionArgs,
 } from "react-router";
 import {
-  redirect,
   useActionData,
   useLoaderData,
+  useNavigate,
   useNavigation,
   useSubmit,
 } from "react-router";
@@ -283,10 +283,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     throw error;
   }
 
-  // During initial setup only: return to the Home setup checklist.
+  // During initial setup only: client hides the save bar, then navigates Home.
+  // A server redirect leaves App Bridge's save bar stuck (Save/Discard dead).
   const setup = await getInitialSetupState(session.shop);
   if (setup?.locked) {
-    throw redirect("/app");
+    return { ok: true as const, redirectTo: "/app" as const };
   }
 
   return { ok: true as const };
@@ -296,6 +297,7 @@ export default function CompanySetupPage() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const submit = useSubmit();
   const shopify = useAppBridge();
   const saving = navigation.state === "submitting";
@@ -318,8 +320,12 @@ export default function CompanySetupPage() {
   useEffect(() => {
     if (!actionData || !("ok" in actionData) || !actionData.ok) return;
     setBaseline(formRef.current);
+    shopify.saveBar.hide(SAVE_BAR_ID);
     shopify.toast.show("Company details saved");
-  }, [actionData, shopify]);
+    if ("redirectTo" in actionData && actionData.redirectTo) {
+      navigate(actionData.redirectTo);
+    }
+  }, [actionData, shopify, navigate]);
 
   const dirty = useMemo(
     () => JSON.stringify(form) !== JSON.stringify(baseline),
