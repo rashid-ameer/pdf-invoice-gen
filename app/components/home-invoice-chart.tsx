@@ -2,7 +2,7 @@
  * Client-only Recharts line chart for Home dashboard.
  * Must only render after mount (parent gates on mounted).
  *
- * Comparison is shown as a second dashed line + legend — not in the tooltip.
+ * Comparison adds a second dashed line, legend, and both series in the tooltip.
  */
 import {
   CartesianGrid,
@@ -68,6 +68,7 @@ export function HomeInvoiceChart({
     current: point.current,
     previous: comparing ? Number(point.previous ?? 0) : undefined,
     currentDate: point.currentDate,
+    previousDate: comparing ? point.previousDate : null,
   }));
 
   const maxValue = data.reduce(
@@ -75,6 +76,9 @@ export function HomeInvoiceChart({
       Math.max(max, point.current, comparing ? (point.previous ?? 0) : 0),
     0,
   );
+
+  const invoiceWord = (count: number) =>
+    count === 1 ? "invoice" : "invoices";
 
   return (
     <div
@@ -109,7 +113,12 @@ export function HomeInvoiceChart({
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
               const point = payload[0]?.payload as
-                | (HomeChartPoint & { currentDate: string })
+                | {
+                    current: number;
+                    previous?: number;
+                    currentDate: string;
+                    previousDate: string | null;
+                  }
                 | undefined;
               if (!point) return null;
               return (
@@ -121,12 +130,21 @@ export function HomeInvoiceChart({
                     padding: "8px 12px",
                     fontSize: 12,
                     color: "#202223",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 4,
                   }}
                 >
-                  <div>
+                  <div style={{ color: CURRENT_LINE }}>
                     {formatDayLabel(point.currentDate)}: {point.current}{" "}
-                    {point.current === 1 ? "invoice" : "invoices"}
+                    {invoiceWord(point.current)}
                   </div>
+                  {comparing && point.previousDate ? (
+                    <div style={{ color: PREVIOUS_LINE }}>
+                      {formatDayLabel(point.previousDate)}: {point.previous ?? 0}{" "}
+                      {invoiceWord(point.previous ?? 0)}
+                    </div>
+                  ) : null}
                 </div>
               );
             }}
