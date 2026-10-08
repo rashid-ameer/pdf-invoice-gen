@@ -101,7 +101,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 function CheckRow({ item }: { item: ComplianceCheckItem }) {
   const fixHref =
     !item.ok && item.key !== "aspConnected"
-      ? "/app/settings"
+      ? "/app/company-setup"
       : !item.ok && item.key === "aspConnected"
         ? "#asp-connect"
         : null;
