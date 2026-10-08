@@ -123,6 +123,24 @@ export default function HomePage() {
           </s-banner>
         ) : null}
 
+        <s-box padding="base" background="subdued" border="base" borderRadius="large">
+          <s-grid
+            gridTemplateColumns="1fr auto"
+            gap="base"
+            alignItems="center"
+          >
+            <s-stack direction="inline" gap="small" alignItems="center">
+              <s-icon type="question-circle" />
+              <s-text>
+                Need help with the Dashboard? Check the step-by-step guide.
+              </s-text>
+            </s-stack>
+            <s-button href="/app/help" variant="secondary">
+              View guide
+            </s-button>
+          </s-grid>
+        </s-box>
+
         <s-query-container>
           <s-section padding="base">
             <s-grid gridTemplateColumns={METRIC_GRID_COLS} gap="small">
