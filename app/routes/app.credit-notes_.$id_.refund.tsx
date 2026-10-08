@@ -34,6 +34,10 @@ import { authenticate } from "../shopify.server";
 
 const REFUND_LIST_HREF = "/app/credit-notes?tab=refund-documents";
 
+/** Preview + sticky Summary; stack on narrow containers. */
+const DETAIL_LAYOUT_COLS =
+  "@container (inline-size > 900px) 1.5fr 0.75fr, 1fr";
+
 /** `/app/credit-notes/:id/refund` details only. */
 function isRefundDocumentDetailsPath(pathname: string): boolean {
   return /^\/app\/credit-notes\/[^/]+\/refund$/.test(pathname);
@@ -487,103 +491,113 @@ export default function RefundDocumentDetailsPage() {
         </s-button>
       </s-menu>
 
-      <s-section
-        heading="Refund document"
-        accessibilityLabel="Refund document preview"
-      >
-        <s-stack gap="small">
-          {previewLoading && !previewMissing ? (
-            <s-stack gap="small" alignItems="center">
-              <s-spinner accessibilityLabel="Loading refund document" />
-              <s-text color="subdued">Loading refund document…</s-text>
+      <s-query-container>
+        <s-grid
+          gridTemplateColumns={DETAIL_LAYOUT_COLS}
+          gap="large"
+          alignItems="start"
+        >
+          <s-section
+            heading="Refund document"
+            accessibilityLabel="Refund document preview"
+          >
+            <s-stack gap="small">
+              {previewLoading && !previewMissing ? (
+                <s-stack gap="small" alignItems="center">
+                  <s-spinner accessibilityLabel="Loading refund document" />
+                  <s-text color="subdued">Loading refund document…</s-text>
+                </s-stack>
+              ) : null}
+              {previewMissing ? (
+                <s-banner tone="critical" heading="Preview unavailable">
+                  The refund document could not be rendered. Try Print or
+                  Download, or return to Document refunds.
+                </s-banner>
+              ) : (
+                <s-box
+                  border="base"
+                  borderRadius="base"
+                  overflow="hidden"
+                  background="subdued"
+                >
+                  <iframe
+                    ref={iframeRef}
+                    title={`Refund document ${creditNote.creditNoteNumber}`}
+                    srcDoc={previewHtml}
+                    width="100%"
+                    height="640"
+                  />
+                </s-box>
+              )}
             </s-stack>
-          ) : null}
-          {previewMissing ? (
-            <s-banner tone="critical" heading="Preview unavailable">
-              The refund document could not be rendered. Try Print or Download,
-              or return to Document refunds.
-            </s-banner>
-          ) : (
-            <s-box
-              border="base"
-              borderRadius="base"
-              overflow="hidden"
-              background="subdued"
-            >
-              <iframe
-                ref={iframeRef}
-                title={`Refund document ${creditNote.creditNoteNumber}`}
-                srcDoc={previewHtml}
-                width="100%"
-                height="640"
-              />
-            </s-box>
-          )}
-        </s-stack>
-      </s-section>
+          </s-section>
 
-      <s-section slot="aside" heading="Summary">
-        {sideLoading ? (
-          <s-stack gap="small" alignItems="start">
-            <s-spinner accessibilityLabel="Loading summary" />
-          </s-stack>
-        ) : (
-          <s-stack gap="small">
-            <s-stack gap="none">
-              <s-text color="subdued">Customer</s-text>
-              <s-text>{creditNote.buyerName}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Invoice</s-text>
-              {creditNote.originalInvoiceId ? (
-                <s-link
-                  href={`/app/invoices/${encodeURIComponent(creditNote.originalInvoiceId)}`}
-                >
-                  {creditNote.originalInvoiceNumber}
-                </s-link>
+          <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
+            <s-section heading="Summary">
+              {sideLoading ? (
+                <s-stack gap="small" alignItems="start">
+                  <s-spinner accessibilityLabel="Loading summary" />
+                </s-stack>
               ) : (
-                <s-text>{creditNote.originalInvoiceNumber}</s-text>
+                <s-stack gap="small">
+                  <s-stack gap="none">
+                    <s-text color="subdued">Customer</s-text>
+                    <s-text>{creditNote.buyerName}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Invoice</s-text>
+                    {creditNote.originalInvoiceId ? (
+                      <s-link
+                        href={`/app/invoices/${encodeURIComponent(creditNote.originalInvoiceId)}`}
+                      >
+                        {creditNote.originalInvoiceNumber}
+                      </s-link>
+                    ) : (
+                      <s-text>{creditNote.originalInvoiceNumber}</s-text>
+                    )}
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Order</s-text>
+                    <s-text>{creditNote.shopifyOrderNumber}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Issue date</s-text>
+                    <s-text>{formatIssueDate(creditNote.issueDateIso)}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Reason</s-text>
+                    <s-text>{creditNote.reason || "—"}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Status</s-text>
+                    <s-badge tone={invoiceStatusBadgeTone(creditNote.status)}>
+                      {formatInvoiceStatusLabel(creditNote.status)}
+                    </s-badge>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Payment status</s-text>
+                    {paymentLabel ? (
+                      <s-badge
+                        tone={paymentStatusBadgeTone(creditNote.financialStatus)}
+                      >
+                        {paymentLabel}
+                      </s-badge>
+                    ) : (
+                      <s-text>—</s-text>
+                    )}
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Total</s-text>
+                    <s-text type="strong">
+                      {formatMoney(creditNote.grandTotal, creditNote.currency)}
+                    </s-text>
+                  </s-stack>
+                </s-stack>
               )}
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Order</s-text>
-              <s-text>{creditNote.shopifyOrderNumber}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Issue date</s-text>
-              <s-text>{formatIssueDate(creditNote.issueDateIso)}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Reason</s-text>
-              <s-text>{creditNote.reason || "—"}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Status</s-text>
-              <s-badge tone={invoiceStatusBadgeTone(creditNote.status)}>
-                {formatInvoiceStatusLabel(creditNote.status)}
-              </s-badge>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Payment status</s-text>
-              {paymentLabel ? (
-                <s-badge
-                  tone={paymentStatusBadgeTone(creditNote.financialStatus)}
-                >
-                  {paymentLabel}
-                </s-badge>
-              ) : (
-                <s-text>—</s-text>
-              )}
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Total</s-text>
-              <s-text type="strong">
-                {formatMoney(creditNote.grandTotal, creditNote.currency)}
-              </s-text>
-            </s-stack>
-          </s-stack>
-        )}
-      </s-section>
+            </s-section>
+          </div>
+        </s-grid>
+      </s-query-container>
     </s-page>
   );
 }

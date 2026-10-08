@@ -23,6 +23,10 @@ import { paymentStatusBadgeTone } from "../utils/invoice-status-badges";
 import { printInvoiceHtml } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
+/** Preview + sticky Summary; stack on narrow containers. */
+const DETAIL_LAYOUT_COLS =
+  "@container (inline-size > 900px) 1.5fr 0.75fr, 1fr";
+
 /** `/app/packing-slips/:id` only — not list or CSV export. */
 function isPackingSlipDetailsPath(pathname: string): boolean {
   return /^\/app\/packing-slips\/[^/]+$/.test(pathname);
@@ -253,85 +257,95 @@ export default function PackingSlipDetailsPage() {
         Download
       </s-button>
 
-      <s-section
-        heading="Packing slip"
-        accessibilityLabel="Packing slip document preview"
-      >
-        <s-stack gap="small">
-          {previewLoading && !previewMissing ? (
-            <s-stack gap="small" alignItems="center">
-              <s-spinner accessibilityLabel="Loading packing slip document" />
-              <s-text color="subdued">Loading packing slip document…</s-text>
-            </s-stack>
-          ) : null}
-          {previewMissing ? (
-            <s-banner tone="critical" heading="Preview unavailable">
-              The packing slip document could not be rendered. Try Print or
-              Download, or return to the packing slips list.
-            </s-banner>
-          ) : (
-            <s-box
-              border="base"
-              borderRadius="base"
-              overflow="hidden"
-              background="subdued"
-            >
-              {/*
-                Hosts the same G5/G7 packing-slip HTML used for print/PDF
-                (via wrapA4EmbedHtml). srcDoc avoids nested-iframe auth issues.
-              */}
-              <iframe
-                ref={iframeRef}
-                title={`Packing slip ${packingSlip.invoiceNumber}`}
-                srcDoc={previewHtml}
-                width="100%"
-                height="640"
-              />
-            </s-box>
-          )}
-        </s-stack>
-      </s-section>
-
-      <s-section slot="aside" heading="Summary">
-        {sideLoading ? (
-          <s-stack gap="small" alignItems="start">
-            <s-spinner accessibilityLabel="Loading summary" />
-          </s-stack>
-        ) : (
-          <s-stack gap="small">
-            <s-stack gap="none">
-              <s-text color="subdued">Customer</s-text>
-              <s-text>{packingSlip.buyerName}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Order</s-text>
-              <s-text>{packingSlip.shopifyOrderNumber}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Invoice date</s-text>
-              <s-text>{formatIssueDate(packingSlip.issueDateIso)}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Payment status</s-text>
-              {paymentLabel ? (
-                <s-badge
-                  tone={paymentStatusBadgeTone(packingSlip.financialStatus)}
-                >
-                  {paymentLabel}
-                </s-badge>
+      <s-query-container>
+        <s-grid
+          gridTemplateColumns={DETAIL_LAYOUT_COLS}
+          gap="large"
+          alignItems="start"
+        >
+          <s-section
+            heading="Packing slip"
+            accessibilityLabel="Packing slip document preview"
+          >
+            <s-stack gap="small">
+              {previewLoading && !previewMissing ? (
+                <s-stack gap="small" alignItems="center">
+                  <s-spinner accessibilityLabel="Loading packing slip document" />
+                  <s-text color="subdued">Loading packing slip document…</s-text>
+                </s-stack>
+              ) : null}
+              {previewMissing ? (
+                <s-banner tone="critical" heading="Preview unavailable">
+                  The packing slip document could not be rendered. Try Print or
+                  Download, or return to the packing slips list.
+                </s-banner>
               ) : (
-                <s-text>—</s-text>
+                <s-box
+                  border="base"
+                  borderRadius="base"
+                  overflow="hidden"
+                  background="subdued"
+                >
+                  {/*
+                    Hosts the same G5/G7 packing-slip HTML used for print/PDF
+                    (via wrapA4EmbedHtml). srcDoc avoids nested-iframe auth issues.
+                  */}
+                  <iframe
+                    ref={iframeRef}
+                    title={`Packing slip ${packingSlip.invoiceNumber}`}
+                    srcDoc={previewHtml}
+                    width="100%"
+                    height="640"
+                  />
+                </s-box>
               )}
             </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Total</s-text>
-              <s-text type="strong">
-                {formatMoney(packingSlip.grandTotal, packingSlip.currency)}
-              </s-text>
-            </s-stack>
-          </s-stack>
-        )}
-      </s-section>
+          </s-section>
+
+          <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
+            <s-section heading="Summary">
+              {sideLoading ? (
+                <s-stack gap="small" alignItems="start">
+                  <s-spinner accessibilityLabel="Loading summary" />
+                </s-stack>
+              ) : (
+                <s-stack gap="small">
+                  <s-stack gap="none">
+                    <s-text color="subdued">Customer</s-text>
+                    <s-text>{packingSlip.buyerName}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Order</s-text>
+                    <s-text>{packingSlip.shopifyOrderNumber}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Invoice date</s-text>
+                    <s-text>{formatIssueDate(packingSlip.issueDateIso)}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Payment status</s-text>
+                    {paymentLabel ? (
+                      <s-badge
+                        tone={paymentStatusBadgeTone(packingSlip.financialStatus)}
+                      >
+                        {paymentLabel}
+                      </s-badge>
+                    ) : (
+                      <s-text>—</s-text>
+                    )}
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Total</s-text>
+                    <s-text type="strong">
+                      {formatMoney(packingSlip.grandTotal, packingSlip.currency)}
+                    </s-text>
+                  </s-stack>
+                </s-stack>
+              )}
+            </s-section>
+          </div>
+        </s-grid>
+      </s-query-container>
     </s-page>
   );
 }

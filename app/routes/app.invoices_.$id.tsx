@@ -27,6 +27,10 @@ import { paymentStatusBadgeTone } from "../utils/invoice-status-badges";
 import { printInvoiceHtml } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
+/** Preview + sticky Summary; stack on narrow containers. */
+const DETAIL_LAYOUT_COLS =
+  "@container (inline-size > 900px) 1.5fr 0.75fr, 1fr";
+
 /** `/app/invoices/:id` only — not list, view, download, export, or bulk. */
 function isInvoiceDetailsPath(pathname: string): boolean {
   return /^\/app\/invoices\/[^/]+$/.test(pathname);
@@ -444,82 +448,95 @@ export default function InvoiceDetailsPage() {
         </s-button>
       </s-menu>
 
-      <s-section heading="Invoice" accessibilityLabel="Invoice document preview">
-        <s-stack gap="small">
-          {previewLoading && !previewMissing ? (
-            <s-stack gap="small" alignItems="center">
-              <s-spinner accessibilityLabel="Loading invoice document" />
-              <s-text color="subdued">Loading invoice document…</s-text>
-            </s-stack>
-          ) : null}
-          {previewMissing ? (
-            <s-banner tone="critical" heading="Preview unavailable">
-              The invoice document could not be rendered. Try Print or Download,
-              or return to the invoices list.
-            </s-banner>
-          ) : (
-            <s-box
-              border="base"
-              borderRadius="base"
-              overflow="hidden"
-              background="subdued"
-            >
-              {/*
-                Hosts the same G5/G7 HTML used for print/PDF (via wrapA4EmbedHtml).
-                srcDoc avoids nested-iframe auth failures in the embedded admin.
-              */}
-              <iframe
-                ref={iframeRef}
-                title={`Invoice ${invoice.invoiceNumber}`}
-                srcDoc={previewHtml}
-                width="100%"
-                height="640"
-              />
-            </s-box>
-          )}
-        </s-stack>
-      </s-section>
-
-      <s-section slot="aside" heading="Summary">
-        {sideLoading ? (
-          <s-stack gap="small" alignItems="start">
-            <s-spinner accessibilityLabel="Loading summary" />
-          </s-stack>
-        ) : (
-          <s-stack gap="small">
-            <s-stack gap="none">
-              <s-text color="subdued">Customer</s-text>
-              <s-text>{invoice.buyerName}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Order</s-text>
-              <s-text>{invoice.shopifyOrderNumber}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Invoice date</s-text>
-              <s-text>{formatIssueDate(invoice.issueDateIso)}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Payment status</s-text>
-              {paymentLabel ? (
-                <s-badge
-                  tone={paymentStatusBadgeTone(invoice.financialStatus)}
-                >
-                  {paymentLabel}
-                </s-badge>
+      <s-query-container>
+        <s-grid
+          gridTemplateColumns={DETAIL_LAYOUT_COLS}
+          gap="large"
+          alignItems="start"
+        >
+          <s-section
+            heading="Invoice"
+            accessibilityLabel="Invoice document preview"
+          >
+            <s-stack gap="small">
+              {previewLoading && !previewMissing ? (
+                <s-stack gap="small" alignItems="center">
+                  <s-spinner accessibilityLabel="Loading invoice document" />
+                  <s-text color="subdued">Loading invoice document…</s-text>
+                </s-stack>
+              ) : null}
+              {previewMissing ? (
+                <s-banner tone="critical" heading="Preview unavailable">
+                  The invoice document could not be rendered. Try Print or
+                  Download, or return to the invoices list.
+                </s-banner>
               ) : (
-                <s-text>—</s-text>
+                <s-box
+                  border="base"
+                  borderRadius="base"
+                  overflow="hidden"
+                  background="subdued"
+                >
+                  {/*
+                    Hosts the same G5/G7 HTML used for print/PDF (via wrapA4EmbedHtml).
+                    srcDoc avoids nested-iframe auth failures in the embedded admin.
+                  */}
+                  <iframe
+                    ref={iframeRef}
+                    title={`Invoice ${invoice.invoiceNumber}`}
+                    srcDoc={previewHtml}
+                    width="100%"
+                    height="640"
+                  />
+                </s-box>
               )}
             </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Total</s-text>
-              <s-text type="strong">
-                {formatMoney(invoice.grandTotal, invoice.currency)}
-              </s-text>
-            </s-stack>
-          </s-stack>
-        )}
-      </s-section>
+          </s-section>
+
+          <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
+            <s-section heading="Summary">
+              {sideLoading ? (
+                <s-stack gap="small" alignItems="start">
+                  <s-spinner accessibilityLabel="Loading summary" />
+                </s-stack>
+              ) : (
+                <s-stack gap="small">
+                  <s-stack gap="none">
+                    <s-text color="subdued">Customer</s-text>
+                    <s-text>{invoice.buyerName}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Order</s-text>
+                    <s-text>{invoice.shopifyOrderNumber}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Invoice date</s-text>
+                    <s-text>{formatIssueDate(invoice.issueDateIso)}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Payment status</s-text>
+                    {paymentLabel ? (
+                      <s-badge
+                        tone={paymentStatusBadgeTone(invoice.financialStatus)}
+                      >
+                        {paymentLabel}
+                      </s-badge>
+                    ) : (
+                      <s-text>—</s-text>
+                    )}
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Total</s-text>
+                    <s-text type="strong">
+                      {formatMoney(invoice.grandTotal, invoice.currency)}
+                    </s-text>
+                  </s-stack>
+                </s-stack>
+              )}
+            </s-section>
+          </div>
+        </s-grid>
+      </s-query-container>
     </s-page>
   );
 }

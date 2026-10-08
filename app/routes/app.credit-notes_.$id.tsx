@@ -32,6 +32,10 @@ import {
 import { printInvoiceHtml } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
+/** Preview + sticky Summary; stack on narrow containers. */
+const DETAIL_LAYOUT_COLS =
+  "@container (inline-size > 900px) 1.5fr 0.75fr, 1fr";
+
 /** `/app/credit-notes/:id` only — not list, view, download, export, or bulk. */
 function isCreditNoteDetailsPath(pathname: string): boolean {
   return /^\/app\/credit-notes\/[^/]+$/.test(pathname);
@@ -487,95 +491,105 @@ export default function CreditNoteDetailsPage() {
         </s-button>
       </s-menu>
 
-      <s-section
-        heading="Credit note"
-        accessibilityLabel="Credit note document preview"
-      >
-        <s-stack gap="small">
-          {previewLoading && !previewMissing ? (
-            <s-stack gap="small" alignItems="center">
-              <s-spinner accessibilityLabel="Loading credit note document" />
-              <s-text color="subdued">Loading credit note document…</s-text>
-            </s-stack>
-          ) : null}
-          {previewMissing ? (
-            <s-banner tone="critical" heading="Preview unavailable">
-              The credit note document could not be rendered. Try Print or
-              Download, or return to the credit notes list.
-            </s-banner>
-          ) : (
-            <s-box
-              border="base"
-              borderRadius="base"
-              overflow="hidden"
-              background="subdued"
-            >
-              <iframe
-                ref={iframeRef}
-                title={`Credit note ${creditNote.creditNoteNumber}`}
-                srcDoc={previewHtml}
-                width="100%"
-                height="640"
-              />
-            </s-box>
-          )}
-        </s-stack>
-      </s-section>
-
-      <s-section slot="aside" heading="Summary">
-        {sideLoading ? (
-          <s-stack gap="small" alignItems="start">
-            <s-spinner accessibilityLabel="Loading summary" />
-          </s-stack>
-        ) : (
-          <s-stack gap="small">
-            <s-stack gap="none">
-              <s-text color="subdued">Customer</s-text>
-              <s-text>{creditNote.buyerName}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Invoice</s-text>
-              <s-text>{creditNote.originalInvoiceNumber}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Order</s-text>
-              <s-text>{creditNote.shopifyOrderNumber}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Issue date</s-text>
-              <s-text>{formatIssueDate(creditNote.issueDateIso)}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Reason</s-text>
-              <s-text>{creditNote.reason || "—"}</s-text>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Status</s-text>
-              <s-badge tone={invoiceStatusBadgeTone(creditNote.status)}>
-                {formatInvoiceStatusLabel(creditNote.status)}
-              </s-badge>
-            </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Payment status</s-text>
-              {paymentLabel ? (
-                <s-badge
-                  tone={paymentStatusBadgeTone(creditNote.financialStatus)}
-                >
-                  {paymentLabel}
-                </s-badge>
+      <s-query-container>
+        <s-grid
+          gridTemplateColumns={DETAIL_LAYOUT_COLS}
+          gap="large"
+          alignItems="start"
+        >
+          <s-section
+            heading="Credit note"
+            accessibilityLabel="Credit note document preview"
+          >
+            <s-stack gap="small">
+              {previewLoading && !previewMissing ? (
+                <s-stack gap="small" alignItems="center">
+                  <s-spinner accessibilityLabel="Loading credit note document" />
+                  <s-text color="subdued">Loading credit note document…</s-text>
+                </s-stack>
+              ) : null}
+              {previewMissing ? (
+                <s-banner tone="critical" heading="Preview unavailable">
+                  The credit note document could not be rendered. Try Print or
+                  Download, or return to the credit notes list.
+                </s-banner>
               ) : (
-                <s-text>—</s-text>
+                <s-box
+                  border="base"
+                  borderRadius="base"
+                  overflow="hidden"
+                  background="subdued"
+                >
+                  <iframe
+                    ref={iframeRef}
+                    title={`Credit note ${creditNote.creditNoteNumber}`}
+                    srcDoc={previewHtml}
+                    width="100%"
+                    height="640"
+                  />
+                </s-box>
               )}
             </s-stack>
-            <s-stack gap="none">
-              <s-text color="subdued">Total</s-text>
-              <s-text type="strong">
-                {formatMoney(creditNote.grandTotal, creditNote.currency)}
-              </s-text>
-            </s-stack>
-          </s-stack>
-        )}
-      </s-section>
+          </s-section>
+
+          <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
+            <s-section heading="Summary">
+              {sideLoading ? (
+                <s-stack gap="small" alignItems="start">
+                  <s-spinner accessibilityLabel="Loading summary" />
+                </s-stack>
+              ) : (
+                <s-stack gap="small">
+                  <s-stack gap="none">
+                    <s-text color="subdued">Customer</s-text>
+                    <s-text>{creditNote.buyerName}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Invoice</s-text>
+                    <s-text>{creditNote.originalInvoiceNumber}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Order</s-text>
+                    <s-text>{creditNote.shopifyOrderNumber}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Issue date</s-text>
+                    <s-text>{formatIssueDate(creditNote.issueDateIso)}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Reason</s-text>
+                    <s-text>{creditNote.reason || "—"}</s-text>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Status</s-text>
+                    <s-badge tone={invoiceStatusBadgeTone(creditNote.status)}>
+                      {formatInvoiceStatusLabel(creditNote.status)}
+                    </s-badge>
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Payment status</s-text>
+                    {paymentLabel ? (
+                      <s-badge
+                        tone={paymentStatusBadgeTone(creditNote.financialStatus)}
+                      >
+                        {paymentLabel}
+                      </s-badge>
+                    ) : (
+                      <s-text>—</s-text>
+                    )}
+                  </s-stack>
+                  <s-stack gap="none">
+                    <s-text color="subdued">Total</s-text>
+                    <s-text type="strong">
+                      {formatMoney(creditNote.grandTotal, creditNote.currency)}
+                    </s-text>
+                  </s-stack>
+                </s-stack>
+              )}
+            </s-section>
+          </div>
+        </s-grid>
+      </s-query-container>
     </s-page>
   );
 }
