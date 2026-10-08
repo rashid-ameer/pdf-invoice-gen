@@ -9,8 +9,6 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { HomeInvoiceChart } from "../components/home-invoice-chart";
 import {
-  parseHomeCompare,
-  parseHomeDateRange,
   type HomeChartActionData,
   type HomeCompare,
   type HomeDateRange,
@@ -28,11 +26,21 @@ const METRIC_GRID_COLS =
 /** Chart header: title left, dropdowns right; stack on narrow. */
 const CHART_HEADER_COLS =
   "@container (inline-size > 480px) 1fr auto, 1fr";
-const CHART_FILTER_COLS =
-  "@container (inline-size > 480px) auto auto, 1fr 1fr";
 
 const DEFAULT_RANGE: HomeDateRange = "30";
 const DEFAULT_COMPARE: HomeCompare = "previous";
+const RANGE_MENU_ID = "home-chart-range-menu";
+const COMPARE_MENU_ID = "home-chart-compare-menu";
+
+const RANGE_LABELS: Record<HomeDateRange, string> = {
+  "7": "Last 7 days",
+  "30": "Last 30 days",
+};
+
+const COMPARE_LABELS: Record<HomeCompare, string> = {
+  previous: "Previous period",
+  none: "No comparison",
+};
 
 export default function HomePage() {
   const loaderData = useLoaderData<HomeLoaderData>();
@@ -171,36 +179,64 @@ export default function HomePage() {
                   </s-text>
                 </s-stack>
 
-                <s-grid gridTemplateColumns={CHART_FILTER_COLS} gap="small-200">
-                  <s-select
-                    label="Date range"
-                    labelAccessibilityVisibility="exclusive"
-                    value={range}
-                    disabled={chartLoading || undefined}
-                    onChange={(event: Event) => {
-                      const value = (event.currentTarget as HTMLSelectElement)
-                        .value;
-                      reloadChart(parseHomeDateRange(value), compare);
-                    }}
+                <s-stack direction="inline" gap="small-200">
+                  <s-button
+                    variant="secondary"
+                    commandFor={RANGE_MENU_ID}
+                    accessibilityLabel={`Date range: ${RANGE_LABELS[range]}`}
+                    {...(chartLoading ? { disabled: true } : {})}
                   >
-                    <s-option value="7">Last 7 days</s-option>
-                    <s-option value="30">Last 30 days</s-option>
-                  </s-select>
-                  <s-select
-                    label="Compare to"
-                    labelAccessibilityVisibility="exclusive"
-                    value={compare}
-                    disabled={chartLoading || undefined}
-                    onChange={(event: Event) => {
-                      const value = (event.currentTarget as HTMLSelectElement)
-                        .value;
-                      reloadChart(range, parseHomeCompare(value));
-                    }}
+                    {RANGE_LABELS[range]}
+                  </s-button>
+                  <s-menu id={RANGE_MENU_ID} accessibilityLabel="Date range">
+                    <s-button
+                      onClick={() => reloadChart("7", compare)}
+                      {...(range === "7" || chartLoading
+                        ? { disabled: true }
+                        : {})}
+                    >
+                      Last 7 days
+                    </s-button>
+                    <s-button
+                      onClick={() => reloadChart("30", compare)}
+                      {...(range === "30" || chartLoading
+                        ? { disabled: true }
+                        : {})}
+                    >
+                      Last 30 days
+                    </s-button>
+                  </s-menu>
+
+                  <s-button
+                    variant="secondary"
+                    commandFor={COMPARE_MENU_ID}
+                    accessibilityLabel={`Compare to: ${COMPARE_LABELS[compare]}`}
+                    {...(chartLoading ? { disabled: true } : {})}
                   >
-                    <s-option value="previous">Previous period</s-option>
-                    <s-option value="none">No comparison</s-option>
-                  </s-select>
-                </s-grid>
+                    {COMPARE_LABELS[compare]}
+                  </s-button>
+                  <s-menu
+                    id={COMPARE_MENU_ID}
+                    accessibilityLabel="Compare to"
+                  >
+                    <s-button
+                      onClick={() => reloadChart(range, "previous")}
+                      {...(compare === "previous" || chartLoading
+                        ? { disabled: true }
+                        : {})}
+                    >
+                      Previous period
+                    </s-button>
+                    <s-button
+                      onClick={() => reloadChart(range, "none")}
+                      {...(compare === "none" || chartLoading
+                        ? { disabled: true }
+                        : {})}
+                    >
+                      No comparison
+                    </s-button>
+                  </s-menu>
+                </s-stack>
               </s-grid>
             </s-query-container>
 
