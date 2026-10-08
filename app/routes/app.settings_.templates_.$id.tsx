@@ -1194,46 +1194,50 @@ export default function TemplateDetailsPage() {
           gap="large"
           alignItems="start"
         >
-          <s-section accessibilityLabel="Template controls">
-            <TemplateVisualConfigEditor
-              config={config}
-              onChange={onConfigChange}
-              baseLayoutCode={result.baseLayoutCode}
-              documentType={result.documentType}
-              sourceType={sourceType}
-              logoResetToken={logoResetToken}
-            />
-          </s-section>
-
-          <s-section heading="Preview">
-            {previewFailed ? (
-              <s-banner tone="critical" heading="Preview failed">
-                <s-stack gap="base">
-                  <s-text>{previewErrorMessage}</s-text>
-                  <s-button
-                    variant="secondary"
-                    onClick={refreshPreview}
-                    {...(previewing ? { loading: true, disabled: true } : {})}
-                  >
-                    Try again
-                  </s-button>
-                </s-stack>
-              </s-banner>
-            ) : null}
-            {previewing && !previewHtml ? (
-              <s-spinner accessibilityLabel="Updating preview" />
-            ) : null}
-            {!previewFailed && previewHtml ? (
-              <iframe
-                ref={iframeRef}
-                title="Template preview"
-                srcDoc={previewHtml}
-                sandbox="allow-same-origin allow-modals"
-                width="100%"
-                scrolling="no"
+          <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
+            <s-section accessibilityLabel="Template controls">
+              <TemplateVisualConfigEditor
+                config={config}
+                onChange={onConfigChange}
+                baseLayoutCode={result.baseLayoutCode}
+                documentType={result.documentType}
+                sourceType={sourceType}
+                logoResetToken={logoResetToken}
               />
-            ) : null}
-          </s-section>
+            </s-section>
+          </div>
+
+          <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
+            <s-section heading="Preview">
+              {previewFailed ? (
+                <s-banner tone="critical" heading="Preview failed">
+                  <s-stack gap="base">
+                    <s-text>{previewErrorMessage}</s-text>
+                    <s-button
+                      variant="secondary"
+                      onClick={refreshPreview}
+                      {...(previewing ? { loading: true, disabled: true } : {})}
+                    >
+                      Try again
+                    </s-button>
+                  </s-stack>
+                </s-banner>
+              ) : null}
+              {previewing && !previewHtml ? (
+                <s-spinner accessibilityLabel="Updating preview" />
+              ) : null}
+              {!previewFailed && previewHtml ? (
+                <iframe
+                  ref={iframeRef}
+                  title="Template preview"
+                  srcDoc={previewHtml}
+                  sandbox="allow-same-origin allow-modals"
+                  width="100%"
+                  scrolling="no"
+                />
+              ) : null}
+            </s-section>
+          </div>
         </s-grid>
       </s-query-container>
 
