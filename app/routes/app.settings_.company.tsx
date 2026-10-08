@@ -350,6 +350,14 @@ export default function CompanySetupPage() {
     };
   }, [dirty, shopify]);
 
+  // Circular loader in the admin header (Loading API) — not `loading` on <button>.
+  useEffect(() => {
+    shopify.loading(saving);
+    return () => {
+      shopify.loading(false);
+    };
+  }, [saving, shopify]);
+
   const patch = <K extends keyof SetupForm>(key: K, value: SetupForm[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     if (errors[key as string]) {
@@ -433,7 +441,8 @@ export default function CompanySetupPage() {
         <button
           variant="primary"
           onClick={saveForm}
-          {...(saving ? { disabled: true, loading: true } : {})}
+          // App Bridge save-bar spinner: empty string enables loading; boolean true does not.
+          {...(saving ? { disabled: true, loading: "" } : {})}
         >
           Save
         </button>
