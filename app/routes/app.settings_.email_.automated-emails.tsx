@@ -326,12 +326,11 @@ function AutomationToggleRow({
           alignItems="center"
         >
           <s-stack gap="none">
-            <s-text type="strong">{row.title}</s-text>
+            <s-heading>{row.title}</s-heading>
             <s-text color="subdued">{row.description}</s-text>
           </s-stack>
           <s-switch
             accessibilityLabel={row.switchLabel}
-            label={row.switchLabel}
             checked={autoSend}
             disabled={saving || undefined}
             onChange={(event: Event) => {
