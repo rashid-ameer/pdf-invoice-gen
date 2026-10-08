@@ -80,6 +80,13 @@ const STEPS = [
 
 const SAVE_BAR_ID = "company-setup-save-bar";
 
+/** App Bridge rejects hide() when the bar element is already gone. */
+function hideCompanySaveBar(
+  shopify: { saveBar: { hide: (id: string) => Promise<void> | void } },
+) {
+  void Promise.resolve(shopify.saveBar.hide(SAVE_BAR_ID)).catch(() => {});
+}
+
 const COUNTRY_OPTIONS: Array<{ value: string; label: string }> = [
   { value: "AE", label: "United Arab Emirates" },
   { value: "SA", label: "Saudi Arabia" },
@@ -320,7 +327,7 @@ export default function CompanySetupPage() {
   useEffect(() => {
     if (!actionData || !("ok" in actionData) || !actionData.ok) return;
     setBaseline(formRef.current);
-    shopify.saveBar.hide(SAVE_BAR_ID);
+    hideCompanySaveBar(shopify);
     shopify.toast.show("Company details saved");
     if ("redirectTo" in actionData && actionData.redirectTo) {
       navigate(actionData.redirectTo);
@@ -336,10 +343,10 @@ export default function CompanySetupPage() {
     if (dirty) {
       shopify.saveBar.show(SAVE_BAR_ID);
     } else {
-      shopify.saveBar.hide(SAVE_BAR_ID);
+      hideCompanySaveBar(shopify);
     }
     return () => {
-      shopify.saveBar.hide(SAVE_BAR_ID);
+      hideCompanySaveBar(shopify);
     };
   }, [dirty, shopify]);
 
@@ -400,7 +407,7 @@ export default function CompanySetupPage() {
     if (saving) return;
     setForm(baseline);
     setErrors({});
-    shopify.saveBar.hide(SAVE_BAR_ID);
+    hideCompanySaveBar(shopify);
   };
 
   const selectSection = (index: number) => {

@@ -56,9 +56,6 @@ export default function HomePage() {
   return <HomeDashboard loaderData={loaderData} />;
 }
 
-/** Must match company route — clear a leftover bar after onboarding navigation. */
-const COMPANY_SETUP_SAVE_BAR_ID = "company-setup-save-bar";
-
 function InitialSetupPage({ setup }: { setup: HomeInitialSetup }) {
   const shopify = useAppBridge();
   const finishFetcher = useFetcher<HomeActionData>();
@@ -73,11 +70,6 @@ function InitialSetupPage({ setup }: { setup: HomeInitialSetup }) {
     company: !setup.companyComplete,
     templates: setup.companyComplete && !setup.templatesComplete,
   });
-
-  // App Bridge save bar lives outside the React tree; hide if company left it open.
-  useEffect(() => {
-    void shopify.saveBar.hide(COMPANY_SETUP_SAVE_BAR_ID);
-  }, [shopify]);
 
   useEffect(() => {
     if (finishFetcher.state !== "idle" || !finishFetcher.data) return;
