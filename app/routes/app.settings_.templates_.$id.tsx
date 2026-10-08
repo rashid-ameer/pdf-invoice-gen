@@ -15,6 +15,7 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { SettingsTemplatesBreadcrumbs } from "../components/settings-templates-breadcrumbs";
 import { TemplateVisualConfigEditor } from "../components/template-visual-config-editor";
 import type { DocumentType } from "../types/index";
 import {
@@ -992,12 +993,7 @@ export default function TemplateDetailsPage() {
   if (!result || !config) {
     return (
       <s-page heading="Template not found" inlineSize="base">
-        <s-link slot="breadcrumb-actions" href="/app/settings">
-          Settings
-        </s-link>
-        <s-link slot="breadcrumb-actions" href="/app/settings/templates">
-          Templates
-        </s-link>
+        <SettingsTemplatesBreadcrumbs menuId="template-missing-breadcrumb" />
         <s-section accessibilityLabel="Template not found">
           <s-banner tone="critical" heading="Template not found">
             This template could not be loaded. It may have been deleted or does
@@ -1144,12 +1140,10 @@ export default function TemplateDetailsPage() {
 
   return (
     <s-page heading={pageHeading} inlineSize="base">
-      <s-link slot="breadcrumb-actions" href="/app/settings">
-        Settings
-      </s-link>
-      <s-link slot="breadcrumb-actions" href={listHref}>
-        Templates
-      </s-link>
+      <SettingsTemplatesBreadcrumbs
+        menuId="template-edit-breadcrumb"
+        templatesHref={listHref}
+      />
       {!isUntitled ? (
         <s-badge slot="accessory" tone="neutral">
           {result.isSystem ? "System" : "Custom"}

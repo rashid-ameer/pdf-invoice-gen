@@ -19,6 +19,7 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { SettingsTemplatesBreadcrumbs } from "../components/settings-templates-breadcrumbs";
 import {
   CARD_GRID_COLUMNS,
   DELETE_DISABLED_TOOLTIP_ID,
@@ -352,12 +353,7 @@ export default function ChooseTemplatePage() {
   if (!data.ok || !data.documentType) {
     return (
       <s-page heading="Choose a template">
-        <s-link slot="breadcrumb-actions" href="/app/settings">
-          Settings
-        </s-link>
-        <s-link slot="breadcrumb-actions" href={templatesOverviewHref()}>
-          Templates
-        </s-link>
+        <SettingsTemplatesBreadcrumbs menuId="template-change-invalid-breadcrumb" />
         <s-section>
           <s-stack gap="base">
             <s-banner tone="critical" heading="Unknown document type">
@@ -402,12 +398,10 @@ export default function ChooseTemplatePage() {
 
   return (
     <s-page heading="Choose a template">
-      <s-link slot="breadcrumb-actions" href="/app/settings">
-        Settings
-      </s-link>
-      <s-link slot="breadcrumb-actions" href={overviewHref}>
-        Templates
-      </s-link>
+      <SettingsTemplatesBreadcrumbs
+        menuId="template-change-breadcrumb"
+        templatesHref={overviewHref}
+      />
 
       <s-stack gap="base">
         <s-text color="subdued">
