@@ -3,7 +3,8 @@
  * No authentication, no database, no merchant data.
  */
 
-import { APP_NAME, SUPPORT_EMAIL, getPublicAppUrl } from "../constants/app";
+import { APP_NAME } from "../constants/app";
+import { SUPPORT_EMAIL, getPublicAppUrl } from "../constants/app.server";
 
 function escapeHtml(value: string): string {
   return value

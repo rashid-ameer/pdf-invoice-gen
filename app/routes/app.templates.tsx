@@ -201,6 +201,7 @@ export default function TemplatesOverviewPage() {
                       <s-button
                         variant="secondary"
                         onClick={() => {
+                          console.log("Clicked")
                           setPendingNav(`edit:${selectedType}`);
                           navigate(
                             `/app/templates/${encodeURIComponent(selectedTemplate.id)}`,

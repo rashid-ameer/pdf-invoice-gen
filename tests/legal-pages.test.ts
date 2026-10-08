@@ -6,7 +6,8 @@ import { describe, it } from "node:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { APP_NAME, SUPPORT_EMAIL } from "../app/constants/app";
+import { APP_NAME } from "../app/constants/app";
+import { SUPPORT_EMAIL } from "../app/constants/app.server";
 import {
   legalHtmlResponse,
   renderInstallFromShopifyPage,

@@ -4,7 +4,7 @@
  */
 
 import prisma from "../db.server";
-import { getPublicAppUrl } from "../constants/app";
+import { getPublicAppUrl } from "../constants/app.server";
 
 export type DatabaseHealth = {
   connected: boolean;
