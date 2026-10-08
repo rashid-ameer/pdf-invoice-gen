@@ -54,6 +54,21 @@ function documentTypeLabel(type: DocumentType): string {
   return TEMPLATE_DOC_TYPES.find((t) => t.value === type)?.label ?? type;
 }
 
+function chooseTemplateHeading(type: DocumentType): string {
+  switch (type) {
+    case "tax_invoice":
+      return "Choose Invoice Template";
+    case "packing_slip":
+      return "Choose Packing Slip Template";
+    case "credit_note":
+      return "Choose Credit Note Template";
+    case "refund_document":
+      return "Choose Refund Document Template";
+    default:
+      return "Choose a template";
+  }
+}
+
 function isChangePath(pathname: string): boolean {
   return /^\/app\/settings\/templates\/[^/]+\/change\/?$/.test(pathname);
 }
@@ -393,6 +408,7 @@ export default function ChooseTemplatePage() {
 
   const documentType = data.documentType;
   const overviewHref = templatesOverviewHref(documentType);
+  const pageHeading = chooseTemplateHeading(documentType);
 
   const submitIntent = (
     intent: string,
@@ -419,7 +435,7 @@ export default function ChooseTemplatePage() {
   };
 
   return (
-    <s-page heading="Choose a template">
+    <s-page heading={pageHeading}>
       <SettingsTemplatesBreadcrumbs
         menuId="template-change-breadcrumb"
         templatesHref={overviewHref}
