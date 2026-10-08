@@ -13,6 +13,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { EmailSandboxBanner } from "../components/email-sandbox-banner";
+import { SettingsEmailBreadcrumbs } from "../components/settings-email-breadcrumbs";
 import {
   getDeliverySettings,
   saveDeliverySettings,
@@ -204,12 +205,7 @@ export default function SenderRecipientsPage() {
 
   return (
     <s-page heading="Sender and recipients">
-      <s-link slot="breadcrumb-actions" href="/app/settings">
-        Settings
-      </s-link>
-      <s-link slot="breadcrumb-actions" href="/app/settings/email">
-        Email
-      </s-link>
+      <SettingsEmailBreadcrumbs menuId="email-sender-breadcrumb" />
 
       <ui-save-bar id={SAVE_BAR_ID}>
         <button

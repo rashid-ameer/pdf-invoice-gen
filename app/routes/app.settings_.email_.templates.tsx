@@ -6,6 +6,7 @@ import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { SettingsEmailBreadcrumbs } from "../components/settings-email-breadcrumbs";
 import { authenticate } from "../shopify.server";
 
 type TemplateRow = {
@@ -44,12 +45,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function EmailTemplatesListPage() {
   return (
     <s-page heading="Email templates">
-      <s-link slot="breadcrumb-actions" href="/app/settings">
-        Settings
-      </s-link>
-      <s-link slot="breadcrumb-actions" href="/app/settings/email">
-        Email
-      </s-link>
+      <SettingsEmailBreadcrumbs menuId="email-templates-list-breadcrumb" />
 
       <s-section>
         <s-stack gap="base">

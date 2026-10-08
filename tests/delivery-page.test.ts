@@ -88,7 +88,7 @@ describe("Email hub UI wiring", () => {
       "utf8",
     );
     assert.match(page, /heading="Automated emails"/);
-    assert.match(page, /href="\/app\/settings\/email"/);
+    assert.match(page, /SettingsEmailBreadcrumbs/);
     assert.match(page, /Tax invoices/);
     assert.match(page, /Credit notes/);
     assert.match(page, /Refund documents/);
@@ -111,7 +111,7 @@ describe("Email hub UI wiring", () => {
       "utf8",
     );
     assert.match(page, /heading="Sender and recipients"/);
-    assert.match(page, /href="\/app\/settings\/email"/);
+    assert.match(page, /SettingsEmailBreadcrumbs/);
     assert.match(page, /From name/);
     assert.match(page, /Reply-to/);
     assert.match(page, /CC staff/);
@@ -128,7 +128,7 @@ describe("Email hub UI wiring", () => {
       "utf8",
     );
     assert.match(page, /heading="Email templates"/);
-    assert.match(page, /href="\/app\/settings\/email"/);
+    assert.match(page, /SettingsEmailBreadcrumbs/);
     assert.match(page, /Tax invoice email/);
     assert.match(page, /Credit note email/);
     assert.match(page, /Refund document email/);

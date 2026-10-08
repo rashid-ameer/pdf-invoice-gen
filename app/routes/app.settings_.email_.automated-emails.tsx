@@ -12,6 +12,7 @@ import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { SettingsEmailBreadcrumbs } from "../components/settings-email-breadcrumbs";
 import {
   getDeliverySettings,
   saveDeliverySettings,
@@ -234,12 +235,7 @@ export default function AutomatedEmailsPage() {
 
   return (
     <s-page heading="Automated emails">
-      <s-link slot="breadcrumb-actions" href="/app/settings">
-        Settings
-      </s-link>
-      <s-link slot="breadcrumb-actions" href="/app/settings/email">
-        Email
-      </s-link>
+      <SettingsEmailBreadcrumbs menuId="email-automated-breadcrumb" />
 
       <ui-save-bar id={SAVE_BAR_ID}>
         <button
