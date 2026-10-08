@@ -27,9 +27,13 @@ import {
 } from "../models/social-links";
 import { authenticate } from "../shopify.server";
 
-/** Side-by-side fields; stack vertically at ≤768px container width. */
-const GRID_2_COLS = "@container (inline-size > 768px) 1fr 1fr, 1fr";
-const GRID_3_COLS = "@container (inline-size > 768px) 1fr 1fr 1fr, 1fr";
+/**
+ * Side-by-side fields in the content panel.
+ * Breakpoint is lower than the page sidebar (768) because the panel is
+ * narrower than the full page once the nav column is present.
+ */
+const GRID_2_COLS = "@container (inline-size > 480px) 1fr 1fr, 1fr";
+const GRID_3_COLS = "@container (inline-size > 480px) 1fr 1fr 1fr, 1fr";
 /** Sidebar nav + section panel; stack on narrow containers. */
 const SECTION_LAYOUT_COLS =
   "@container (inline-size > 768px) 220px 1fr, 1fr";
