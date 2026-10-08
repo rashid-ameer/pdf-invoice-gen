@@ -174,6 +174,11 @@ type Pages = {
   "/app/refund-documents/bulk": {
     params: {};
   };
+  "/app/settings/email/:type": {
+    params: {
+      "type": string;
+    };
+  };
   "/app/invoices/export/csv": {
     params: {};
   };
@@ -206,10 +211,8 @@ type Pages = {
       "id": string;
     };
   };
-  "/app/delivery/:type": {
-    params: {
-      "type": string;
-    };
+  "/app/settings/email": {
+    params: {};
   };
   "/app/invoices/bulk": {
     params: {};
@@ -257,9 +260,6 @@ type Pages = {
   "/app/branding": {
     params: {};
   };
-  "/app/delivery": {
-    params: {};
-  };
   "/app/invoices": {
     params: {};
   };
@@ -274,7 +274,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/app/api/orders/:orderId/invoice/customer-link" | "/app/api/orders/:orderId/invoice/preview" | "/verify/refund-documents/:id/:signature" | "/app/api/orders/:orderId/invoice/email" | "/verify/credit-notes/:id/:signature" | "/app/api/orders/:orderId/documents" | "/public/refund-documents/:token" | "/public/refund-documents/:token/download" | "/verify/invoices/:id/:signature" | "/webhooks/customers/data_request" | "/public/credit-notes/:token" | "/public/credit-notes/:token/download" | "/webhooks/app/scopes_update" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/public/invoices/:token" | "/public/invoices/:token/download" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/webhooks/shop/redact" | "/api/health" | "/app/print" | "/api/ready" | "/api/setup" | "/install" | "/privacy" | "/support" | "/auth/*" | "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/settings/templates/:type/change" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/settings/templates/:id" | "/app/settings/templates/:id/thumbnail" | "/app/refund-documents/bulk" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/settings/templates" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/delivery/:type" | "/app/invoices/bulk" | "/app/company-setup" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/compliance" | "/app/branding" | "/app/delivery" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/" | "/app/api/orders/:orderId/invoice/customer-link" | "/app/api/orders/:orderId/invoice/preview" | "/verify/refund-documents/:id/:signature" | "/app/api/orders/:orderId/invoice/email" | "/verify/credit-notes/:id/:signature" | "/app/api/orders/:orderId/documents" | "/public/refund-documents/:token" | "/public/refund-documents/:token/download" | "/verify/invoices/:id/:signature" | "/webhooks/customers/data_request" | "/public/credit-notes/:token" | "/public/credit-notes/:token/download" | "/webhooks/app/scopes_update" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/public/invoices/:token" | "/public/invoices/:token/download" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/webhooks/shop/redact" | "/api/health" | "/app/print" | "/api/ready" | "/api/setup" | "/install" | "/privacy" | "/support" | "/auth/*" | "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/settings/templates/:type/change" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/settings/templates/:id" | "/app/settings/templates/:id/thumbnail" | "/app/refund-documents/bulk" | "/app/settings/email/:type" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/settings/templates" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/settings/email" | "/app/invoices/bulk" | "/app/company-setup" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/compliance" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
   };
   "routes/app_.api.orders.$orderId.invoice.customer-link.tsx": {
     id: "routes/app_.api.orders.$orderId.invoice.customer-link";
@@ -398,7 +398,7 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/settings/templates/:type/change" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/settings/templates/:id" | "/app/settings/templates/:id/thumbnail" | "/app/refund-documents/bulk" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/settings/templates" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/delivery/:type" | "/app/invoices/bulk" | "/app/company-setup" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/compliance" | "/app/branding" | "/app/delivery" | "/app/invoices" | "/app/settings" | "/app/help";
+    page: "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/settings/templates/:type/change" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/settings/templates/:id" | "/app/settings/templates/:id/thumbnail" | "/app/refund-documents/bulk" | "/app/settings/email/:type" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/settings/templates" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/settings/email" | "/app/invoices/bulk" | "/app/company-setup" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/compliance" | "/app/branding" | "/app/invoices" | "/app/settings" | "/app/help";
   };
   "routes/app.credit-notes_.$id_.refund-document.tsx": {
     id: "routes/app.credit-notes_.$id_.refund-document";
@@ -436,6 +436,10 @@ type RouteFiles = {
     id: "routes/app.refund-documents_.bulk";
     page: "/app/refund-documents/bulk";
   };
+  "routes/app.settings_.email_.$type.tsx": {
+    id: "routes/app.settings_.email_.$type";
+    page: "/app/settings/email/:type";
+  };
   "routes/app.invoices_.export.csv.tsx": {
     id: "routes/app.invoices_.export.csv";
     page: "/app/invoices/export/csv";
@@ -468,9 +472,9 @@ type RouteFiles = {
     id: "routes/app.credit-notes_.$id.view";
     page: "/app/credit-notes/:id/view";
   };
-  "routes/app.delivery_.$type.tsx": {
-    id: "routes/app.delivery_.$type";
-    page: "/app/delivery/:type";
+  "routes/app.settings_.email.tsx": {
+    id: "routes/app.settings_.email";
+    page: "/app/settings/email";
   };
   "routes/app.invoices_.bulk.tsx": {
     id: "routes/app.invoices_.bulk";
@@ -519,10 +523,6 @@ type RouteFiles = {
   "routes/app.branding.tsx": {
     id: "routes/app.branding";
     page: "/app/branding";
-  };
-  "routes/app.delivery.tsx": {
-    id: "routes/app.delivery";
-    page: "/app/delivery";
   };
   "routes/app.invoices.tsx": {
     id: "routes/app.invoices";
@@ -584,6 +584,7 @@ type RouteModules = {
   "routes/app.settings_.templates_.$id": typeof import("./app/routes/app.settings_.templates_.$id.tsx");
   "routes/app.settings_.templates_.$id.thumbnail": typeof import("./app/routes/app.settings_.templates_.$id.thumbnail.tsx");
   "routes/app.refund-documents_.bulk": typeof import("./app/routes/app.refund-documents_.bulk.tsx");
+  "routes/app.settings_.email_.$type": typeof import("./app/routes/app.settings_.email_.$type.tsx");
   "routes/app.invoices_.export.csv": typeof import("./app/routes/app.invoices_.export.csv.tsx");
   "routes/app.packing-slips_.bulk": typeof import("./app/routes/app.packing-slips_.bulk.tsx");
   "routes/app.settings_.templates": typeof import("./app/routes/app.settings_.templates.tsx");
@@ -592,7 +593,7 @@ type RouteModules = {
   "routes/app.credit-notes_.$id": typeof import("./app/routes/app.credit-notes_.$id.tsx");
   "routes/app.credit-notes_.$id.download": typeof import("./app/routes/app.credit-notes_.$id.download.tsx");
   "routes/app.credit-notes_.$id.view": typeof import("./app/routes/app.credit-notes_.$id.view.tsx");
-  "routes/app.delivery_.$type": typeof import("./app/routes/app.delivery_.$type.tsx");
+  "routes/app.settings_.email": typeof import("./app/routes/app.settings_.email.tsx");
   "routes/app.invoices_.bulk": typeof import("./app/routes/app.invoices_.bulk.tsx");
   "routes/app.company-setup": typeof import("./app/routes/app.company-setup.tsx");
   "routes/app.invoices_.$id": typeof import("./app/routes/app.invoices_.$id.tsx");
@@ -605,7 +606,6 @@ type RouteModules = {
   "routes/app.additional": typeof import("./app/routes/app.additional.tsx");
   "routes/app.compliance": typeof import("./app/routes/app.compliance.tsx");
   "routes/app.branding": typeof import("./app/routes/app.branding.tsx");
-  "routes/app.delivery": typeof import("./app/routes/app.delivery.tsx");
   "routes/app.invoices": typeof import("./app/routes/app.invoices.tsx");
   "routes/app.settings": typeof import("./app/routes/app.settings.tsx");
   "routes/app._index": typeof import("./app/routes/app._index.tsx");

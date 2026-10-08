@@ -320,7 +320,10 @@ export default function EmailTemplatePage() {
   if (loaderData.invalidType || !loaderData.type || !loaderData.settings) {
     return (
       <s-page heading="Email template">
-        <s-link slot="breadcrumb-actions" href="/app/delivery">
+        <s-link slot="breadcrumb-actions" href="/app/settings">
+          Settings
+        </s-link>
+        <s-link slot="breadcrumb-actions" href="/app/settings/email">
           Email
         </s-link>
         <s-banner tone="critical" heading="Unknown template type">
@@ -328,7 +331,7 @@ export default function EmailTemplatePage() {
           document type from the Email page.
         </s-banner>
         <s-stack direction="inline" gap="small">
-          <s-button variant="primary" href="/app/delivery">
+          <s-button variant="primary" href="/app/settings/email">
             Back to Email
           </s-button>
         </s-stack>
@@ -555,7 +558,10 @@ function EmailTemplateEditor({
 
   return (
     <s-page heading={meta.title} inlineSize="large">
-      <s-link slot="breadcrumb-actions" href="/app/delivery">
+      <s-link slot="breadcrumb-actions" href="/app/settings">
+        Settings
+      </s-link>
+      <s-link slot="breadcrumb-actions" href="/app/settings/email">
         Email
       </s-link>
 

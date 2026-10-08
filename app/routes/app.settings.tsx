@@ -40,6 +40,7 @@ const SETTINGS_AREAS: SettingsArea[] = [
     id: "email",
     title: "Email",
     description: "Automatic emails, sender name, and reply-to address.",
+    href: "/app/settings/email",
   },
 ];
 

@@ -19,7 +19,7 @@ import { authenticate } from "../shopify.server";
 
 /**
  * Email configuration — which document emails auto-send, and when.
- * Template editing lives at /app/delivery/:type. Layout lives on Branding.
+ * Template editing lives at /app/settings/email/:type. Layout lives on Branding.
  */
 
 const SAVE_BAR_ID = "email-config-save-bar";
@@ -55,7 +55,7 @@ const DOCUMENT_TYPES: DocumentTypeConfig[] = [
     heading: "Tax invoices",
     description: "Email the invoice PDF to the customer.",
     switchLabel: "Auto-send tax invoices",
-    templateHref: "/app/delivery/invoice",
+    templateHref: "/app/settings/email/invoice",
     autoSendKey: "invoiceAutoSend",
     hasTrigger: true,
   },
@@ -64,7 +64,7 @@ const DOCUMENT_TYPES: DocumentTypeConfig[] = [
     heading: "Credit notes",
     description: "Sent after a Shopify refund creates a credit note.",
     switchLabel: "Auto-send credit notes",
-    templateHref: "/app/delivery/credit-note",
+    templateHref: "/app/settings/email/credit-note",
     autoSendKey: "creditNoteAutoSend",
     hasTrigger: false,
   },
@@ -73,7 +73,7 @@ const DOCUMENT_TYPES: DocumentTypeConfig[] = [
     heading: "Refund documents",
     description: "Refund receipt PDF sent on the same refund event.",
     switchLabel: "Auto-send refund documents",
-    templateHref: "/app/delivery/refund",
+    templateHref: "/app/settings/email/refund",
     autoSendKey: "refundDocumentAutoSend",
     hasTrigger: false,
   },
@@ -278,6 +278,9 @@ export default function EmailConfigPage() {
 
   return (
     <s-page heading="Email">
+      <s-link slot="breadcrumb-actions" href="/app/settings">
+        Settings
+      </s-link>
       <ui-save-bar id={SAVE_BAR_ID}>
         <button
           variant="primary"

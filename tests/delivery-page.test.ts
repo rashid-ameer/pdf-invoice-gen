@@ -41,19 +41,26 @@ async function seedStore() {
 }
 
 describe("Email config page UI wiring", () => {
-  it("adds Email nav to /app/delivery without duplicating existing items", () => {
+  it("exposes Email via Settings hub, not sidebar", () => {
     const nav = readFileSync(join(process.cwd(), "app/routes/app.tsx"), "utf8");
-    assert.match(nav, /href="\/app\/delivery">Email</);
-    assert.equal((nav.match(/href="\/app\/delivery"/g) || []).length, 1);
+    assert.doesNotMatch(nav, /href="\/app\/settings\/email"/);
+    assert.doesNotMatch(nav, /href="\/app\/delivery"/);
+
+    const settings = readFileSync(
+      join(process.cwd(), "app/routes/app.settings.tsx"),
+      "utf8",
+    );
+    assert.match(settings, /href:\s*"\/app\/settings\/email"/);
   });
 
   it("is configuration-only: switches, sender, recipients — no templates or layout", () => {
     const page = readFileSync(
-      join(process.cwd(), "app/routes/app.delivery.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.email.tsx"),
       "utf8",
     );
 
     assert.match(page, /heading="Email"/);
+    assert.match(page, /breadcrumb-actions[\s\S]*Settings/);
     assert.match(page, /Tax invoices/);
     assert.match(page, /Credit notes/);
     assert.match(page, /Refund documents/);
@@ -62,9 +69,9 @@ describe("Email config page UI wiring", () => {
     assert.match(page, /s-switch/);
     assert.match(page, /Send when/);
     assert.match(page, /Edit template/);
-    assert.match(page, /\/app\/delivery\/invoice/);
-    assert.match(page, /\/app\/delivery\/credit-note/);
-    assert.match(page, /\/app\/delivery\/refund/);
+    assert.match(page, /\/app\/settings\/email\/invoice/);
+    assert.match(page, /\/app\/settings\/email\/credit-note/);
+    assert.match(page, /\/app\/settings\/email\/refund/);
     assert.match(page, /enabled", "1"/);
     assert.match(page, /ui-save-bar/);
     assert.match(page, /slot="aside"/);
@@ -81,7 +88,7 @@ describe("Email config page UI wiring", () => {
 
   it("wires edit-template route for all three types and invalid type", () => {
     const page = readFileSync(
-      join(process.cwd(), "app/routes/app.delivery_.$type.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.email_.$type.tsx"),
       "utf8",
     );
     assert.match(page, /Tax invoice email/);
