@@ -955,12 +955,23 @@ export default function TemplateDetailsPage() {
     if (!iframe || !previewHtml) return;
     const onLoad = () => {
       const doc = iframe.contentDocument;
+      if (doc?.documentElement) {
+        doc.documentElement.style.overflow = "hidden";
+      }
+      if (doc?.body) {
+        doc.body.style.overflow = "hidden";
+        doc.body.style.margin = "0";
+      }
       const h = Math.max(
         doc?.body?.scrollHeight ?? 0,
         doc?.documentElement?.scrollHeight ?? 0,
         480,
       );
+      // Size iframe to content so the page (not the iframe) scrolls.
       iframe.style.height = `${h}px`;
+      iframe.style.border = "none";
+      iframe.style.display = "block";
+      iframe.style.overflow = "hidden";
     };
     iframe.addEventListener("load", onLoad);
     onLoad();
@@ -1177,13 +1188,13 @@ export default function TemplateDetailsPage() {
         </s-banner>
       ) : null}
 
-      <s-section padding="base">
-        <s-query-container>
-          <s-grid
-            gridTemplateColumns={EDITOR_LAYOUT_COLS}
-            gap="large"
-            alignItems="start"
-          >
+      <s-query-container>
+        <s-grid
+          gridTemplateColumns={EDITOR_LAYOUT_COLS}
+          gap="large"
+          alignItems="start"
+        >
+          <s-section accessibilityLabel="Template controls">
             <TemplateVisualConfigEditor
               config={config}
               onChange={onConfigChange}
@@ -1192,38 +1203,39 @@ export default function TemplateDetailsPage() {
               sourceType={sourceType}
               logoResetToken={logoResetToken}
             />
+          </s-section>
 
-            <s-stack gap="base">
-              {previewFailed ? (
-                <s-banner tone="critical" heading="Preview failed">
-                  <s-stack gap="base">
-                    <s-text>{previewErrorMessage}</s-text>
-                    <s-button
-                      variant="secondary"
-                      onClick={refreshPreview}
-                      {...(previewing ? { loading: true, disabled: true } : {})}
-                    >
-                      Try again
-                    </s-button>
-                  </s-stack>
-                </s-banner>
-              ) : null}
-              {previewing && !previewHtml ? (
-                <s-spinner accessibilityLabel="Updating preview" />
-              ) : null}
-              {!previewFailed && previewHtml ? (
-                <iframe
-                  ref={iframeRef}
-                  title="Template preview"
-                  srcDoc={previewHtml}
-                  sandbox="allow-same-origin allow-modals"
-                  width="100%"
-                />
-              ) : null}
-            </s-stack>
-          </s-grid>
-        </s-query-container>
-      </s-section>
+          <s-section heading="Preview">
+            {previewFailed ? (
+              <s-banner tone="critical" heading="Preview failed">
+                <s-stack gap="base">
+                  <s-text>{previewErrorMessage}</s-text>
+                  <s-button
+                    variant="secondary"
+                    onClick={refreshPreview}
+                    {...(previewing ? { loading: true, disabled: true } : {})}
+                  >
+                    Try again
+                  </s-button>
+                </s-stack>
+              </s-banner>
+            ) : null}
+            {previewing && !previewHtml ? (
+              <s-spinner accessibilityLabel="Updating preview" />
+            ) : null}
+            {!previewFailed && previewHtml ? (
+              <iframe
+                ref={iframeRef}
+                title="Template preview"
+                srcDoc={previewHtml}
+                sandbox="allow-same-origin allow-modals"
+                width="100%"
+                scrolling="no"
+              />
+            ) : null}
+          </s-section>
+        </s-grid>
+      </s-query-container>
 
       <s-modal
         id={SAVE_MODAL_ID}

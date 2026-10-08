@@ -141,8 +141,8 @@ export function TemplateVisualConfigEditor({
 
       {tab === "style" ? (
         <s-stack gap="base">
-          <s-heading>Style</s-heading>
           <s-stack gap="base">
+            <s-heading>Logo</s-heading>
             <LogoEditor
               logoUrl={config.branding.logoUrl}
               resetToken={logoResetToken}
@@ -153,7 +153,12 @@ export function TemplateVisualConfigEditor({
                 })
               }
             />
+          </s-stack>
 
+          <s-divider />
+
+          <s-stack gap="base">
+            <s-heading>Colors</s-heading>
             <s-query-container>
               <s-grid
                 gridTemplateColumns="@container (inline-size > 480px) repeat(3, 1fr), 1fr"
@@ -201,7 +206,12 @@ export function TemplateVisualConfigEditor({
                 ) : null}
               </s-grid>
             </s-query-container>
+          </s-stack>
 
+          <s-divider />
+
+          <s-stack gap="base">
+            <s-heading>Typography</s-heading>
             <s-select
               label="Font family"
               value={config.typography.fontFamily}
@@ -275,106 +285,103 @@ export function TemplateVisualConfigEditor({
 
       {tab === "layout" && showLayoutTab && caps.codeEditor ? (
         <s-stack gap="base">
-          <s-heading>Layout</s-heading>
-          <s-stack gap="base">
+          <s-select
+            label="Base layout"
+            value={baseLayoutCode}
+            disabled
+          >
+            <s-option value={baseLayoutCode}>
+              {LAYOUT_LABELS[baseLayoutCode] ?? baseLayoutCode}
+            </s-option>
+          </s-select>
+
+          {caps.headerStyle ? (
             <s-select
-              label="Base layout"
-              value={baseLayoutCode}
-              disabled
+              label="Header style"
+              value={config.layout.headerStyle}
+              {...(disabled ? { disabled: true } : {})}
+              onChange={(event: Event) => {
+                const value = selectValue(event);
+                if (
+                  value !== "minimal" &&
+                  value !== "banner" &&
+                  value !== "emirates"
+                ) {
+                  return;
+                }
+                patch((d) => {
+                  d.layout.headerStyle = value;
+                });
+              }}
             >
-              <s-option value={baseLayoutCode}>
-                {LAYOUT_LABELS[baseLayoutCode] ?? baseLayoutCode}
-              </s-option>
+              <s-option value="minimal">Minimal</s-option>
+              <s-option value="banner">Banner</s-option>
+              <s-option value="emirates">Classic stripe header</s-option>
             </s-select>
+          ) : null}
 
-            {caps.headerStyle ? (
-              <s-select
-                label="Header style"
-                value={config.layout.headerStyle}
-                {...(disabled ? { disabled: true } : {})}
-                onChange={(event: Event) => {
-                  const value = selectValue(event);
-                  if (
-                    value !== "minimal" &&
-                    value !== "banner" &&
-                    value !== "emirates"
-                  ) {
-                    return;
-                  }
-                  patch((d) => {
-                    d.layout.headerStyle = value;
-                  });
-                }}
-              >
-                <s-option value="minimal">Minimal</s-option>
-                <s-option value="banner">Banner</s-option>
-                <s-option value="emirates">Classic stripe header</s-option>
-              </s-select>
-            ) : null}
+          {caps.sellerBuyerLayout ? (
+            <s-select
+              label="Seller / buyer layout"
+              value={config.layout.sellerBuyerLayout}
+              {...(disabled ? { disabled: true } : {})}
+              onChange={(event: Event) => {
+                const value = selectValue(event);
+                if (value !== "side-by-side" && value !== "stacked") return;
+                patch((d) => {
+                  d.layout.sellerBuyerLayout = value;
+                });
+              }}
+            >
+              <s-option value="side-by-side">Side by side</s-option>
+              <s-option value="stacked">Stacked</s-option>
+            </s-select>
+          ) : (
+            <s-text color="subdued">
+              Field placement is fixed on this layout. Stacked seller/buyer is
+              not used.
+            </s-text>
+          )}
 
-            {caps.sellerBuyerLayout ? (
-              <s-select
-                label="Seller / buyer layout"
-                value={config.layout.sellerBuyerLayout}
-                {...(disabled ? { disabled: true } : {})}
-                onChange={(event: Event) => {
-                  const value = selectValue(event);
-                  if (value !== "side-by-side" && value !== "stacked") return;
-                  patch((d) => {
-                    d.layout.sellerBuyerLayout = value;
-                  });
-                }}
-              >
-                <s-option value="side-by-side">Side by side</s-option>
-                <s-option value="stacked">Stacked</s-option>
-              </s-select>
-            ) : (
-              <s-text color="subdued">
-                Field placement is fixed on this layout. Stacked seller/buyer is
-                not used.
-              </s-text>
-            )}
+          {caps.logoPosition ? (
+            <s-select
+              label="Logo position"
+              value={config.layout.logoPosition}
+              {...(disabled ? { disabled: true } : {})}
+              onChange={(event: Event) => {
+                const value = selectValue(event);
+                if (value !== "left" && value !== "center") return;
+                patch((d) => {
+                  d.layout.logoPosition = value;
+                });
+              }}
+            >
+              <s-option value="left">Left</s-option>
+              <s-option value="center">Center</s-option>
+            </s-select>
+          ) : null}
 
-            {caps.logoPosition ? (
-              <s-select
-                label="Logo position"
-                value={config.layout.logoPosition}
-                {...(disabled ? { disabled: true } : {})}
-                onChange={(event: Event) => {
-                  const value = selectValue(event);
-                  if (value !== "left" && value !== "center") return;
-                  patch((d) => {
-                    d.layout.logoPosition = value;
-                  });
-                }}
-              >
-                <s-option value="left">Left</s-option>
-                <s-option value="center">Center</s-option>
-              </s-select>
-            ) : null}
-
-            {caps.taxBadge ? (
-              <s-checkbox
-                label="Show tax supplier badge"
-                checked={Boolean(config.layout.showTaxBadge)}
-                {...(disabled ? { disabled: true } : {})}
-                onChange={(event: Event) => {
-                  const checked = (event.currentTarget as HTMLInputElement)
-                    .checked;
-                  patch((d) => {
-                    d.layout.showTaxBadge = checked;
-                  });
-                }}
-              />
-            ) : null}
-          </s-stack>
+          {caps.taxBadge ? (
+            <s-checkbox
+              label="Show tax supplier badge"
+              checked={Boolean(config.layout.showTaxBadge)}
+              {...(disabled ? { disabled: true } : {})}
+              onChange={(event: Event) => {
+                const checked = (event.currentTarget as HTMLInputElement)
+                  .checked;
+                patch((d) => {
+                  d.layout.showTaxBadge = checked;
+                });
+              }}
+            />
+          ) : null}
         </s-stack>
       ) : null}
 
       {tab === "content" ? (
         <s-stack gap="base">
-          <s-heading>Content</s-heading>
           <s-stack gap="base">
+            <s-heading>Language</s-heading>
             <s-select
               label="Language"
               value={primaryLang}
@@ -410,8 +417,11 @@ export function TemplateVisualConfigEditor({
               }}
             />
             <s-text color="subdued">{languageHint}</s-text>
+          </s-stack>
 
-            {showEn ? (
+          {showEn ? (
+            <>
+              <s-divider />
               <s-stack gap="base">
                 <s-heading>English content</s-heading>
                 {caps.documentTitle ? (
@@ -470,6 +480,10 @@ export function TemplateVisualConfigEditor({
                     })
                   }
                 />
+              </s-stack>
+
+              <s-divider />
+              <s-stack gap="base">
                 <s-heading>English labels</s-heading>
                 {caps.sellerLabel ? (
                   <s-text-field
@@ -502,9 +516,12 @@ export function TemplateVisualConfigEditor({
                   }}
                 />
               </s-stack>
-            ) : null}
+            </>
+          ) : null}
 
-            {showAr ? (
+          {showAr ? (
+            <>
+              <s-divider />
               <s-stack gap="base">
                 <s-heading>Arabic content</s-heading>
                 {caps.documentTitle ? (
@@ -547,6 +564,10 @@ export function TemplateVisualConfigEditor({
                     })
                   }
                 />
+              </s-stack>
+
+              <s-divider />
+              <s-stack gap="base">
                 <s-heading>Arabic labels</s-heading>
                 {caps.sellerLabel ? (
                   <s-text-field
@@ -611,14 +632,13 @@ export function TemplateVisualConfigEditor({
                   }}
                 />
               </s-stack>
-            ) : null}
-          </s-stack>
+            </>
+          ) : null}
         </s-stack>
       ) : null}
 
       {tab === "fields" ? (
         <s-stack gap="base">
-          <s-heading>Fields</s-heading>
           <s-stack gap="base">
             <s-heading>
               {isPackingSlip
@@ -711,6 +731,10 @@ export function TemplateVisualConfigEditor({
               }}
             />
 
+          </s-stack>
+
+          <s-divider />
+          <s-stack gap="base">
             <s-heading>Line item columns</s-heading>
             <s-checkbox
               label="SKU"
@@ -790,8 +814,12 @@ export function TemplateVisualConfigEditor({
               }}
             />
 
-            {caps.productDisplay ? (
-              <>
+          </s-stack>
+
+          {caps.productDisplay ? (
+            <>
+              <s-divider />
+              <s-stack gap="base">
                 <s-heading>Product display</s-heading>
                 <s-checkbox
                   label="Product titles"
@@ -833,9 +861,12 @@ export function TemplateVisualConfigEditor({
                     });
                   }}
                 />
-              </>
-            ) : null}
+              </s-stack>
+            </>
+          ) : null}
 
+          <s-divider />
+          <s-stack gap="base">
             <s-heading>Totals</s-heading>
             {isPackingSlip ? (
               <s-checkbox
@@ -920,6 +951,10 @@ export function TemplateVisualConfigEditor({
               <s-checkbox label="Grand total (locked)" checked disabled />
             )}
 
+          </s-stack>
+
+          <s-divider />
+          <s-stack gap="base">
             <s-heading>Extra blocks</s-heading>
             {caps.qrCode ? (
               <s-checkbox
