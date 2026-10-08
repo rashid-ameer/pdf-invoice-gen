@@ -247,7 +247,7 @@ export default function BrandingPage() {
   };
 
   return (
-    <s-page heading="Invoice branding" inlineSize="large">
+    <s-page heading="Invoice branding" inlineSize="base">
       <s-link slot="breadcrumb-actions" href="/app/settings">
         Settings
       </s-link>
@@ -389,14 +389,16 @@ export default function BrandingPage() {
             </s-section>
           </s-stack>
 
-          <s-section heading="Live preview" subheading="Updates as you edit">
-            <InvoiceBrandingPreview
-              logoSrc={logo.src}
-              primaryColor={form.primaryColor}
-              accentColor={form.accentColor}
-              footerText={form.footerText}
-            />
-          </s-section>
+          <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
+            <s-section heading="Live preview" subheading="Updates as you edit">
+              <InvoiceBrandingPreview
+                logoSrc={logo.src}
+                primaryColor={form.primaryColor}
+                accentColor={form.accentColor}
+                footerText={form.footerText}
+              />
+            </s-section>
+          </div>
         </s-grid>
       </s-query-container>
     </s-page>
@@ -579,7 +581,7 @@ export function ErrorBoundary() {
 
   if (isNetworkFetchError(error)) {
     return (
-      <s-page heading="Invoice branding" inlineSize="large">
+      <s-page heading="Invoice branding" inlineSize="base">
         <s-link slot="breadcrumb-actions" href="/app/settings">
           Settings
         </s-link>
