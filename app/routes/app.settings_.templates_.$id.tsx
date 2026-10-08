@@ -1165,7 +1165,9 @@ export default function TemplateDetailsPage() {
         <button
           variant="primary"
           onClick={openSaveModal}
-          {...(busy || savingInModal ? { disabled: true } : {})}
+          {...(busy || savingInModal
+            ? { disabled: true, loading: "" }
+            : {})}
         >
           Save
         </button>

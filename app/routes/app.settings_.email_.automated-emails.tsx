@@ -241,7 +241,7 @@ export default function AutomatedEmailsPage() {
         <button
           variant="primary"
           onClick={saveForm}
-          {...(saving ? { disabled: true, loading: true } : {})}
+          {...(saving ? { disabled: true, loading: "" } : {})}
         >
           Save
         </button>
