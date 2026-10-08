@@ -351,7 +351,8 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /"credit_note"/);
     assert.match(page, /"refund_document"/);
     assert.match(page, /Customer link copied/);
-    assert.match(page, /Link created — opened in a new tab/);
+    assert.doesNotMatch(page, /window\.open\(/);
+    assert.doesNotMatch(page, /opened in a new tab/);
   });
 
   it("wires Copy customer link on credit note and refund details", () => {
@@ -370,7 +371,8 @@ describe("Credit notes page UI wiring", () => {
     assert.match(cnDetails, /"credit_note"/);
     assert.doesNotMatch(cnDetails, /"refund_document"/);
     assert.match(cnDetails, /Customer link copied/);
-    assert.match(cnDetails, /Link created — opened in a new tab/);
+    assert.doesNotMatch(cnDetails, /window\.open\(/);
+    assert.doesNotMatch(cnDetails, /opened in a new tab/);
 
     assert.match(refundDetails, /Copy customer link/);
     assert.match(refundDetails, /intent === "customer-link"/);
@@ -378,6 +380,7 @@ describe("Credit notes page UI wiring", () => {
     assert.match(refundDetails, /"refund_document"/);
     assert.doesNotMatch(refundDetails, /"credit_note"/);
     assert.match(refundDetails, /Customer link copied/);
-    assert.match(refundDetails, /Link created — opened in a new tab/);
+    assert.doesNotMatch(refundDetails, /window\.open\(/);
+    assert.doesNotMatch(refundDetails, /opened in a new tab/);
   });
 });

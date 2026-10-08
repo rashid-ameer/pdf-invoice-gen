@@ -278,8 +278,7 @@ export default function RefundDocumentDetailsPage() {
         shopify.toast.show("Customer link copied");
       },
       () => {
-        window.open(url, "_blank", "noopener");
-        shopify.toast.show("Link created — opened in a new tab");
+        shopify.toast.show("Failed to create link", { isError: true });
       },
     );
   }, [linkFetcher.state, linkFetcher.data, shopify]);
