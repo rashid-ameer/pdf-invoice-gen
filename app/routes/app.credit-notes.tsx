@@ -628,7 +628,7 @@ export default function CreditNotesPage() {
           paddingInline="base"
           border="none"
           borderRadius="base"
-          background={activeTab === "credit-notes" ? "base" : "transparent"}
+          background={activeTab === "credit-notes" ? "strong" : "transparent"}
           accessibilityLabel="Show credit notes"
           onClick={() => switchTab("credit-notes")}
         >
@@ -641,7 +641,7 @@ export default function CreditNotesPage() {
           paddingInline="base"
           border="none"
           borderRadius="base"
-          background={isRefundTab ? "base" : "transparent"}
+          background={isRefundTab ? "strong" : "transparent"}
           accessibilityLabel="Show document refunds"
           onClick={() => switchTab("refund-documents")}
         >

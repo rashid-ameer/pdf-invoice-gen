@@ -30,6 +30,9 @@ import { authenticate } from "../shopify.server";
 /** Side-by-side fields; stack vertically at ≤768px container width. */
 const GRID_2_COLS = "@container (inline-size > 768px) 1fr 1fr, 1fr";
 const GRID_3_COLS = "@container (inline-size > 768px) 1fr 1fr 1fr, 1fr";
+/** Sidebar nav + section panel; stack on narrow containers. */
+const SECTION_LAYOUT_COLS =
+  "@container (inline-size > 768px) 220px 1fr, 1fr";
 
 const STEPS = [
   {
@@ -170,33 +173,6 @@ function collectStepErrors(index: number, data: SetupForm): FieldErrors {
   return next;
 }
 
-/** Fields that count toward setup completion % (required for a valid save). */
-function getSetupProgress(form: SetupForm): {
-  filled: number;
-  total: number;
-  percent: number;
-} {
-  const values: string[] = [
-    form.legalName,
-    form.addressLine1,
-    form.city,
-    form.country,
-    form.businessEmail,
-    form.businessPhone,
-    form.vatRate,
-    form.invoicePrefix,
-    form.creditNotePrefix,
-  ];
-  if (form.vatStatus === "registered") {
-    values.push(form.trn);
-  }
-
-  const total = values.length;
-  const filled = values.filter((value) => value.trim().length > 0).length;
-  const percent = total === 0 ? 0 : Math.round((filled / total) * 100);
-  return { filled, total, percent };
-}
-
 function emptySocial(): Record<SocialPlatform, { label: string; url: string }> {
   return Object.fromEntries(
     SOCIAL_PLATFORMS.map((platform) => [
@@ -317,7 +293,6 @@ export default function CompanySetupPage() {
   const [form, setForm] = useState<SetupForm>(() => toForm(loaderData.setup));
   const [step, setStep] = useState(0);
   const [errors, setErrors] = useState<FieldErrors>({});
-  const isLastStep = step >= STEPS.length - 1;
   const formRef = useRef(form);
   formRef.current = form;
 
@@ -383,12 +358,6 @@ export default function CompanySetupPage() {
     });
   };
 
-  const validateStep = (index: number, data: SetupForm): boolean => {
-    const next = collectStepErrors(index, data);
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  };
-
   const saveForm = () => {
     if (saving) return;
     for (let index = 0; index < STEPS.length; index += 1) {
@@ -415,17 +384,10 @@ export default function CompanySetupPage() {
     shopify.saveBar.hide(SAVE_BAR_ID);
   };
 
-  const goBack = () => {
-    if (saving || step === 0) return;
+  const selectSection = (index: number) => {
+    if (saving || index === step) return;
     setErrors({});
-    setStep((prev) => prev - 1);
-  };
-
-  const goNext = () => {
-    if (saving || isLastStep) return;
-    if (!validateStep(step, form)) return;
-    setErrors({});
-    setStep((prev) => prev + 1);
+    setStep(index);
   };
 
   const current = STEPS[step];
@@ -463,391 +425,373 @@ export default function CompanySetupPage() {
           </s-banner>
         ) : null}
 
-        <s-section>
-          <s-stack gap="large-300">
-            <StepIndicator steps={STEPS} current={step} form={form} />
-
-            <s-stack gap="base">
-              <s-stack gap="none">
-                <s-heading>{current.heading}</s-heading>
-                {current.subheading ? (
-                  <s-paragraph color="subdued">{current.subheading}</s-paragraph>
-                ) : null}
-              </s-stack>
-
-              <s-query-container>
-                <s-stack gap="base">
-                  {step === 0 ? (
-                    <s-stack gap="base">
-                      <s-text-field
-                        label="Legal company name"
-                        value={form.legalName}
-                        placeholder="Acme Trading LLC"
-                        error={errors.legalName}
-                        onInput={(event: Event) =>
-                          patch("legalName", fieldValue(event))
-                        }
-                        onChange={(event: Event) =>
-                          patch("legalName", fieldValue(event))
-                        }
-                      />
-                      <s-text-field
-                        label="Trade / brand name (optional)"
-                        value={form.tradeName}
-                        placeholder="Acme"
-                        onInput={(event: Event) =>
-                          patch("tradeName", fieldValue(event))
-                        }
-                        onChange={(event: Event) =>
-                          patch("tradeName", fieldValue(event))
-                        }
-                      />
-                      <s-select
-                        label="VAT registration status"
-                        value={form.vatStatus}
-                        placeholder="Registered"
-                        onChange={(event: Event) =>
-                          patch("vatStatus", fieldValue(event))
-                        }
-                      >
-                        <s-option value="registered">
-                          VAT registered — issue tax invoices
-                        </s-option>
-                        <s-option value="not_registered">
-                          Not VAT registered — commercial invoices
-                        </s-option>
-                      </s-select>
-                    </s-stack>
-                  ) : null}
-
-                  {step === 1 ? (
-                    <s-stack gap="base">
-                      <s-grid gridTemplateColumns={GRID_2_COLS} gap="base">
-                        <s-text-field
-                          label="Tax registration number (VAT/GST)"
-                          value={form.trn}
-                          placeholder="100123456700003"
-                          error={errors.trn}
-                          onInput={(event: Event) =>
-                            patch("trn", fieldValue(event))
-                          }
-                          onChange={(event: Event) =>
-                            patch("trn", fieldValue(event))
-                          }
-                          onBlur={applyTinFromTrn}
-                        />
-                        <s-text-field
-                          label="Electronic invoicing ID (optional)"
-                          value={form.tin}
-                          placeholder="1001234567"
-                          onInput={(event: Event) =>
-                            patch("tin", fieldValue(event))
-                          }
-                          onChange={(event: Event) =>
-                            patch("tin", fieldValue(event))
-                          }
-                        />
-                      </s-grid>
-                      <s-text-field
-                        label="Business registration ID (optional)"
-                        value={form.tradeLicence}
-                        placeholder="CN-1234567"
-                        onInput={(event: Event) =>
-                          patch("tradeLicence", fieldValue(event))
-                        }
-                        onChange={(event: Event) =>
-                          patch("tradeLicence", fieldValue(event))
-                        }
-                      />
-                    </s-stack>
-                  ) : null}
-
-                  {step === 2 ? (
-                    <s-stack gap="base">
-                      <s-text-field
-                        label="Address"
-                        value={form.addressLine1}
-                        placeholder="123 Business Bay"
-                        error={errors.addressLine1}
-                        autocomplete="address-line1"
-                        onInput={(event: Event) =>
-                          patch("addressLine1", fieldValue(event))
-                        }
-                        onChange={(event: Event) =>
-                          patch("addressLine1", fieldValue(event))
-                        }
-                      />
-                      <s-text-field
-                        label="Address line 2 (optional)"
-                        value={form.addressLine2}
-                        placeholder="Suite 401"
-                        autocomplete="address-line2"
-                        onInput={(event: Event) =>
-                          patch("addressLine2", fieldValue(event))
-                        }
-                        onChange={(event: Event) =>
-                          patch("addressLine2", fieldValue(event))
-                        }
-                      />
-                      <s-text-field
-                        label="City"
-                        value={form.city}
-                        placeholder="Dubai"
-                        error={errors.city}
-                        autocomplete="address-level2"
-                        onInput={(event: Event) =>
-                          patch("city", fieldValue(event))
-                        }
-                        onChange={(event: Event) =>
-                          patch("city", fieldValue(event))
-                        }
-                      />
-                      <s-grid gridTemplateColumns={GRID_3_COLS} gap="base">
-                        <s-select
-                          label="Country"
-                          value={form.country}
-                          placeholder="AE"
-                          error={errors.country}
-                          onChange={(event: Event) =>
-                            patch("country", fieldValue(event))
-                          }
+        <s-query-container>
+          <s-grid
+            gridTemplateColumns={SECTION_LAYOUT_COLS}
+            gap="large"
+            alignItems="start"
+          >
+            <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
+              <s-section padding="none" accessibilityLabel="Company setup sections">
+                <s-box border="base" borderRadius="base" padding="small">
+                  <s-stack gap="small-400">
+                    {STEPS.map((section, index) => {
+                      const selected = index === step;
+                      const incomplete =
+                        Object.keys(collectStepErrors(index, form)).length > 0;
+                      return (
+                        <s-clickable
+                          paddingBlock="small-400"
+                          paddingInline="base"
+                          borderRadius="base"
+                          background={selected ? "subdued" : "transparent"}
+                          accessibilityLabel={`${section.label}${selected ? ", selected" : ""}${incomplete ? ", incomplete" : ""}`}
+                          onClick={() => selectSection(index)}
                         >
-                          {countryOptions.map((option) => (
-                            <s-option key={option.value} value={option.value}>
-                              {option.label}
-                            </s-option>
-                          ))}
-                        </s-select>
-                        <s-text-field
-                          label="State / province / region (optional)"
-                          value={form.emirate}
-                          placeholder="Dubai"
-                          autocomplete="address-level1"
-                          onInput={(event: Event) =>
-                            patch("emirate", fieldValue(event))
-                          }
-                          onChange={(event: Event) =>
-                            patch("emirate", fieldValue(event))
-                          }
-                        />
-                        <s-text-field
-                          label="Postal code (optional)"
-                          value={form.postalCode}
-                          placeholder="00000"
-                          autocomplete="postal-code"
-                          onInput={(event: Event) =>
-                            patch("postalCode", fieldValue(event))
-                          }
-                          onChange={(event: Event) =>
-                            patch("postalCode", fieldValue(event))
-                          }
-                        />
-                      </s-grid>
-                    </s-stack>
-                  ) : null}
+                          <s-stack
+                            direction="inline"
+                            gap="small-200"
+                            alignItems="center"
+                            justifyContent="space-between"
+                          >
+                            <s-heading>{section.label}</s-heading>
+                          </s-stack>
+                        </s-clickable>
+                      );
+                    })}
+                  </s-stack>
+                </s-box>
+              </s-section>
+            </div>
 
-                  {step === 3 ? (
-                    <s-stack gap="base">
-                      <s-grid gridTemplateColumns={GRID_2_COLS} gap="base">
-                        <s-email-field
-                          label="Business email"
-                          value={form.businessEmail}
-                          placeholder="billing@example.com"
-                          error={errors.businessEmail}
+            <s-section>
+              <s-stack gap="base">
+                <s-stack gap="none">
+                  <s-heading>{current.heading}</s-heading>
+                  {current.subheading ? (
+                    <s-paragraph color="subdued">
+                      {current.subheading}
+                    </s-paragraph>
+                  ) : null}
+                </s-stack>
+
+                <s-query-container>
+                  <s-stack gap="base">
+                    {step === 0 ? (
+                      <s-stack gap="base">
+                        <s-text-field
+                          label="Legal company name"
+                          value={form.legalName}
+                          placeholder="Acme Trading LLC"
+                          error={errors.legalName}
                           onInput={(event: Event) =>
-                            patch("businessEmail", fieldValue(event))
+                            patch("legalName", fieldValue(event))
                           }
                           onChange={(event: Event) =>
-                            patch("businessEmail", fieldValue(event))
+                            patch("legalName", fieldValue(event))
                           }
                         />
                         <s-text-field
-                          label="Business phone"
-                          value={form.businessPhone}
-                          placeholder="+971 50 123 4567"
-                          error={errors.businessPhone}
+                          label="Trade / brand name (optional)"
+                          value={form.tradeName}
+                          placeholder="Acme"
                           onInput={(event: Event) =>
-                            patch("businessPhone", fieldValue(event))
+                            patch("tradeName", fieldValue(event))
                           }
                           onChange={(event: Event) =>
-                            patch("businessPhone", fieldValue(event))
-                          }
-                        />
-                      </s-grid>
-                    </s-stack>
-                  ) : null}
-
-                  {step === 4 ? (
-                    <s-stack gap="base">
-                      <s-grid gridTemplateColumns={GRID_2_COLS} gap="base">
-                        <s-number-field
-                          label="Default VAT rate (%)"
-                          value={form.vatRate}
-                          placeholder="5"
-                          min={0}
-                          max={100}
-                          step={0.5}
-                          error={errors.vatRate}
-                          onInput={(event: Event) =>
-                            patch("vatRate", fieldValue(event))
-                          }
-                          onChange={(event: Event) =>
-                            patch("vatRate", fieldValue(event))
+                            patch("tradeName", fieldValue(event))
                           }
                         />
                         <s-select
-                          label="Tax handling"
-                          value={form.taxInclusive}
-                          placeholder="Exclusive"
+                          label="VAT registration status"
+                          value={form.vatStatus}
+                          placeholder="Registered"
                           onChange={(event: Event) =>
-                            patch("taxInclusive", fieldValue(event))
+                            patch("vatStatus", fieldValue(event))
                           }
                         >
-                          <s-option value="false">
-                            Tax exclusive (add on top)
+                          <s-option value="registered">
+                            VAT registered — issue tax invoices
                           </s-option>
-                          <s-option value="true">
-                            Tax inclusive (included in price)
+                          <s-option value="not_registered">
+                            Not VAT registered — commercial invoices
                           </s-option>
                         </s-select>
-                      </s-grid>
-                      <s-grid gridTemplateColumns={GRID_2_COLS} gap="base">
-                        <s-text-field
-                          label="Invoice prefix"
-                          value={form.invoicePrefix}
-                          placeholder="INV-"
-                          error={errors.invoicePrefix}
-                          onInput={(event: Event) =>
-                            patch("invoicePrefix", fieldValue(event))
-                          }
-                          onChange={(event: Event) =>
-                            patch("invoicePrefix", fieldValue(event))
-                          }
-                        />
-                        <s-text-field
-                          label="Credit note prefix"
-                          value={form.creditNotePrefix}
-                          placeholder="CN-"
-                          error={errors.creditNotePrefix}
-                          onInput={(event: Event) =>
-                            patch("creditNotePrefix", fieldValue(event))
-                          }
-                          onChange={(event: Event) =>
-                            patch("creditNotePrefix", fieldValue(event))
-                          }
-                        />
-                      </s-grid>
-                    </s-stack>
-                  ) : null}
+                      </s-stack>
+                    ) : null}
 
-                  {step === 5 ? (
-                    <s-stack gap="base">
-                      <s-checkbox
-                        label="Show social links on invoice footer"
-                        checked={form.showSocialLinks}
-                        onChange={(event: Event) => {
-                          const target = event.currentTarget as HTMLInputElement & {
-                            checked?: boolean;
-                          };
-                          patch("showSocialLinks", Boolean(target.checked));
-                        }}
-                      />
-                      {socialLinksFormFieldNames().map(({ platform }) => (
-                        <s-grid
-                          key={platform}
-                          gridTemplateColumns={GRID_2_COLS}
-                          gap="base"
-                        >
+                    {step === 1 ? (
+                      <s-stack gap="base">
+                        <s-grid gridTemplateColumns={GRID_2_COLS} gap="base">
                           <s-text-field
-                            label={`${SOCIAL_PLATFORM_LABELS[platform]} label (optional)`}
-                            value={form.social[platform].label}
-                            placeholder={SOCIAL_PLATFORM_LABELS[platform]}
+                            label="Tax registration number (VAT/GST)"
+                            value={form.trn}
+                            placeholder="100123456700003"
+                            error={errors.trn}
                             onInput={(event: Event) =>
-                              patchSocial(platform, "label", fieldValue(event))
+                              patch("trn", fieldValue(event))
                             }
                             onChange={(event: Event) =>
-                              patchSocial(platform, "label", fieldValue(event))
+                              patch("trn", fieldValue(event))
                             }
+                            onBlur={applyTinFromTrn}
                           />
                           <s-text-field
-                            label={`${SOCIAL_PLATFORM_LABELS[platform]} URL (optional)`}
-                            value={form.social[platform].url}
-                            placeholder="https://example.com"
+                            label="Electronic invoicing ID (optional)"
+                            value={form.tin}
+                            placeholder="1001234567"
                             onInput={(event: Event) =>
-                              patchSocial(platform, "url", fieldValue(event))
+                              patch("tin", fieldValue(event))
                             }
                             onChange={(event: Event) =>
-                              patchSocial(platform, "url", fieldValue(event))
+                              patch("tin", fieldValue(event))
                             }
                           />
                         </s-grid>
-                      ))}
-                    </s-stack>
-                  ) : null}
-                </s-stack>
-              </s-query-container>
-            </s-stack>
+                        <s-text-field
+                          label="Business registration ID (optional)"
+                          value={form.tradeLicence}
+                          placeholder="CN-1234567"
+                          onInput={(event: Event) =>
+                            patch("tradeLicence", fieldValue(event))
+                          }
+                          onChange={(event: Event) =>
+                            patch("tradeLicence", fieldValue(event))
+                          }
+                        />
+                      </s-stack>
+                    ) : null}
 
-            <s-stack
-              direction="inline"
-              justifyContent="space-between"
-              alignItems="center"
-            >
-              <s-button
-                type="button"
-                variant="secondary"
-                onClick={goBack}
-                {...(step === 0 || saving ? { disabled: true } : {})}
-              >
-                Back
-              </s-button>
-              <s-button
-                type="button"
-                variant="secondary"
-                onClick={goNext}
-                {...(saving || isLastStep ? { disabled: true } : {})}
-              >
-                Next
-              </s-button>
-            </s-stack>
-          </s-stack>
-        </s-section>
+                    {step === 2 ? (
+                      <s-stack gap="base">
+                        <s-text-field
+                          label="Address"
+                          value={form.addressLine1}
+                          placeholder="123 Business Bay"
+                          error={errors.addressLine1}
+                          autocomplete="address-line1"
+                          onInput={(event: Event) =>
+                            patch("addressLine1", fieldValue(event))
+                          }
+                          onChange={(event: Event) =>
+                            patch("addressLine1", fieldValue(event))
+                          }
+                        />
+                        <s-text-field
+                          label="Address line 2 (optional)"
+                          value={form.addressLine2}
+                          placeholder="Suite 401"
+                          autocomplete="address-line2"
+                          onInput={(event: Event) =>
+                            patch("addressLine2", fieldValue(event))
+                          }
+                          onChange={(event: Event) =>
+                            patch("addressLine2", fieldValue(event))
+                          }
+                        />
+                        <s-text-field
+                          label="City"
+                          value={form.city}
+                          placeholder="Dubai"
+                          error={errors.city}
+                          autocomplete="address-level2"
+                          onInput={(event: Event) =>
+                            patch("city", fieldValue(event))
+                          }
+                          onChange={(event: Event) =>
+                            patch("city", fieldValue(event))
+                          }
+                        />
+                        <s-grid gridTemplateColumns={GRID_3_COLS} gap="base">
+                          <s-select
+                            label="Country"
+                            value={form.country}
+                            placeholder="AE"
+                            error={errors.country}
+                            onChange={(event: Event) =>
+                              patch("country", fieldValue(event))
+                            }
+                          >
+                            {countryOptions.map((option) => (
+                              <s-option key={option.value} value={option.value}>
+                                {option.label}
+                              </s-option>
+                            ))}
+                          </s-select>
+                          <s-text-field
+                            label="State / province / region (optional)"
+                            value={form.emirate}
+                            placeholder="Dubai"
+                            autocomplete="address-level1"
+                            onInput={(event: Event) =>
+                              patch("emirate", fieldValue(event))
+                            }
+                            onChange={(event: Event) =>
+                              patch("emirate", fieldValue(event))
+                            }
+                          />
+                          <s-text-field
+                            label="Postal code (optional)"
+                            value={form.postalCode}
+                            placeholder="00000"
+                            autocomplete="postal-code"
+                            onInput={(event: Event) =>
+                              patch("postalCode", fieldValue(event))
+                            }
+                            onChange={(event: Event) =>
+                              patch("postalCode", fieldValue(event))
+                            }
+                          />
+                        </s-grid>
+                      </s-stack>
+                    ) : null}
+
+                    {step === 3 ? (
+                      <s-stack gap="base">
+                        <s-grid gridTemplateColumns={GRID_2_COLS} gap="base">
+                          <s-email-field
+                            label="Business email"
+                            value={form.businessEmail}
+                            placeholder="billing@example.com"
+                            error={errors.businessEmail}
+                            onInput={(event: Event) =>
+                              patch("businessEmail", fieldValue(event))
+                            }
+                            onChange={(event: Event) =>
+                              patch("businessEmail", fieldValue(event))
+                            }
+                          />
+                          <s-text-field
+                            label="Business phone"
+                            value={form.businessPhone}
+                            placeholder="+971 50 123 4567"
+                            error={errors.businessPhone}
+                            onInput={(event: Event) =>
+                              patch("businessPhone", fieldValue(event))
+                            }
+                            onChange={(event: Event) =>
+                              patch("businessPhone", fieldValue(event))
+                            }
+                          />
+                        </s-grid>
+                      </s-stack>
+                    ) : null}
+
+                    {step === 4 ? (
+                      <s-stack gap="base">
+                        <s-grid gridTemplateColumns={GRID_2_COLS} gap="base">
+                          <s-number-field
+                            label="Default VAT rate (%)"
+                            value={form.vatRate}
+                            placeholder="5"
+                            min={0}
+                            max={100}
+                            step={0.5}
+                            error={errors.vatRate}
+                            onInput={(event: Event) =>
+                              patch("vatRate", fieldValue(event))
+                            }
+                            onChange={(event: Event) =>
+                              patch("vatRate", fieldValue(event))
+                            }
+                          />
+                          <s-select
+                            label="Tax handling"
+                            value={form.taxInclusive}
+                            placeholder="Exclusive"
+                            onChange={(event: Event) =>
+                              patch("taxInclusive", fieldValue(event))
+                            }
+                          >
+                            <s-option value="false">
+                              Tax exclusive (add on top)
+                            </s-option>
+                            <s-option value="true">
+                              Tax inclusive (included in price)
+                            </s-option>
+                          </s-select>
+                        </s-grid>
+                        <s-grid gridTemplateColumns={GRID_2_COLS} gap="base">
+                          <s-text-field
+                            label="Invoice prefix"
+                            value={form.invoicePrefix}
+                            placeholder="INV-"
+                            error={errors.invoicePrefix}
+                            onInput={(event: Event) =>
+                              patch("invoicePrefix", fieldValue(event))
+                            }
+                            onChange={(event: Event) =>
+                              patch("invoicePrefix", fieldValue(event))
+                            }
+                          />
+                          <s-text-field
+                            label="Credit note prefix"
+                            value={form.creditNotePrefix}
+                            placeholder="CN-"
+                            error={errors.creditNotePrefix}
+                            onInput={(event: Event) =>
+                              patch("creditNotePrefix", fieldValue(event))
+                            }
+                            onChange={(event: Event) =>
+                              patch("creditNotePrefix", fieldValue(event))
+                            }
+                          />
+                        </s-grid>
+                      </s-stack>
+                    ) : null}
+
+                    {step === 5 ? (
+                      <s-stack gap="base">
+                        <s-checkbox
+                          label="Show social links on invoice footer"
+                          checked={form.showSocialLinks}
+                          onChange={(event: Event) => {
+                            const target = event.currentTarget as HTMLInputElement & {
+                              checked?: boolean;
+                            };
+                            patch("showSocialLinks", Boolean(target.checked));
+                          }}
+                        />
+                        {socialLinksFormFieldNames().map(({ platform }) => (
+                          <s-grid
+                            key={platform}
+                            gridTemplateColumns={GRID_2_COLS}
+                            gap="base"
+                          >
+                            <s-text-field
+                              label={`${SOCIAL_PLATFORM_LABELS[platform]} label (optional)`}
+                              value={form.social[platform].label}
+                              placeholder={SOCIAL_PLATFORM_LABELS[platform]}
+                              onInput={(event: Event) =>
+                                patchSocial(platform, "label", fieldValue(event))
+                              }
+                              onChange={(event: Event) =>
+                                patchSocial(platform, "label", fieldValue(event))
+                              }
+                            />
+                            <s-text-field
+                              label={`${SOCIAL_PLATFORM_LABELS[platform]} URL (optional)`}
+                              value={form.social[platform].url}
+                              placeholder="https://example.com"
+                              onInput={(event: Event) =>
+                                patchSocial(platform, "url", fieldValue(event))
+                              }
+                              onChange={(event: Event) =>
+                                patchSocial(platform, "url", fieldValue(event))
+                              }
+                            />
+                          </s-grid>
+                        ))}
+                      </s-stack>
+                    ) : null}
+                  </s-stack>
+                </s-query-container>
+              </s-stack>
+            </s-section>
+          </s-grid>
+        </s-query-container>
       </s-stack>
     </s-page>
-  );
-}
-
-function StepIndicator({
-  steps,
-  current,
-  form,
-}: {
-  steps: typeof STEPS;
-  current: number;
-  form: SetupForm;
-}) {
-  const stepNumber = current + 1;
-  const totalSteps = steps.length;
-  const { percent } = getSetupProgress(form);
-
-  return (
-    <s-stack gap="small">
-      <s-stack
-        direction="inline"
-        justifyContent="space-between"
-        alignItems="center"
-      >
-        <s-text color="subdued">
-          Step {stepNumber} of {totalSteps}
-        </s-text>
-        <s-text color="subdued">{percent}% Complete</s-text>
-      </s-stack>
-      <s-progress
-        value={percent}
-        max={100}
-        accessibilityLabel={`Setup progress: ${percent} percent complete, step ${stepNumber} of ${totalSteps}`}
-      />
-    </s-stack>
   );
 }
 
