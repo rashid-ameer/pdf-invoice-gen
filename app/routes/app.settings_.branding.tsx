@@ -248,6 +248,9 @@ export default function BrandingPage() {
 
   return (
     <s-page heading="Invoice branding" inlineSize="large">
+      <s-link slot="breadcrumb-actions" href="/app/settings">
+        Settings
+      </s-link>
       <ui-save-bar id={SAVE_BAR_ID}>
         <button
           variant="primary"
@@ -577,10 +580,13 @@ export function ErrorBoundary() {
   if (isNetworkFetchError(error)) {
     return (
       <s-page heading="Invoice branding" inlineSize="large">
+        <s-link slot="breadcrumb-actions" href="/app/settings">
+          Settings
+        </s-link>
         <s-banner tone="critical" heading="Couldn't save">
           Check your connection and try again.
         </s-banner>
-        <s-button href="/app/branding" variant="primary">
+        <s-button href="/app/settings/branding" variant="primary">
           Try again
         </s-button>
       </s-page>

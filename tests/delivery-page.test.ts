@@ -142,7 +142,7 @@ describe("Email config page UI wiring", () => {
 
   it("moves email layout to Branding page", () => {
     const branding = readFileSync(
-      join(process.cwd(), "app/routes/app.branding.tsx"),
+      join(process.cwd(), "app/routes/app.settings_.branding.tsx"),
       "utf8",
     );
     assert.match(branding, /Email layout/);

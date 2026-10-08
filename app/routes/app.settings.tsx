@@ -29,6 +29,7 @@ const SETTINGS_AREAS: SettingsArea[] = [
     title: "Branding",
     description:
       "Logo, colors, and fonts used across your documents and emails.",
+    href: "/app/settings/branding",
   },
   {
     id: "templates",
