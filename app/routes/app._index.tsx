@@ -19,9 +19,12 @@ import {
 
 export { action, loader } from "../models/dashboard.server";
 
-/** Three equal metric cards; stack below 480px container width. */
+/**
+ * Metrics card composition — Shopify App Home pattern.
+ * @see https://shopify.dev/docs/api/app-home/latest/patterns/compositions/metrics-card
+ */
 const METRIC_GRID_COLS =
-  "@container (inline-size > 480px) 1fr 1fr 1fr, 1fr";
+  "@container (inline-size <= 400px) 1fr, 1fr auto 1fr auto 1fr";
 /** Chart header: title left, dropdowns right; stack on narrow. */
 const CHART_HEADER_COLS =
   "@container (inline-size > 480px) 1fr auto, 1fr";
@@ -113,19 +116,44 @@ export default function HomePage() {
         ) : null}
 
         <s-query-container>
-          <s-grid gridTemplateColumns={METRIC_GRID_COLS} gap="base">
-            {pageLoading || (!loaderData.totals && !loaderData.totalsError)
-              ? metrics.map((metric) => (
-                  <MetricCardLoading key={metric.label} label={metric.label} />
-                ))
-              : metrics.map((metric) => (
-                  <MetricCard
-                    key={metric.label}
-                    label={metric.label}
-                    value={metric.value}
-                  />
-                ))}
-          </s-grid>
+          <s-section padding="base">
+            <s-grid gridTemplateColumns={METRIC_GRID_COLS} gap="small">
+              {pageLoading || (!loaderData.totals && !loaderData.totalsError)
+                ? metrics.flatMap((metric, index) => {
+                    const card = (
+                      <MetricCardLoading
+                        key={metric.label}
+                        label={metric.label}
+                      />
+                    );
+                    if (index >= metrics.length - 1) return [card];
+                    return [
+                      card,
+                      <s-divider
+                        key={`${metric.label}-divider`}
+                        direction="block"
+                      />,
+                    ];
+                  })
+                : metrics.flatMap((metric, index) => {
+                    const card = (
+                      <MetricCard
+                        key={metric.label}
+                        label={metric.label}
+                        value={metric.value}
+                      />
+                    );
+                    if (index >= metrics.length - 1) return [card];
+                    return [
+                      card,
+                      <s-divider
+                        key={`${metric.label}-divider`}
+                        direction="block"
+                      />,
+                    ];
+                  })}
+            </s-grid>
+          </s-section>
         </s-query-container>
 
         <s-section>
@@ -208,25 +236,33 @@ export default function HomePage() {
 
 function MetricCard({ label, value }: { label: string; value: number }) {
   return (
-    <s-section>
-      <s-stack gap="small-400">
-        <s-text color="subdued">{label}</s-text>
-        <s-number fontSize="large" fontWeight="medium">
-          {value.toLocaleString("en-US")}
-        </s-number>
-      </s-stack>
-    </s-section>
+    <s-clickable
+      paddingBlock="small-400"
+      paddingInline="small-100"
+      borderRadius="base"
+      accessibilityLabel={`${label}: ${value.toLocaleString("en-US")}`}
+    >
+      <s-grid gap="small-300">
+        <s-heading>{label}</s-heading>
+        <s-text>{value.toLocaleString("en-US")}</s-text>
+      </s-grid>
+    </s-clickable>
   );
 }
 
 function MetricCardLoading({ label }: { label: string }) {
   return (
-    <s-section>
-      <s-stack gap="small-400" alignItems="start">
-        <s-text color="subdued">{label}</s-text>
+    <s-clickable
+      paddingBlock="small-400"
+      paddingInline="small-100"
+      borderRadius="base"
+      accessibilityLabel={`Loading ${label}`}
+    >
+      <s-grid gap="small-300">
+        <s-heading>{label}</s-heading>
         <s-spinner accessibilityLabel={`Loading ${label}`} size="base" />
-      </s-stack>
-    </s-section>
+      </s-grid>
+    </s-clickable>
   );
 }
 
