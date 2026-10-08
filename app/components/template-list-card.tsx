@@ -11,9 +11,9 @@ import type { TemplateListItem } from "../models/template.server";
 export const DELETE_MODAL_ID = "delete-template-modal";
 export const DELETE_DISABLED_TOOLTIP_ID = "delete-selected-template-tooltip";
 
-/** 1 col mobile → 2 tablet → 4 desktop (container-query range syntax). */
+/** 1 col mobile → 2 tablet → 3 desktop (container-query range syntax). */
 export const CARD_GRID_COLUMNS =
-  "@container (inline-size < 560px) 1fr, (560px <= inline-size < 768px) 1fr 1fr, 1fr 1fr 1fr 1fr";
+  "@container (inline-size < 560px) 1fr, (560px <= inline-size < 768px) 1fr 1fr, 1fr 1fr 1fr";
 
 export function TemplateCard({
   item,

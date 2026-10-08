@@ -44,12 +44,6 @@ import {
   templatesOverviewHref,
 } from "../utils/template-type-slug";
 
-function documentTypePluralLower(type: DocumentType): string {
-  return (
-    TEMPLATE_DOC_TYPES.find((t) => t.value === type)?.pluralLower ?? type
-  );
-}
-
 function documentTypeLabel(type: DocumentType): string {
   return TEMPLATE_DOC_TYPES.find((t) => t.value === type)?.label ?? type;
 }
@@ -404,10 +398,6 @@ export default function ChooseTemplatePage() {
       />
 
       <s-stack gap="base">
-        <s-text color="subdued">
-          For {documentTypePluralLower(documentType)}
-        </s-text>
-
         {actionError ? (
           <s-banner
             tone="critical"
@@ -420,9 +410,9 @@ export default function ChooseTemplatePage() {
 
         <s-query-container>
           <s-grid
-            gridTemplateColumns="@container (inline-size > 480px) 1fr auto, 1fr"
+            gridTemplateColumns="@container (inline-size > 480px) 1fr auto auto, 1fr"
             gap="small-200"
-            alignItems="end"
+            alignItems="center"
           >
             <s-text-field
               label="Search"
@@ -437,39 +427,32 @@ export default function ChooseTemplatePage() {
                 );
               }}
             />
-            <s-grid
-              gridTemplateColumns="@container (inline-size > 480px) auto auto, 1fr 1fr"
-              gap="small-200"
-              alignItems="end"
+            <s-select
+              label="Template type"
+              labelAccessibilityVisibility="exclusive"
+              value={kindFilter}
+              onChange={(event: Event) => {
+                const value = (event.currentTarget as HTMLSelectElement).value;
+                if (
+                  value === "all" ||
+                  value === "custom" ||
+                  value === "system"
+                ) {
+                  setKindFilter(value);
+                }
+              }}
             >
-              <s-select
-                label="Template type"
-                labelAccessibilityVisibility="exclusive"
-                value={kindFilter}
-                onChange={(event: Event) => {
-                  const value = (event.currentTarget as HTMLSelectElement)
-                    .value;
-                  if (
-                    value === "all" ||
-                    value === "custom" ||
-                    value === "system"
-                  ) {
-                    setKindFilter(value);
-                  }
-                }}
-              >
-                <s-option value="all">All templates</s-option>
-                <s-option value="custom">Custom</s-option>
-                <s-option value="system">System</s-option>
-              </s-select>
-              <s-button
-                variant="primary"
-                onClick={createNewTemplate}
-                {...(createBusy ? { loading: true, disabled: true } : {})}
-              >
-                Create new template
-              </s-button>
-            </s-grid>
+              <s-option value="all">All templates</s-option>
+              <s-option value="custom">Custom</s-option>
+              <s-option value="system">System</s-option>
+            </s-select>
+            <s-button
+              variant="primary"
+              onClick={createNewTemplate}
+              {...(createBusy ? { loading: true, disabled: true } : {})}
+            >
+              Create new template
+            </s-button>
           </s-grid>
         </s-query-container>
 
