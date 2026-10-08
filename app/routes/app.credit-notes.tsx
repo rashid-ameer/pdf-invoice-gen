@@ -29,6 +29,10 @@ import {
 import { listRefundDocumentTemplatesForShop } from "../models/credit-note-document.server";
 import { issueCreditNotePublicLinkForShop } from "../models/public-link.server";
 import { enqueueSyncRefunds } from "../models/sync-queue.server";
+import {
+  CUSTOMER_LINK_MODAL_ID,
+  CustomerLinkCopyModal,
+} from "../components/customer-link-copy-modal";
 import { formatPaymentStatus } from "../utils/csv";
 import { downloadCreditNotePdf } from "../utils/download-credit-note-pdf";
 import { downloadRefundDocumentPdf } from "../utils/download-refund-document-pdf";
@@ -264,7 +268,11 @@ export default function CreditNotesPage() {
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
-  const [linkCopyingId, setLinkCopyingId] = useState<string | null>(null);
+  const [linkDocumentId, setLinkDocumentId] = useState<string | null>(null);
+  const [customerLinkModalUrl, setCustomerLinkModalUrl] = useState("");
+  const [customerLinkError, setCustomerLinkError] = useState<string | null>(
+    null,
+  );
   const [csvBusy, setCsvBusy] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailAwaiting = useRef(false);
@@ -315,34 +323,25 @@ export default function CreditNotesPage() {
   useEffect(() => {
     if (!linkAwaiting.current || linkFetcher.state !== "idle") return;
     linkAwaiting.current = false;
-    setLinkCopyingId(null);
 
     if (!linkFetcher.data || linkFetcher.data === linkDataAtSubmit.current) {
-      shopify.toast.show("Failed to create link", { isError: true });
+      setCustomerLinkError("Failed to create link");
       return;
     }
 
     if (linkFetcher.data.intent !== "customer-link") return;
 
     if (!linkFetcher.data.ok || !("url" in linkFetcher.data) || !linkFetcher.data.url) {
-      shopify.toast.show(
+      setCustomerLinkError(
         ("error" in linkFetcher.data && linkFetcher.data.error) ||
           "Failed to create link",
-        { isError: true },
       );
       return;
     }
 
-    const url = linkFetcher.data.url;
-    void navigator.clipboard.writeText(url).then(
-      () => {
-        shopify.toast.show("Customer link copied");
-      },
-      () => {
-        shopify.toast.show("Failed to create link", { isError: true });
-      },
-    );
-  }, [linkFetcher.state, linkFetcher.data, shopify]);
+    setCustomerLinkError(null);
+    setCustomerLinkModalUrl(linkFetcher.data.url);
+  }, [linkFetcher.state, linkFetcher.data]);
 
   useEffect(() => {
     setSelectedIds(new Set());
@@ -512,20 +511,6 @@ export default function CreditNotesPage() {
     navigate(`/app/credit-notes/${encodeURIComponent(id)}`);
   };
 
-  const copyCreditNoteNumber = async (creditNoteNumber: string) => {
-    try {
-      await navigator.clipboard.writeText(creditNoteNumber);
-      shopify.toast.show(`Copied ${creditNoteNumber}`);
-    } catch {
-      shopify.toast.show(
-        isRefundTab
-          ? "Could not copy reference"
-          : "Could not copy credit note number",
-        { isError: true },
-      );
-    }
-  };
-
   const openPrint = (id: string, _creditNoteNumber: string) => {
     if (isRefundTab) {
       void fetchAndPrintRefundDocument(id, defaultRefundTemplateId);
@@ -577,19 +562,33 @@ export default function CreditNotesPage() {
     emailFetcher.submit(body, { method: "post" });
   };
 
-  const copyCustomerLink = (noteId: string) => {
-    if (linkCopying) return;
-    setLinkCopyingId(noteId);
+  const openCustomerLinkModal = (noteId: string) => {
+    setLinkDocumentId(noteId);
+    setCustomerLinkModalUrl("");
+    setCustomerLinkError(null);
+    void shopify.modal.show(CUSTOMER_LINK_MODAL_ID);
+  };
+
+  const generateCustomerLink = () => {
+    if (!linkDocumentId || linkCopying) return;
+    setCustomerLinkError(null);
+    setCustomerLinkModalUrl("");
     linkDataAtSubmit.current = linkFetcher.data;
     linkAwaiting.current = true;
     const body = new FormData();
     body.set("intent", "customer-link");
-    body.set("documentId", noteId);
+    body.set("documentId", linkDocumentId);
     body.set(
       "documentType",
       isRefundTab ? "refund_document" : "credit_note",
     );
     linkFetcher.submit(body, { method: "post" });
+  };
+
+  const resetCustomerLinkModal = () => {
+    setLinkDocumentId(null);
+    setCustomerLinkModalUrl("");
+    setCustomerLinkError(null);
   };
 
   const printSelected = () => {
@@ -996,23 +995,10 @@ export default function CreditNotesPage() {
                               View
                             </s-button>
                             <s-button
-                              icon="clipboard"
-                              onClick={() =>
-                                void copyCreditNoteNumber(note.creditNoteNumber)
-                              }
-                            >
-                              Copy
-                            </s-button>
-                            <s-button
                               icon="link"
-                              onClick={() => copyCustomerLink(note.id)}
-                              {...(linkCopyingId === note.id
-                                ? { loading: true, disabled: true }
-                                : linkCopying
-                                  ? { disabled: true }
-                                  : {})}
+                              onClick={() => openCustomerLinkModal(note.id)}
                             >
-                              Copy customer link
+                              Generate customer link
                             </s-button>
                             <s-button
                               icon="print"
@@ -1059,6 +1045,14 @@ export default function CreditNotesPage() {
           </s-table>
         )}
       </s-section>
+
+      <CustomerLinkCopyModal
+        url={customerLinkModalUrl}
+        generating={linkCopying}
+        error={customerLinkError}
+        onGenerate={generateCustomerLink}
+        onHide={resetCustomerLinkModal}
+      />
     </s-page>
   );
 }

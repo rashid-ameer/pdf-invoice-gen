@@ -13,6 +13,10 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import {
+  CUSTOMER_LINK_MODAL_ID,
+  CustomerLinkCopyModal,
+} from "../components/customer-link-copy-modal";
 import { APP_LOCALE } from "../constants/app";
 import { sendInvoiceEmail } from "../models/document-email.server";
 import { wrapA4EmbedHtml } from "../models/document-preview.server";
@@ -164,6 +168,10 @@ export default function InvoiceDetailsPage() {
     isInvoiceDetailsPath(navigation.location.pathname);
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [customerLinkUrl, setCustomerLinkUrl] = useState("");
+  const [customerLinkError, setCustomerLinkError] = useState<string | null>(
+    null,
+  );
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const emailAwaiting = useRef(false);
   const emailDataAtSubmit = useRef(emailFetcher.data);
@@ -171,7 +179,7 @@ export default function InvoiceDetailsPage() {
     emailFetcher.state === "submitting" || emailFetcher.state === "loading";
   const linkAwaiting = useRef(false);
   const linkDataAtSubmit = useRef(linkFetcher.data);
-  const linkCopying =
+  const linkGenerating =
     linkFetcher.state === "submitting" || linkFetcher.state === "loading";
 
   // Host-level indicator only while navigating to (or reloading) details.
@@ -209,31 +217,27 @@ export default function InvoiceDetailsPage() {
     linkAwaiting.current = false;
 
     if (!linkFetcher.data || linkFetcher.data === linkDataAtSubmit.current) {
-      shopify.toast.show("Failed to create link", { isError: true });
+      setCustomerLinkError("Failed to create link");
       return;
     }
 
     if (linkFetcher.data.intent !== "customer-link") return;
 
-    if (!linkFetcher.data.ok || !("url" in linkFetcher.data) || !linkFetcher.data.url) {
-      shopify.toast.show(
+    if (
+      !linkFetcher.data.ok ||
+      !("url" in linkFetcher.data) ||
+      !linkFetcher.data.url
+    ) {
+      setCustomerLinkError(
         ("error" in linkFetcher.data && linkFetcher.data.error) ||
           "Failed to create link",
-        { isError: true },
       );
       return;
     }
 
-    const url = linkFetcher.data.url;
-    void navigator.clipboard.writeText(url).then(
-      () => {
-        shopify.toast.show("Customer link copied");
-      },
-      () => {
-        shopify.toast.show("Failed to create link", { isError: true });
-      },
-    );
-  }, [linkFetcher.state, linkFetcher.data, shopify]);
+    setCustomerLinkError(null);
+    setCustomerLinkUrl(linkFetcher.data.url);
+  }, [linkFetcher.state, linkFetcher.data]);
 
   /**
    * Mark the preview ready once the srcDoc iframe has laid out.
@@ -338,15 +342,6 @@ export default function InvoiceDetailsPage() {
   const previewLoading = loadingDetailsContent || !previewLoaded;
   const previewMissing = !previewHtml;
 
-  const copyInvoiceNumber = async () => {
-    try {
-      await navigator.clipboard.writeText(invoice.invoiceNumber);
-      shopify.toast.show(`Copied ${invoice.invoiceNumber}`);
-    } catch {
-      shopify.toast.show("Could not copy invoice number", { isError: true });
-    }
-  };
-
   /**
    * Native browser print of the same G5/G7 HTML already in the preview iframe.
    * Stays on this page — no PDF download, toast, or app navigation.
@@ -385,14 +380,27 @@ export default function InvoiceDetailsPage() {
     emailFetcher.submit(body, { method: "post" });
   };
 
-  const copyCustomerLink = () => {
-    if (!invoice || linkCopying) return;
+  const openCustomerLinkModal = () => {
+    setCustomerLinkUrl("");
+    setCustomerLinkError(null);
+    void shopify.modal.show(CUSTOMER_LINK_MODAL_ID);
+  };
+
+  const generateCustomerLink = () => {
+    if (!invoice || linkGenerating) return;
+    setCustomerLinkError(null);
+    setCustomerLinkUrl("");
     linkDataAtSubmit.current = linkFetcher.data;
     linkAwaiting.current = true;
     const body = new FormData();
     body.set("intent", "customer-link");
     body.set("documentId", invoice.id);
     linkFetcher.submit(body, { method: "post" });
+  };
+
+  const resetCustomerLinkModal = () => {
+    setCustomerLinkUrl("");
+    setCustomerLinkError(null);
   };
 
   return (
@@ -426,15 +434,8 @@ export default function InvoiceDetailsPage() {
         id={MORE_MENU_ID}
         accessibilityLabel={`More actions for ${invoice.invoiceNumber}`}
       >
-        <s-button icon="clipboard" onClick={() => void copyInvoiceNumber()}>
-          Copy
-        </s-button>
-        <s-button
-          icon="link"
-          onClick={copyCustomerLink}
-          {...(linkCopying ? { loading: true, disabled: true } : {})}
-        >
-          Copy customer link
+        <s-button icon="link" onClick={openCustomerLinkModal}>
+          Generate customer link
         </s-button>
         <s-button icon="print" onClick={printInvoice}>
           Print
@@ -537,6 +538,14 @@ export default function InvoiceDetailsPage() {
           </div>
         </s-grid>
       </s-query-container>
+
+      <CustomerLinkCopyModal
+        url={customerLinkUrl}
+        generating={linkGenerating}
+        error={customerLinkError}
+        onGenerate={generateCustomerLink}
+        onHide={resetCustomerLinkModal}
+      />
     </s-page>
   );
 }

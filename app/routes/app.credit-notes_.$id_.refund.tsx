@@ -13,6 +13,10 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import {
+  CUSTOMER_LINK_MODAL_ID,
+  CustomerLinkCopyModal,
+} from "../components/customer-link-copy-modal";
 import { APP_LOCALE } from "../constants/app";
 import { sendRefundDocumentEmail } from "../models/document-email.server";
 import { wrapA4EmbedHtml } from "../models/document-preview.server";
@@ -213,6 +217,10 @@ export default function RefundDocumentDetailsPage() {
     isRefundDocumentDetailsPath(navigation.location.pathname);
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [customerLinkUrl, setCustomerLinkUrl] = useState("");
+  const [customerLinkError, setCustomerLinkError] = useState<string | null>(
+    null,
+  );
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const emailAwaiting = useRef(false);
   const emailDataAtSubmit = useRef(emailFetcher.data);
@@ -220,7 +228,7 @@ export default function RefundDocumentDetailsPage() {
     emailFetcher.state === "submitting" || emailFetcher.state === "loading";
   const linkAwaiting = useRef(false);
   const linkDataAtSubmit = useRef(linkFetcher.data);
-  const linkCopying =
+  const linkGenerating =
     linkFetcher.state === "submitting" || linkFetcher.state === "loading";
 
   useEffect(() => {
@@ -257,31 +265,27 @@ export default function RefundDocumentDetailsPage() {
     linkAwaiting.current = false;
 
     if (!linkFetcher.data || linkFetcher.data === linkDataAtSubmit.current) {
-      shopify.toast.show("Failed to create link", { isError: true });
+      setCustomerLinkError("Failed to create link");
       return;
     }
 
     if (linkFetcher.data.intent !== "customer-link") return;
 
-    if (!linkFetcher.data.ok || !("url" in linkFetcher.data) || !linkFetcher.data.url) {
-      shopify.toast.show(
+    if (
+      !linkFetcher.data.ok ||
+      !("url" in linkFetcher.data) ||
+      !linkFetcher.data.url
+    ) {
+      setCustomerLinkError(
         ("error" in linkFetcher.data && linkFetcher.data.error) ||
           "Failed to create link",
-        { isError: true },
       );
       return;
     }
 
-    const url = linkFetcher.data.url;
-    void navigator.clipboard.writeText(url).then(
-      () => {
-        shopify.toast.show("Customer link copied");
-      },
-      () => {
-        shopify.toast.show("Failed to create link", { isError: true });
-      },
-    );
-  }, [linkFetcher.state, linkFetcher.data, shopify]);
+    setCustomerLinkError(null);
+    setCustomerLinkUrl(linkFetcher.data.url);
+  }, [linkFetcher.state, linkFetcher.data]);
 
   useEffect(() => {
     if (!previewHtml) {
@@ -379,15 +383,6 @@ export default function RefundDocumentDetailsPage() {
   const previewLoading = loadingDetailsContent || !previewLoaded;
   const previewMissing = !previewHtml;
 
-  const copyReference = async () => {
-    try {
-      await navigator.clipboard.writeText(creditNote.creditNoteNumber);
-      shopify.toast.show(`Copied ${creditNote.creditNoteNumber}`);
-    } catch {
-      shopify.toast.show("Could not copy reference", { isError: true });
-    }
-  };
-
   const printRefundDocument = () => {
     if (!previewHtml) return;
     printInvoiceHtml(previewHtml, {
@@ -423,14 +418,27 @@ export default function RefundDocumentDetailsPage() {
     emailFetcher.submit(body, { method: "post" });
   };
 
-  const copyCustomerLink = () => {
-    if (linkCopying) return;
+  const openCustomerLinkModal = () => {
+    setCustomerLinkUrl("");
+    setCustomerLinkError(null);
+    void shopify.modal.show(CUSTOMER_LINK_MODAL_ID);
+  };
+
+  const generateCustomerLink = () => {
+    if (linkGenerating) return;
+    setCustomerLinkError(null);
+    setCustomerLinkUrl("");
     linkDataAtSubmit.current = linkFetcher.data;
     linkAwaiting.current = true;
     const body = new FormData();
     body.set("intent", "customer-link");
     body.set("documentId", creditNote.id);
     linkFetcher.submit(body, { method: "post" });
+  };
+
+  const resetCustomerLinkModal = () => {
+    setCustomerLinkUrl("");
+    setCustomerLinkError(null);
   };
 
   return (
@@ -464,15 +472,8 @@ export default function RefundDocumentDetailsPage() {
         id={MORE_MENU_ID}
         accessibilityLabel={`More actions for ${creditNote.creditNoteNumber}`}
       >
-        <s-button icon="clipboard" onClick={() => void copyReference()}>
-          Copy
-        </s-button>
-        <s-button
-          icon="link"
-          onClick={copyCustomerLink}
-          {...(linkCopying ? { loading: true, disabled: true } : {})}
-        >
-          Copy customer link
+        <s-button icon="link" onClick={openCustomerLinkModal}>
+          Generate customer link
         </s-button>
         <s-button
           icon="print"
@@ -597,6 +598,14 @@ export default function RefundDocumentDetailsPage() {
           </div>
         </s-grid>
       </s-query-container>
+
+      <CustomerLinkCopyModal
+        url={customerLinkUrl}
+        generating={linkGenerating}
+        error={customerLinkError}
+        onGenerate={generateCustomerLink}
+        onHide={resetCustomerLinkModal}
+      />
     </s-page>
   );
 }

@@ -25,6 +25,10 @@ import {
 import { issueInvoicePublicLinkForShop } from "../models/public-link.server";
 import { enqueueSyncOrders } from "../models/sync-queue.server";
 import { reregisterWebhooksForShop } from "../models/webhook-register.server";
+import {
+  CUSTOMER_LINK_MODAL_ID,
+  CustomerLinkCopyModal,
+} from "../components/customer-link-copy-modal";
 import { formatPaymentStatus } from "../utils/csv";
 import {
   INVOICE_DOCUMENT_STATUSES,
@@ -232,7 +236,11 @@ export default function InvoicesPage() {
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
-  const [linkCopyingId, setLinkCopyingId] = useState<string | null>(null);
+  const [linkDocumentId, setLinkDocumentId] = useState<string | null>(null);
+  const [customerLinkModalUrl, setCustomerLinkModalUrl] = useState("");
+  const [customerLinkError, setCustomerLinkError] = useState<string | null>(
+    null,
+  );
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailAwaiting = useRef(false);
   const emailDataAtSubmit = useRef(emailFetcher.data);
@@ -300,35 +308,25 @@ export default function InvoicesPage() {
   useEffect(() => {
     if (!linkAwaiting.current || linkFetcher.state !== "idle") return;
     linkAwaiting.current = false;
-    setLinkCopyingId(null);
 
     if (!linkFetcher.data || linkFetcher.data === linkDataAtSubmit.current) {
-      shopify.toast.show("Failed to create link", { isError: true });
+      setCustomerLinkError("Failed to create link");
       return;
     }
 
     if (linkFetcher.data.intent !== "customer-link") return;
 
     if (!linkFetcher.data.ok || !("url" in linkFetcher.data) || !linkFetcher.data.url) {
-      shopify.toast.show(
+      setCustomerLinkError(
         ("error" in linkFetcher.data && linkFetcher.data.error) ||
           "Failed to create link",
-        { isError: true },
       );
       return;
     }
 
-    const url = linkFetcher.data.url;
-    void navigator.clipboard.writeText(url).then(
-      () => {
-        shopify.toast.show("Customer link copied");
-      },
-      () => {
-        // Old invoice Copy link had no open-tab fallback.
-        shopify.toast.show("Failed to create link", { isError: true });
-      },
-    );
-  }, [linkFetcher.state, linkFetcher.data, shopify]);
+    setCustomerLinkError(null);
+    setCustomerLinkModalUrl(linkFetcher.data.url);
+  }, [linkFetcher.state, linkFetcher.data]);
 
   const updateFilters = useCallback(
     (patch: Record<string, string | null | undefined>) => {
@@ -461,15 +459,6 @@ export default function InvoicesPage() {
     });
   };
 
-  const copyInvoiceNumber = async (invoiceNumber: string) => {
-    try {
-      await navigator.clipboard.writeText(invoiceNumber);
-      shopify.toast.show(`Copied ${invoiceNumber}`);
-    } catch {
-      shopify.toast.show("Could not copy invoice number", { isError: true });
-    }
-  };
-
   const openView = (id: string) => {
     navigate(`/app/invoices/${encodeURIComponent(id)}`);
   };
@@ -510,15 +499,29 @@ export default function InvoicesPage() {
     emailFetcher.submit(body, { method: "post" });
   };
 
-  const copyCustomerLink = (invoiceId: string) => {
-    if (linkCopying) return;
-    setLinkCopyingId(invoiceId);
+  const openCustomerLinkModal = (invoiceId: string) => {
+    setLinkDocumentId(invoiceId);
+    setCustomerLinkModalUrl("");
+    setCustomerLinkError(null);
+    void shopify.modal.show(CUSTOMER_LINK_MODAL_ID);
+  };
+
+  const generateCustomerLink = () => {
+    if (!linkDocumentId || linkCopying) return;
+    setCustomerLinkError(null);
+    setCustomerLinkModalUrl("");
     linkDataAtSubmit.current = linkFetcher.data;
     linkAwaiting.current = true;
     const body = new FormData();
     body.set("intent", "customer-link");
-    body.set("documentId", invoiceId);
+    body.set("documentId", linkDocumentId);
     linkFetcher.submit(body, { method: "post" });
+  };
+
+  const resetCustomerLinkModal = () => {
+    setLinkDocumentId(null);
+    setCustomerLinkModalUrl("");
+    setCustomerLinkError(null);
   };
 
   const printSelected = () => {
@@ -839,23 +842,10 @@ export default function InvoicesPage() {
                             View
                           </s-button>
                           <s-button
-                            icon="clipboard"
-                            onClick={() =>
-                              void copyInvoiceNumber(invoice.invoiceNumber)
-                            }
-                          >
-                            Copy
-                          </s-button>
-                          <s-button
                             icon="link"
-                            onClick={() => copyCustomerLink(invoice.id)}
-                            {...(linkCopyingId === invoice.id
-                              ? { loading: true, disabled: true }
-                              : linkCopying
-                                ? { disabled: true }
-                                : {})}
+                            onClick={() => openCustomerLinkModal(invoice.id)}
                           >
-                            Copy customer link
+                            Generate customer link
                           </s-button>
                           <s-button
                             icon="print"
@@ -900,6 +890,14 @@ export default function InvoicesPage() {
           </s-table>
         </s-section>
       )}
+
+      <CustomerLinkCopyModal
+        url={customerLinkModalUrl}
+        generating={linkCopying}
+        error={customerLinkError}
+        onGenerate={generateCustomerLink}
+        onHide={resetCustomerLinkModal}
+      />
     </s-page>
   );
 }

@@ -448,16 +448,20 @@ describe("Credit note document routes / UI wiring", () => {
     assert.match(source, />\s*Send email\s*</);
     assert.match(source, /commandFor=\{MORE_MENU_ID\}/);
     assert.match(source, />\s*More actions\s*</);
-    assert.match(source, /icon="clipboard"/);
+    assert.match(source, /icon="link"/);
     assert.match(source, /icon="print"/);
     assert.match(source, /icon="download"/);
     assert.match(source, /icon="email"/);
+    assert.match(source, /Generate customer link/);
+    assert.match(source, /openCustomerLinkModal/);
+    assert.match(source, /generateCustomerLink/);
+    assert.match(source, /CustomerLinkCopyModal/);
     assert.equal(
       [...source.matchAll(/slot="secondary-actions"/g)].length,
       1,
-      "Copy/Print/Download should only live under More actions",
+      "Generate/Print/Download should only live under More actions",
     );
-    assert.match(source, /copyCreditNoteNumber/);
+    assert.doesNotMatch(source, /copyCreditNoteNumber/);
     assert.match(source, /openDownload/);
     assert.match(source, /downloadCreditNotePdf/);
     assert.match(source, /sendCreditNoteEmail/);

@@ -168,11 +168,14 @@ describe("Invoices page wiring", () => {
     assert.match(source, /const sendEmail = /);
     assert.match(source, /sendInvoiceEmail/);
     assert.match(source, /trigger: "manual"/);
-    assert.match(source, /Copy customer link/);
+    assert.match(source, /Generate customer link/);
+    assert.match(source, /openCustomerLinkModal/);
+    assert.match(source, /generateCustomerLink/);
+    assert.match(source, /CustomerLinkCopyModal/);
     assert.match(source, /intent === "customer-link"/);
     assert.match(source, /issueInvoicePublicLinkForShop/);
-    assert.match(source, /Customer link copied/);
-    assert.doesNotMatch(source, /DocumentEmailModal|s-modal|s-email-field/);
+    assert.doesNotMatch(source, /Copy customer link/);
+    assert.doesNotMatch(source, /DocumentEmailModal|s-email-field/);
     assert.doesNotMatch(source, /icon="email"\s+disabled/);
     assert.match(source, /isInvoicesListPath/);
     assert.match(source, /navigation\.location/);
@@ -435,22 +438,25 @@ describe("Invoice details page", () => {
     assert.doesNotMatch(source, /Send email is not available yet/);
     assert.doesNotMatch(source, /DocumentEmailModal|s-modal|s-email-field/);
     assert.match(source, /commandFor=\{MORE_MENU_ID\}/);
-    assert.match(source, /icon="clipboard"/);
+    assert.match(source, /icon="link"/);
     assert.match(source, /icon="print"/);
     assert.match(source, /icon="download"/);
-    assert.match(source, />\s*Copy\s*</);
-    assert.match(source, /Copy customer link/);
+    assert.match(source, /Generate customer link/);
+    assert.match(source, /openCustomerLinkModal/);
+    assert.match(source, /generateCustomerLink/);
+    assert.match(source, /CustomerLinkCopyModal/);
     assert.match(source, /intent === "customer-link"/);
     assert.match(source, /issueInvoicePublicLinkForShop/);
-    assert.match(source, /Customer link copied/);
-    assert.match(source, /const copyCustomerLink = /);
+    assert.doesNotMatch(source, /Copy customer link/);
+    assert.doesNotMatch(source, /const copyCustomerLink = /);
     assert.match(source, />\s*More actions\s*</);
     assert.equal(
       [...source.matchAll(/slot="secondary-actions"/g)].length,
       1,
       "Print/Download should only live under More actions",
     );
-    assert.match(source, /slot="aside"/);
+    assert.match(source, /DETAIL_LAYOUT_COLS/);
+    assert.match(source, /position: "sticky"/);
     assert.match(source, /heading="Summary"/);
     assert.match(source, /Customer/);
     assert.match(source, /Order/);
