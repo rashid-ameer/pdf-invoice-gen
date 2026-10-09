@@ -1,5 +1,8 @@
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
-export const GROQ_SEO_MODEL = 'llama-3.3-70b-versatile';
+/** Groq retired llama-3.3-70b-versatile for free/dev tiers (2026-08-16). */
+const DEFAULT_GROQ_SEO_MODEL = 'openai/gpt-oss-120b';
+export const GROQ_SEO_MODEL =
+  process.env.GROQ_SEO_MODEL?.trim() || DEFAULT_GROQ_SEO_MODEL;
 
 export type SeoScanItem = {
   id: string;
@@ -42,6 +45,7 @@ async function callGroq(
       model: GROQ_SEO_MODEL,
       messages: [{role: 'user', content: prompt}],
       temperature,
+      max_tokens: 2048,
       response_format: {type: 'json_object'},
     }),
   });
