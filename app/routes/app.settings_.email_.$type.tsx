@@ -339,7 +339,10 @@ export default function EmailTemplatePage() {
   if (loaderData.invalidType || !loaderData.type || !loaderData.settings) {
     return (
       <s-page heading="Email template">
-        <SettingsEmailBreadcrumbs menuId="email-template-invalid-breadcrumb" />
+        <SettingsEmailBreadcrumbs
+          parentHref="/app/settings/email/templates"
+          parentLabel="Email templates"
+        />
         <s-banner tone="critical" heading="Unknown template type">
           “{params.type || "missing"}” is not a valid email template. Choose a
           document type from the Email page.
@@ -573,7 +576,10 @@ function EmailTemplateEditor({
 
   return (
     <s-page heading={meta.title} inlineSize="base">
-      <SettingsEmailBreadcrumbs menuId="email-template-edit-breadcrumb" />
+      <SettingsEmailBreadcrumbs
+        parentHref="/app/settings/email/templates"
+        parentLabel="Email templates"
+      />
 
       <ui-save-bar id={SAVE_BAR_ID}>
         <button

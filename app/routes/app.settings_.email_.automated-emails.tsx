@@ -235,7 +235,7 @@ export default function AutomatedEmailsPage() {
 
   return (
     <s-page heading="Automated emails">
-      <SettingsEmailBreadcrumbs menuId="email-automated-breadcrumb" />
+      <SettingsEmailBreadcrumbs />
 
       <ui-save-bar id={SAVE_BAR_ID}>
         <button

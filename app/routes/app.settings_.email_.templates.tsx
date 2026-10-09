@@ -45,7 +45,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function EmailTemplatesListPage() {
   return (
     <s-page heading="Email templates">
-      <SettingsEmailBreadcrumbs menuId="email-templates-list-breadcrumb" />
+      <SettingsEmailBreadcrumbs />
 
       <s-section>
         <s-stack gap="base">

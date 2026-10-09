@@ -314,8 +314,14 @@ export default function ChooseTemplatePage() {
       fetcher.data.templateId
     ) {
       shopify.toast.show(fetcher.data.message);
+      const createdType =
+        "documentType" in fetcher.data && fetcher.data.documentType
+          ? String(fetcher.data.documentType)
+          : String(params.type || "");
+      const qs = new URLSearchParams({ new: "1", from: "change" });
+      if (createdType) qs.set("type", createdType);
       navigate(
-        `/app/settings/templates/${encodeURIComponent(fetcher.data.templateId)}?new=1`,
+        `/app/settings/templates/${encodeURIComponent(fetcher.data.templateId)}?${qs.toString()}`,
       );
       return;
     }
@@ -348,7 +354,7 @@ export default function ChooseTemplatePage() {
     shopify.toast.show(
       "message" in fetcher.data ? fetcher.data.message : "Done",
     );
-  }, [fetcher.state, fetcher.data, navigate, shopify]);
+  }, [fetcher.state, fetcher.data, navigate, shopify, params.type]);
 
   const matchesSearch = (item: TemplateListItem) => {
     const q = searchDraft.trim().toLowerCase();
@@ -390,7 +396,7 @@ export default function ChooseTemplatePage() {
   if (!data.ok || !data.documentType) {
     return (
       <s-page heading="Choose a template">
-        <SettingsTemplatesBreadcrumbs menuId="template-change-invalid-breadcrumb" />
+        <SettingsTemplatesBreadcrumbs />
         <s-section>
           <s-stack gap="base">
             <s-banner tone="critical" heading="Unknown document type">
@@ -436,10 +442,7 @@ export default function ChooseTemplatePage() {
 
   return (
     <s-page heading={pageHeading}>
-      <SettingsTemplatesBreadcrumbs
-        menuId="template-change-breadcrumb"
-        templatesHref={overviewHref}
-      />
+      <SettingsTemplatesBreadcrumbs parentHref={overviewHref} />
 
       <s-stack gap="base">
         {actionError ? (
@@ -548,7 +551,9 @@ export default function ChooseTemplatePage() {
                   item={item}
                   selectLoading={selectingId === item.id && busy}
                   onEdit={() =>
-                    navigate(`/app/settings/templates/${encodeURIComponent(item.id)}`)
+                    navigate(
+                      `/app/settings/templates/${encodeURIComponent(item.id)}?from=change&type=${encodeURIComponent(documentType)}`,
+                    )
                   }
                   onSelect={() => {
                     setActionError(null);

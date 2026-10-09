@@ -20,6 +20,7 @@ import { TemplateVisualConfigEditor } from "../components/template-visual-config
 import type { DocumentType } from "../types/index";
 import {
   BASE_LAYOUT_CODES,
+  DOCUMENT_TYPES,
   layoutEditorCapabilities,
   type BaseLayoutCode,
   type TemplateConfig,
@@ -813,9 +814,19 @@ export default function TemplateDetailsPage() {
       fetcher.data.templateId
     ) {
       shopify.toast.show(fetcher.data.message);
-      navigate(
-        `/app/settings/templates/${encodeURIComponent(fetcher.data.templateId)}?new=1`,
-      );
+      {
+        const qs = new URLSearchParams({ new: "1" });
+        if (searchParams.get("from") === "change") {
+          qs.set("from", "change");
+          const t =
+            searchParams.get("type") ||
+            (result?.documentType ? String(result.documentType) : "");
+          if (t) qs.set("type", t);
+        }
+        navigate(
+          `/app/settings/templates/${encodeURIComponent(fetcher.data.templateId)}?${qs.toString()}`,
+        );
+      }
       return;
     }
 
@@ -835,7 +846,7 @@ export default function TemplateDetailsPage() {
         ? fetcher.data.message
         : "Done",
     );
-  }, [fetcher.state, fetcher.data, navigate, shopify, result]);
+  }, [fetcher.state, fetcher.data, navigate, shopify, result, searchParams]);
 
   // Config → Liquid sync when editing code templates from the visual sidebar.
   useEffect(() => {
@@ -1004,7 +1015,7 @@ export default function TemplateDetailsPage() {
   if (!result || !config) {
     return (
       <s-page heading="Template not found" inlineSize="base">
-        <SettingsTemplatesBreadcrumbs menuId="template-missing-breadcrumb" />
+        <SettingsTemplatesBreadcrumbs />
         <s-section accessibilityLabel="Template not found">
           <s-banner tone="critical" heading="Template not found">
             This template could not be loaded. It may have been deleted or does
@@ -1019,6 +1030,25 @@ export default function TemplateDetailsPage() {
   }
 
   const listHref = `/app/settings/templates?type=${encodeURIComponent(result.documentType)}`;
+  const fromChange = searchParams.get("from") === "change";
+  const changeTypeParam = searchParams.get("type");
+  const changeDocType =
+    changeTypeParam &&
+    (DOCUMENT_TYPES as readonly string[]).includes(changeTypeParam)
+      ? (changeTypeParam as DocumentType)
+      : fromChange
+        ? result.documentType
+        : null;
+  const parentBreadcrumb =
+    fromChange && changeDocType
+      ? {
+          parentHref: `/app/settings/templates/${encodeURIComponent(changeDocType)}/change`,
+          parentLabel: "Choose a template",
+        }
+      : {
+          parentHref: listHref,
+          parentLabel: "Templates",
+        };
   const isUntitled =
     isNew || searchParams.get("new") === "1";
   const pageHeading = isUntitled
@@ -1152,8 +1182,8 @@ export default function TemplateDetailsPage() {
   return (
     <s-page heading={pageHeading} inlineSize="base">
       <SettingsTemplatesBreadcrumbs
-        menuId="template-edit-breadcrumb"
-        templatesHref={listHref}
+        parentHref={parentBreadcrumb.parentHref}
+        parentLabel={parentBreadcrumb.parentLabel}
       />
       {!isUntitled ? (
         <s-badge slot="accessory" tone="neutral">

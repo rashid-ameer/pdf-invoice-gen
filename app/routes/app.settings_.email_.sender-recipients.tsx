@@ -205,7 +205,7 @@ export default function SenderRecipientsPage() {
 
   return (
     <s-page heading="Sender and recipients">
-      <SettingsEmailBreadcrumbs menuId="email-sender-breadcrumb" />
+      <SettingsEmailBreadcrumbs />
 
       <ui-save-bar id={SAVE_BAR_ID}>
         <button

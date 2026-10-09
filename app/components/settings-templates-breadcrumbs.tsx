@@ -1,29 +1,16 @@
 /**
- * Breadcrumb overflow for template edit / change pages.
- * App Home only renders the first `breadcrumb-actions` link, so Settings +
- * Templates cannot both show as a trail. Use "…" that opens a menu instead.
+ * Single parent breadcrumb for template pages (Shopify App Home shows one link).
  */
 export function SettingsTemplatesBreadcrumbs({
-  menuId,
-  templatesHref = "/app/settings/templates",
+  parentHref = "/app/settings/templates",
+  parentLabel = "Templates",
 }: {
-  menuId: string;
-  templatesHref?: string;
+  parentHref?: string;
+  parentLabel?: string;
 }) {
   return (
-    <>
-      <s-button
-        slot="breadcrumb-actions"
-        variant="tertiary"
-        commandFor={menuId}
-        accessibilityLabel="Navigate to Settings or Templates"
-      >
-        …
-      </s-button>
-      <s-menu id={menuId} accessibilityLabel="Parent pages">
-        <s-button href="/app/settings">Settings</s-button>
-        <s-button href={templatesHref}>Templates</s-button>
-      </s-menu>
-    </>
+    <s-link slot="breadcrumb-actions" href={parentHref}>
+      {parentLabel}
+    </s-link>
   );
 }
