@@ -423,3 +423,23 @@ model SpeedOptimizerSetting {
 
   @@index([shop])
 }
+
+model UpsellTimer {
+  id                     String   @id @default(cuid())
+  shop                   String
+  variantGid             String
+  productGid             String
+  productHandle          String?
+  originalPrice          Int
+  originalCompareAtPrice Int?
+  timerPrice             Int
+  endsAt                 DateTime
+  status                 String   @default("active")
+  revertJobId            String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([shop, variantGid])
+  @@index([shop, status])
+  @@index([shop, productHandle])
+}

@@ -35,6 +35,17 @@ import {
   saveSpeedOptimizerSettings,
   toPublicSnakeCase as toSpeedOptimizerPublic,
 } from "../app/models/speed-optimizer-settings.server";
+import {
+  defaultUpsellConfig,
+  normalizeUpsellConfig,
+} from "../app/models/upsell-config";
+import {
+  createTimer,
+  deleteTimersForShop,
+  listActiveTimers,
+  updateTimerStatus,
+} from "../app/models/upsell-timers.server";
+import { authorizeCronRequest } from "../app/models/cron-auth.server";
 
 const cleanupShops: string[] = [];
 
@@ -230,5 +241,93 @@ describe("speed optimizer settings", () => {
     await deleteShopExtraFeatureData(shop);
     settings = await getSpeedOptimizerSettings(shop);
     assert.deepEqual(settings, DEFAULT_SPEED_OPTIMIZER_SETTINGS);
+  });
+});
+
+describe("upsell config + timers", () => {
+  it("normalize defaults and deep-merge", () => {
+    const defaults = defaultUpsellConfig();
+    assert.equal(defaults.app_enabled, true);
+    const features = defaults.features as Record<string, unknown>;
+    const discount = features.discount_upsell as Record<string, unknown>;
+    assert.equal(discount.enabled, false);
+
+    const merged = normalizeUpsellConfig({
+      app_enabled: false,
+      features: {
+        discount_upsell: { enabled: true },
+      },
+    });
+    assert.equal(merged.app_enabled, false);
+    const mergedFeatures = merged.features as Record<string, unknown>;
+    const mergedDiscount = mergedFeatures.discount_upsell as Record<
+      string,
+      unknown
+    >;
+    assert.equal(mergedDiscount.enabled, true);
+    assert.ok(Array.isArray(mergedDiscount.rules));
+  });
+
+  it("timer CRUD, require flag, cleanup, cron auth", async () => {
+    const shop = shopDomain();
+    await createShopExtraFeature(shop, {
+      ...DEFAULT_EXTRA_FEATURE_FLAGS,
+      upsellEnabled: true,
+    });
+
+    const endsAt = new Date(Date.now() + 60_000);
+    const timer = await createTimer(shop, {
+      variantGid: "gid://shopify/ProductVariant/1",
+      productGid: "gid://shopify/Product/1",
+      productHandle: "test-product",
+      originalPrice: 2000,
+      originalCompareAtPrice: null,
+      timerPrice: 1500,
+      endsAt,
+    });
+    assert.equal(timer.status, "active");
+
+    let active = await listActiveTimers(shop);
+    assert.equal(active.length, 1);
+
+    await updateTimerStatus(timer.id, "completed");
+    active = await listActiveTimers(shop);
+    assert.equal(active.length, 0);
+
+    await requireExtraFeatureFlag(shop, "upsellEnabled");
+
+    // Recreate active timer so cleanup path deletes it
+    await createTimer(shop, {
+      variantGid: "gid://shopify/ProductVariant/2",
+      productGid: "gid://shopify/Product/2",
+      originalPrice: 1000,
+      timerPrice: 800,
+      endsAt,
+    });
+
+    await deleteShopExtraFeatureData(shop);
+    active = await listActiveTimers(shop);
+    assert.equal(active.length, 0);
+    await deleteTimersForShop(shop);
+
+    const prev = process.env.CRON_SECRET;
+    process.env.CRON_SECRET = "test-cron-secret";
+    try {
+      assert.equal(
+        authorizeCronRequest(
+          new Request("http://localhost/api/cron/x", {
+            headers: { Authorization: "Bearer test-cron-secret" },
+          }),
+        ),
+        true,
+      );
+      assert.equal(
+        authorizeCronRequest(new Request("http://localhost/api/cron/x")),
+        false,
+      );
+    } finally {
+      if (prev === undefined) delete process.env.CRON_SECRET;
+      else process.env.CRON_SECRET = prev;
+    }
   });
 });

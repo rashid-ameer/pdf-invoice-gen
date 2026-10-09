@@ -1,0 +1,289 @@
+.genie-upsell-widget {
+  margin: 16px 0;
+  background: #000;
+  padding: 16px;
+  border-radius: 0;
+}
+
+.genie-upsell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.genie-upsell-title {
+  color: #fff;
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.genie-upsell-grid {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+}
+
+.genie-upsell-nav {
+  display: flex;
+  gap: 10px;
+}
+
+.genie-upsell-nav button {
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.genie-upsell-card {
+  min-width: 520px;
+  background: #fff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0px;
+  scroll-snap-align: start;
+}
+
+.genie-upsell-card-link {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  gap: 12px;
+  text-decoration: none;
+}
+
+.genie-upsell-image {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #eceff2;
+}
+
+.genie-upsell-image-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  background: #eceff2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.genie-upsell-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.genie-upsell-title-text {
+  color: #22c948;
+  font-size: 18px;
+  margin: 0;
+}
+
+.genie-upsell-variant {
+  color: #e23d3d;
+  font-size: 20px;
+  margin: 0;
+}
+
+.genie-upsell-price {
+  color: #3c4e96;
+  font-size: 18px;
+  margin: 0;
+}
+
+.genie-upsell-button {
+  border: none;
+  background: #a54be8;
+  color: #d8ff15;
+  border-radius: 10px;
+  padding: 10px 20px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.genie-discount-upsell,
+.genie-shipping-bar,
+.genie-bundle-offer {
+  margin: 12px 0;
+}
+
+.genie-discount-text,
+.genie-shipping-text,
+.genie-bundle-title,
+.genie-bundle-subtitle {
+  margin: 0;
+}
+
+.genie-shipping-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.genie-shipping-progress {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.genie-shipping-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  transition: width 0.2s ease;
+}
+
+.genie-bundle-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.genie-bundle-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.genie-bundle-subtitle {
+  font-size: 13px;
+  opacity: 0.9;
+}
+
+.genie-bundle-button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 700;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.genie-bundle-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.genie-bundle-products {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+
+.genie-bundle-plus {
+  font-size: 18px;
+  font-weight: 700;
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
+.genie-bundle-product {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+  max-width: 80px;
+}
+
+.genie-bundle-product-img {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+}
+
+.genie-bundle-product-img--placeholder {
+  background: #e5e7eb;
+}
+
+.genie-bundle-product-title {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.genie-bundle-product-price {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+.genie-bundle-products--single {
+  width: 100%;
+}
+
+.genie-bundle-products--single .genie-bundle-product {
+  width: 100%;
+  max-width: none;
+  flex-direction: row;
+  align-items: center;
+  text-align: left;
+  gap: 10px;
+}
+
+.genie-bundle-products--single .genie-bundle-product-img {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.genie-bundle-products--single .genie-bundle-product-title {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.genie-bundle-products--single .genie-bundle-product-price {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.genie-popup-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.genie-timer-bar span {
+  display: inline-block;
+}
+
+@media (max-width: 480px) {
+  .genie-upsell-card {
+    min-width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .genie-upsell-button {
+    width: 100%;
+  }
+}

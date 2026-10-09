@@ -74,6 +74,12 @@ type Pages = {
   "/webhooks/customers/data_request": {
     params: {};
   };
+  "/api/storefront/upsell-products": {
+    params: {};
+  };
+  "/api/cron/upsell-timer-reverts": {
+    params: {};
+  };
   "/api/storefront/trusted-badges": {
     params: {};
   };
@@ -241,6 +247,9 @@ type Pages = {
   "/app/settings/company": {
     params: {};
   };
+  "/app/upsell/customize": {
+    params: {};
+  };
   "/app/settings/email": {
     params: {};
   };
@@ -281,6 +290,9 @@ type Pages = {
   "/app/packing-slips": {
     params: {};
   };
+  "/app/upsell": {
+    params: {};
+  };
   "/app/credit-notes": {
     params: {};
   };
@@ -307,7 +319,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/app/api/orders/:orderId/invoice/customer-link" | "/app/api/orders/:orderId/invoice/preview" | "/api/storefront/speed-optimizer-settings" | "/verify/refund-documents/:id/:signature" | "/app/api/orders/:orderId/invoice/email" | "/verify/credit-notes/:id/:signature" | "/api/storefront/extra-feature-flags" | "/app/api/orders/:orderId/documents" | "/api/storefront/wishlist-settings" | "/public/refund-documents/:token" | "/public/refund-documents/:token/download" | "/verify/invoices/:id/:signature" | "/webhooks/customers/data_request" | "/api/storefront/trusted-badges" | "/public/credit-notes/:token" | "/public/credit-notes/:token/download" | "/webhooks/app/scopes_update" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/public/invoices/:token" | "/public/invoices/:token/download" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/webhooks/shop/redact" | "/api/health" | "/app/print" | "/api/ready" | "/api/setup" | "/install" | "/privacy" | "/support" | "/auth/*" | "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/settings/email/sender-recipients" | "/app/settings/templates/:type/change" | "/app/settings/email/automated-emails" | "/app/settings/email/templates" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/settings/templates/:id" | "/app/settings/templates/:id/thumbnail" | "/app/refund-documents/bulk" | "/app/settings/email/:type" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/settings/templates" | "/app/shop-extra-features" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/settings/branding" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/settings/company" | "/app/settings/email" | "/app/speed-optimizer" | "/app/invoices/bulk" | "/app/trusted-badges" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/compliance" | "/app/invoices" | "/app/settings" | "/app/wishlist" | "/app/help";
+    page: "/" | "/app/api/orders/:orderId/invoice/customer-link" | "/app/api/orders/:orderId/invoice/preview" | "/api/storefront/speed-optimizer-settings" | "/verify/refund-documents/:id/:signature" | "/app/api/orders/:orderId/invoice/email" | "/verify/credit-notes/:id/:signature" | "/api/storefront/extra-feature-flags" | "/app/api/orders/:orderId/documents" | "/api/storefront/wishlist-settings" | "/public/refund-documents/:token" | "/public/refund-documents/:token/download" | "/verify/invoices/:id/:signature" | "/webhooks/customers/data_request" | "/api/storefront/upsell-products" | "/api/cron/upsell-timer-reverts" | "/api/storefront/trusted-badges" | "/public/credit-notes/:token" | "/public/credit-notes/:token/download" | "/webhooks/app/scopes_update" | "/webhooks/customers/redact" | "/webhooks/app/uninstalled" | "/public/invoices/:token" | "/public/invoices/:token/download" | "/webhooks/refunds/create" | "/webhooks/orders/create" | "/webhooks/orders/paid" | "/webhooks/shop/redact" | "/api/health" | "/app/print" | "/api/ready" | "/api/setup" | "/install" | "/privacy" | "/support" | "/auth/*" | "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/settings/email/sender-recipients" | "/app/settings/templates/:type/change" | "/app/settings/email/automated-emails" | "/app/settings/email/templates" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/settings/templates/:id" | "/app/settings/templates/:id/thumbnail" | "/app/refund-documents/bulk" | "/app/settings/email/:type" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/settings/templates" | "/app/shop-extra-features" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/settings/branding" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/settings/company" | "/app/upsell/customize" | "/app/settings/email" | "/app/speed-optimizer" | "/app/invoices/bulk" | "/app/trusted-badges" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/upsell" | "/app/credit-notes" | "/app/additional" | "/app/compliance" | "/app/invoices" | "/app/settings" | "/app/wishlist" | "/app/help";
   };
   "routes/app_.api.orders.$orderId.invoice.customer-link.tsx": {
     id: "routes/app_.api.orders.$orderId.invoice.customer-link";
@@ -360,6 +372,14 @@ type RouteFiles = {
   "routes/webhooks.customers.data_request.tsx": {
     id: "routes/webhooks.customers.data_request";
     page: "/webhooks/customers/data_request";
+  };
+  "routes/api.storefront.upsell-products.ts": {
+    id: "routes/api.storefront.upsell-products";
+    page: "/api/storefront/upsell-products";
+  };
+  "routes/api.cron.upsell-timer-reverts.tsx": {
+    id: "routes/api.cron.upsell-timer-reverts";
+    page: "/api/cron/upsell-timer-reverts";
   };
   "routes/api.storefront.trusted-badges.ts": {
     id: "routes/api.storefront.trusted-badges";
@@ -447,7 +467,7 @@ type RouteFiles = {
   };
   "routes/app.tsx": {
     id: "routes/app";
-    page: "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/settings/email/sender-recipients" | "/app/settings/templates/:type/change" | "/app/settings/email/automated-emails" | "/app/settings/email/templates" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/settings/templates/:id" | "/app/settings/templates/:id/thumbnail" | "/app/refund-documents/bulk" | "/app/settings/email/:type" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/settings/templates" | "/app/shop-extra-features" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/settings/branding" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/settings/company" | "/app/settings/email" | "/app/speed-optimizer" | "/app/invoices/bulk" | "/app/trusted-badges" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/credit-notes" | "/app/additional" | "/app/compliance" | "/app/invoices" | "/app/settings" | "/app/wishlist" | "/app/help";
+    page: "/app" | "/app/credit-notes/:id/refund-document" | "/app/credit-notes/:id/refund-document/view" | "/app/settings/email/sender-recipients" | "/app/settings/templates/:type/change" | "/app/settings/email/automated-emails" | "/app/settings/email/templates" | "/app/credit-notes/:id/refund" | "/app/packing-slips/export/csv" | "/app/credit-notes/export/csv" | "/app/settings/templates/:id" | "/app/settings/templates/:id/thumbnail" | "/app/refund-documents/bulk" | "/app/settings/email/:type" | "/app/invoices/export/csv" | "/app/packing-slips/bulk" | "/app/settings/templates" | "/app/shop-extra-features" | "/app/credit-notes/bulk" | "/app/packing-slips/:id" | "/app/settings/branding" | "/app/credit-notes/:id" | "/app/credit-notes/:id/download" | "/app/credit-notes/:id/view" | "/app/settings/company" | "/app/upsell/customize" | "/app/settings/email" | "/app/speed-optimizer" | "/app/invoices/bulk" | "/app/trusted-badges" | "/app/invoices/:id" | "/app/invoices/:id/packing-slip" | "/app/invoices/:id/packing-slip/view" | "/app/invoices/:id/download" | "/app/invoices/:id/view" | "/app/packing-slips" | "/app/upsell" | "/app/credit-notes" | "/app/additional" | "/app/compliance" | "/app/invoices" | "/app/settings" | "/app/wishlist" | "/app/help";
   };
   "routes/app.credit-notes_.$id_.refund-document.tsx": {
     id: "routes/app.credit-notes_.$id_.refund-document";
@@ -545,6 +565,10 @@ type RouteFiles = {
     id: "routes/app.settings_.company";
     page: "/app/settings/company";
   };
+  "routes/app.upsell.customize.tsx": {
+    id: "routes/app.upsell.customize";
+    page: "/app/upsell/customize";
+  };
   "routes/app.settings_.email.tsx": {
     id: "routes/app.settings_.email";
     page: "/app/settings/email";
@@ -584,6 +608,10 @@ type RouteFiles = {
   "routes/app.packing-slips.tsx": {
     id: "routes/app.packing-slips";
     page: "/app/packing-slips";
+  };
+  "routes/app.upsell._index.tsx": {
+    id: "routes/app.upsell._index";
+    page: "/app/upsell";
   };
   "routes/app.credit-notes.tsx": {
     id: "routes/app.credit-notes";
@@ -634,6 +662,8 @@ type RouteModules = {
   "routes/public.refund-documents_.$token.download": typeof import("./app/routes/public.refund-documents_.$token.download.tsx");
   "routes/verify.invoices_.$id.$signature": typeof import("./app/routes/verify.invoices_.$id.$signature.tsx");
   "routes/webhooks.customers.data_request": typeof import("./app/routes/webhooks.customers.data_request.tsx");
+  "routes/api.storefront.upsell-products": typeof import("./app/routes/api.storefront.upsell-products.ts");
+  "routes/api.cron.upsell-timer-reverts": typeof import("./app/routes/api.cron.upsell-timer-reverts.tsx");
   "routes/api.storefront.trusted-badges": typeof import("./app/routes/api.storefront.trusted-badges.ts");
   "routes/public.credit-notes_.$token": typeof import("./app/routes/public.credit-notes_.$token.tsx");
   "routes/public.credit-notes_.$token.download": typeof import("./app/routes/public.credit-notes_.$token.download.tsx");
@@ -680,6 +710,7 @@ type RouteModules = {
   "routes/app.credit-notes_.$id.download": typeof import("./app/routes/app.credit-notes_.$id.download.tsx");
   "routes/app.credit-notes_.$id.view": typeof import("./app/routes/app.credit-notes_.$id.view.tsx");
   "routes/app.settings_.company": typeof import("./app/routes/app.settings_.company.tsx");
+  "routes/app.upsell.customize": typeof import("./app/routes/app.upsell.customize.tsx");
   "routes/app.settings_.email": typeof import("./app/routes/app.settings_.email.tsx");
   "routes/app.speed-optimizer": typeof import("./app/routes/app.speed-optimizer.tsx");
   "routes/app.invoices_.bulk": typeof import("./app/routes/app.invoices_.bulk.tsx");
@@ -690,6 +721,7 @@ type RouteModules = {
   "routes/app.invoices_.$id.download": typeof import("./app/routes/app.invoices_.$id.download.tsx");
   "routes/app.invoices_.$id.view": typeof import("./app/routes/app.invoices_.$id.view.tsx");
   "routes/app.packing-slips": typeof import("./app/routes/app.packing-slips.tsx");
+  "routes/app.upsell._index": typeof import("./app/routes/app.upsell._index.tsx");
   "routes/app.credit-notes": typeof import("./app/routes/app.credit-notes.tsx");
   "routes/app.additional": typeof import("./app/routes/app.additional.tsx");
   "routes/app.compliance": typeof import("./app/routes/app.compliance.tsx");

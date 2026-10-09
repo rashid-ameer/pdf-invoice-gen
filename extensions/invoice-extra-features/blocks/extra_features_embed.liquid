@@ -1,5 +1,5 @@
 {%- comment -%}
-  Gesture-gated loader for Trusted Badges, Wishlist, Speed Optimizer (and later Upsell).
+  Gesture-gated loader for Trusted Badges, Wishlist, Speed Optimizer, Upsell.
 {%- endcomment -%}
 {%- liquid
   assign _invoice_app_base = app.url | strip
@@ -24,6 +24,12 @@
   data-wishlist-js="{{ 'wishlist.js' | asset_url }}"
   data-speed-optimizer-css="{{ 'speed-optimizer.css' | asset_url }}"
   data-speed-optimizer-js="{{ 'speed-optimizer.js' | asset_url }}"
+  data-upsell-css="{{ 'upsell.css' | asset_url }}"
+  data-upsell-js="{{ 'upsell.js' | asset_url }}"
+  {% if product -%}
+  data-upsell-product-id="{{ product.id }}"
+  data-upsell-collections="{% for c in product.collections %}{{ c.id }}{% unless forloop.last %},{% endunless %}{% endfor %}"
+  {%- endif %}
 >
   <input
     type="hidden"
@@ -34,6 +40,8 @@
   />
 </div>
 
+<script type="application/json" id="invoice-upsell-config-json">{{ shop.metafields.upsell_app.config.value | default: nil | json }}</script>
+
 <script>
   (function () {
     if (window.__invoiceExtraFeaturesEmbedBootstrapped) return;
@@ -42,6 +50,7 @@
     var root = document.getElementById('invoice-feature-embed');
     if (!root) return;
 
+    var PAGE_TYPE = root.getAttribute('data-page-type') || '';
     var PROXY_BASE = (root.getAttribute('data-proxy-base') || '/apps/pdf-invoice').replace(/\/$/, '');
 
     function addCss(href) {
@@ -171,7 +180,33 @@
             onload: function () { callInit('InvoiceSpeedOptimizerInit'); },
           });
         }
-        // Upsell assets wired when that feature is ported.
+        if (flags.upsell_enabled) {
+          var cfgEl = document.getElementById('invoice-upsell-config-json');
+          try {
+            window.InvoiceUpsellConfig = cfgEl
+              ? JSON.parse(cfgEl.textContent || 'null')
+              : null;
+          } catch (e) {
+            window.InvoiceUpsellConfig = null;
+          }
+          window.InvoiceUpsellPageType = PAGE_TYPE;
+          if (root.getAttribute('data-upsell-product-id')) {
+            window.InvoiceUpsellProduct = {
+              id: root.getAttribute('data-upsell-product-id'),
+              collections: root.getAttribute('data-upsell-collections') || '',
+            };
+          }
+          addCss(root.getAttribute('data-upsell-css'));
+          addScript(root.getAttribute('data-upsell-js'), {
+            defer: true,
+            onload: function () {
+              if (PAGE_TYPE === 'collection' || PAGE_TYPE === 'index') {
+                window.InvoiceAddProductIds = true;
+              }
+              callInit('InvoiceUpsellInit');
+            },
+          });
+        }
       }
 
       var flagsRequested = false;
