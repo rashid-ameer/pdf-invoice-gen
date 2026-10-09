@@ -20,6 +20,8 @@
   data-page-type="{{ request.page_type }}"
   data-trusted-badges-css="{{ 'trusted-badges.css' | asset_url }}"
   data-trusted-badges-js="{{ 'trusted-badges.js' | asset_url }}"
+  data-wishlist-css="{{ 'wishlist.css' | asset_url }}"
+  data-wishlist-js="{{ 'wishlist.js' | asset_url }}"
 >
   <input
     type="hidden"
@@ -69,7 +71,8 @@
       if (!input || !input.value || !String(input.value).trim()) return;
       var domain = String(input.value).trim().toLowerCase();
 
-      var FLAGS_CACHE_KEY = 'invoice_feature_flags_v1:' + domain;
+      // v2: invalidate caches that may predate Wishlist (and future) flag flips.
+      var FLAGS_CACHE_KEY = 'invoice_feature_flags_v2:' + domain;
       var FLAGS_CACHE_TTL = 10 * 60 * 1000;
 
       function readCachedFlags() {
@@ -152,24 +155,25 @@
             onload: function () { callInit('InvoiceTrustedBadgesInit'); },
           });
         }
-        // Wishlist / Speed / Upsell assets wired when those features are ported.
-      }
-
-      var cachedUpfront = readCachedFlags();
-      if (cachedUpfront) {
-        applyFlags(cachedUpfront);
-        return;
+        if (flags.wishlist_enabled) {
+          addCss(root.getAttribute('data-wishlist-css'));
+          addScript(root.getAttribute('data-wishlist-js'), {
+            defer: true,
+            onload: function () { callInit('InvoiceWishlistInit'); },
+          });
+        }
+        // Speed / Upsell assets wired when those features are ported.
       }
 
       var flagsRequested = false;
       function fetchAndApplyFlags() {
         if (flagsRequested) return;
         flagsRequested = true;
+
+        // Stale-while-revalidate: show cached flags immediately, then refresh
+        // so newly enabled features (e.g. Wishlist) load without waiting for TTL.
         var cached = readCachedFlags();
-        if (cached) {
-          applyFlags(cached);
-          return;
-        }
+        if (cached) applyFlags(cached);
 
         var appBase = (root.getAttribute('data-app-url') || '').replace(/\/$/, '');
         var proxyUrl = PROXY_BASE + '/extra-feature-flags';

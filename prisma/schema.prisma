@@ -391,3 +391,23 @@ model TrustedBadge {
   @@index([shop, position])
   @@index([shop, published])
 }
+
+model WishlistSetting {
+  id              String   @id @default(cuid())
+  shop            String   @unique
+  enabled         Boolean  @default(false)
+  iconStyle       String   @default("heart")
+  iconAnimation   String   @default("fill")
+  iconColor       String   @default("#ff4757")
+  iconColorActive String   @default("#ffffff")
+  iconSize        Int      @default(20)
+  bgColor         String   @default("#ffffff")
+  bgColorActive   String   @default("#ff4757")
+  padding         Int      @default(4)
+  borderRadius    Int      @default(50)
+  showOnHover     Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([shop])
+}

@@ -23,6 +23,12 @@ import {
   updateBadge,
 } from "../app/models/trusted-badges.server";
 import { deleteShopExtraFeatureData } from "../app/models/shop-extra-features-cleanup.server";
+import {
+  DEFAULT_WISHLIST_SETTINGS,
+  getWishlistSettings,
+  saveWishlistSettings,
+  toPublicSnakeCase,
+} from "../app/models/wishlist-settings.server";
 
 const cleanupShops: string[] = [];
 
@@ -150,5 +156,40 @@ describe("trusted badges", () => {
     await deleteShopExtraFeatureData(shop);
     assert.equal((await listBadges(shop)).length, 0);
     assert.deepEqual(await getExtraFeatureFlags(shop), DEFAULT_EXTRA_FEATURE_FLAGS);
+  });
+});
+
+describe("wishlist settings", () => {
+  it("defaults, save, public snake_case, and cleanup", async () => {
+    const shop = shopDomain();
+    await createShopExtraFeature(shop, {
+      ...DEFAULT_EXTRA_FEATURE_FLAGS,
+      wishlistEnabled: true,
+    });
+
+    let settings = await getWishlistSettings(shop);
+    assert.deepEqual(settings, DEFAULT_WISHLIST_SETTINGS);
+
+    settings = await saveWishlistSettings(shop, {
+      enabled: true,
+      iconStyle: "star",
+      iconSize: 24,
+      showOnHover: true,
+    });
+    assert.equal(settings.enabled, true);
+    assert.equal(settings.iconStyle, "star");
+    assert.equal(settings.iconSize, 24);
+    assert.equal(settings.showOnHover, true);
+
+    const pub = toPublicSnakeCase(settings);
+    assert.equal(pub.icon_style, "star");
+    assert.equal(pub.icon_size, 24);
+    assert.equal(pub.show_on_hover, true);
+
+    await requireExtraFeatureFlag(shop, "wishlistEnabled");
+
+    await deleteShopExtraFeatureData(shop);
+    settings = await getWishlistSettings(shop);
+    assert.deepEqual(settings, DEFAULT_WISHLIST_SETTINGS);
   });
 });
