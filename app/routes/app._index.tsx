@@ -169,94 +169,120 @@ function HomeSetupPanel({
     ? initialSetupTemplateHref(setup.nextTemplateType)
     : "/app/settings/templates?setup=1";
 
+  /** Post-Finish Setup collapses as a whole; locked onboarding stays open. */
+  const [panelOpen, setPanelOpen] = useState(true);
   const [expanded, setExpanded] = useState({
     company: !setup.companyComplete,
     templates: setup.companyComplete && !setup.templatesComplete,
   });
 
+  const bodyVisible = !dismissible || panelOpen;
+  const stepsCompleted =
+    (setup.companyComplete ? 1 : 0) + (setup.templatesComplete ? 1 : 0);
+
   return (
     <s-stack gap="base">
-      <s-stack
-        direction="inline"
-        gap="base"
-        justifyContent="space-between"
-        alignItems="start"
-      >
-        <s-stack gap="small-200">
+      <s-stack gap="small-200">
+        <s-stack
+          direction="inline"
+          gap="base"
+          justifyContent="space-between"
+          alignItems="center"
+        >
           <s-heading>Setup</s-heading>
-          <s-paragraph>
-            {dismissible
-              ? "Your store is ready. You can review setup steps below or dismiss this section."
-              : "Get your store ready for sending invoices. This takes 3–4 minutes. You can stop at any point and pick up from where you left."}
-          </s-paragraph>
+          {dismissible ? (
+            <s-stack direction="inline" gap="small-200" alignItems="center">
+              <s-button
+                variant="tertiary"
+                tone="neutral"
+                icon="x"
+                accessibilityLabel="Dismiss setup"
+                onClick={onDismiss}
+                {...(dismissing ? { loading: true, disabled: true } : {})}
+              />
+              <s-button
+                variant="tertiary"
+                tone="neutral"
+                icon={panelOpen ? "chevron-up" : "chevron-down"}
+                accessibilityLabel={
+                  panelOpen ? "Collapse Setup" : "Expand Setup"
+                }
+                onClick={() => setPanelOpen((open) => !open)}
+              />
+            </s-stack>
+          ) : null}
         </s-stack>
-        {dismissible ? (
-          <s-button
-            variant="tertiary"
-            tone="neutral"
-            icon="x"
-            accessibilityLabel="Dismiss setup"
-            onClick={onDismiss}
-            {...(dismissing ? { loading: true, disabled: true } : {})}
-          />
-        ) : null}
+        <s-paragraph>
+          {dismissible
+            ? "Your store is ready. You can review setup steps below or dismiss this section."
+            : "Get your store ready for sending invoices. This takes 3–4 minutes. You can stop at any point and pick up from where you left."}
+        </s-paragraph>
+        <s-text color="subdued">
+          {stepsCompleted} of 2 steps completed
+        </s-text>
       </s-stack>
 
-      {finishError ? (
-        <s-banner tone="critical" heading="Couldn't finish setup">
-          {finishError}
-        </s-banner>
-      ) : null}
+      {bodyVisible ? (
+        <>
+          {finishError ? (
+            <s-banner tone="critical" heading="Couldn't finish setup">
+              {finishError}
+            </s-banner>
+          ) : null}
 
-      {dismissError ? (
-        <s-banner tone="critical" heading="Couldn't dismiss setup">
-          {dismissError}
-        </s-banner>
-      ) : null}
+          {dismissError ? (
+            <s-banner tone="critical" heading="Couldn't dismiss setup">
+              {dismissError}
+            </s-banner>
+          ) : null}
 
-      <s-box border="base" borderRadius="base" background="base">
-        <SetupAccordionItem
-          complete={setup.companyComplete}
-          title="Company Setup"
-          description="Add your legal name, tax IDs, address, and invoice defaults."
-          actionLabel="Setup company"
-          actionHref="/app/settings/company"
-          expanded={expanded.company}
-          onToggle={() =>
-            setExpanded((prev) => ({
-              ...prev,
-              company: !prev.company,
-            }))
-          }
-        />
-        <s-divider />
-        <SetupAccordionItem
-          complete={setup.templatesComplete}
-          title="Default Templates"
-          description="Choose a default template for invoices, packing slips, credit notes, and refund documents."
-          actionLabel="Choose templates"
-          actionHref={templatesHref}
-          expanded={expanded.templates}
-          onToggle={() =>
-            setExpanded((prev) => ({
-              ...prev,
-              templates: !prev.templates,
-            }))
-          }
-        />
-      </s-box>
+          <s-box border="base" borderRadius="base" background="base">
+            <SetupAccordionItem
+              complete={setup.companyComplete}
+              title="Company Setup"
+              description="Add your legal name, tax IDs, address, and invoice defaults."
+              actionLabel="Setup company"
+              actionHref="/app/settings/company"
+              expanded={expanded.company}
+              onToggle={() =>
+                setExpanded((prev) => ({
+                  ...prev,
+                  company: !prev.company,
+                }))
+              }
+            />
+            <s-divider />
+            <SetupAccordionItem
+              complete={setup.templatesComplete}
+              title="Default Templates"
+              description="Choose a default template for invoices, packing slips, credit notes, and refund documents."
+              actionLabel="Choose templates"
+              actionHref={templatesHref}
+              expanded={expanded.templates}
+              onToggle={() =>
+                setExpanded((prev) => ({
+                  ...prev,
+                  templates: !prev.templates,
+                }))
+              }
+            />
+          </s-box>
 
-      {onFinish ? (
-        <s-stack direction="inline" gap="base" justifyContent="end">
-          <s-button
-            variant="primary"
-            onClick={onFinish}
-            {...(setup.stagesComplete && !finishing ? {} : { disabled: true })}
-            {...(finishing ? { loading: true } : {})}
-          >
-            Finish setup
-          </s-button>
-        </s-stack>
+          {onFinish ? (
+            <s-stack direction="inline" gap="base" justifyContent="end">
+              <s-button
+                variant="primary"
+                onClick={onFinish}
+                {...(setup.stagesComplete && !finishing
+                  ? {}
+                  : { disabled: true })}
+                {...(finishing ? { loading: true } : {})}
+              >
+                Finish setup
+              </s-button>
+            </s-stack>
+          ) : null}
+        </>
       ) : null}
     </s-stack>
   );
@@ -421,12 +447,6 @@ function HomeDashboard({ loaderData }: { loaderData: HomeLoaderData }) {
   return (
     <s-page heading="Home">
       <s-stack gap="base">
-        {loaderData.initialSetup && !loaderData.initialSetup.locked ? (
-          <s-section>
-            <DismissibleHomeSetup setup={loaderData.initialSetup} />
-          </s-section>
-        ) : null}
-
         {loaderData.totalsError ? (
           <s-banner tone="critical" heading="We couldn't load the metrics">
             <s-button onClick={retryTotals}>Try again</s-button>
@@ -455,6 +475,12 @@ function HomeDashboard({ loaderData }: { loaderData: HomeLoaderData }) {
             </s-button>
           </s-grid>
         </s-box>
+
+        {loaderData.initialSetup && !loaderData.initialSetup.locked ? (
+          <s-section>
+            <DismissibleHomeSetup setup={loaderData.initialSetup} />
+          </s-section>
+        ) : null}
 
         <s-query-container>
           <s-section padding="base">
