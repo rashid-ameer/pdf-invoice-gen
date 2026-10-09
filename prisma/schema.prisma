@@ -411,3 +411,15 @@ model WishlistSetting {
 
   @@index([shop])
 }
+
+model SpeedOptimizerSetting {
+  id            String   @id @default(cuid())
+  shop          String   @unique
+  enabled       Boolean  @default(false)
+  excludedPages String   @default("/cart,/account,/checkout")
+  prefetchLimit Int      @default(10)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shop])
+}

@@ -1,5 +1,5 @@
 {%- comment -%}
-  Gesture-gated loader for Trusted Badges (and later Wishlist, Speed Optimizer, Upsell).
+  Gesture-gated loader for Trusted Badges, Wishlist, Speed Optimizer (and later Upsell).
 {%- endcomment -%}
 {%- liquid
   assign _invoice_app_base = app.url | strip
@@ -22,6 +22,8 @@
   data-trusted-badges-js="{{ 'trusted-badges.js' | asset_url }}"
   data-wishlist-css="{{ 'wishlist.css' | asset_url }}"
   data-wishlist-js="{{ 'wishlist.js' | asset_url }}"
+  data-speed-optimizer-css="{{ 'speed-optimizer.css' | asset_url }}"
+  data-speed-optimizer-js="{{ 'speed-optimizer.js' | asset_url }}"
 >
   <input
     type="hidden"
@@ -162,7 +164,14 @@
             onload: function () { callInit('InvoiceWishlistInit'); },
           });
         }
-        // Speed / Upsell assets wired when those features are ported.
+        if (flags.speed_optimizer_enabled) {
+          addCss(root.getAttribute('data-speed-optimizer-css'));
+          addScript(root.getAttribute('data-speed-optimizer-js'), {
+            defer: true,
+            onload: function () { callInit('InvoiceSpeedOptimizerInit'); },
+          });
+        }
+        // Upsell assets wired when that feature is ported.
       }
 
       var flagsRequested = false;

@@ -29,6 +29,12 @@ import {
   saveWishlistSettings,
   toPublicSnakeCase,
 } from "../app/models/wishlist-settings.server";
+import {
+  DEFAULT_SPEED_OPTIMIZER_SETTINGS,
+  getSpeedOptimizerSettings,
+  saveSpeedOptimizerSettings,
+  toPublicSnakeCase as toSpeedOptimizerPublic,
+} from "../app/models/speed-optimizer-settings.server";
 
 const cleanupShops: string[] = [];
 
@@ -191,5 +197,38 @@ describe("wishlist settings", () => {
     await deleteShopExtraFeatureData(shop);
     settings = await getWishlistSettings(shop);
     assert.deepEqual(settings, DEFAULT_WISHLIST_SETTINGS);
+  });
+});
+
+describe("speed optimizer settings", () => {
+  it("defaults, save, public snake_case, require flag, and cleanup", async () => {
+    const shop = shopDomain();
+    await createShopExtraFeature(shop, {
+      ...DEFAULT_EXTRA_FEATURE_FLAGS,
+      speedOptimizerEnabled: true,
+    });
+
+    let settings = await getSpeedOptimizerSettings(shop);
+    assert.deepEqual(settings, DEFAULT_SPEED_OPTIMIZER_SETTINGS);
+
+    settings = await saveSpeedOptimizerSettings(shop, {
+      enabled: true,
+      excludedPages: "/cart,/checkout",
+      prefetchLimit: 5,
+    });
+    assert.equal(settings.enabled, true);
+    assert.equal(settings.excludedPages, "/cart,/checkout");
+    assert.equal(settings.prefetchLimit, 5);
+
+    const pub = toSpeedOptimizerPublic(settings);
+    assert.equal(pub.excluded_pages, "/cart,/checkout");
+    assert.equal(pub.prefetch_limit, 5);
+    assert.equal(pub.enabled, true);
+
+    await requireExtraFeatureFlag(shop, "speedOptimizerEnabled");
+
+    await deleteShopExtraFeatureData(shop);
+    settings = await getSpeedOptimizerSettings(shop);
+    assert.deepEqual(settings, DEFAULT_SPEED_OPTIMIZER_SETTINGS);
   });
 });
