@@ -20,6 +20,7 @@ import {
   type HomeTotals,
 } from "./dashboard";
 import {
+  dismissInitialSetup,
   finishInitialSetup,
   getInitialSetupState,
 } from "./initial-setup.server";
@@ -32,6 +33,7 @@ export type {
   HomeChartSeries,
   HomeCompare,
   HomeDateRange,
+  HomeDismissSetupActionData,
   HomeFinishSetupActionData,
   HomeInitialSetup,
   HomeLoaderData,
@@ -213,9 +215,9 @@ export async function loader({
   const { session } = await authenticate.admin(request);
   const setupState = await getInitialSetupState(session.shop);
   const initialSetup =
-    setupState?.locked === true ? toHomeInitialSetup(setupState) : null;
+    setupState?.showOnHome === true ? toHomeInitialSetup(setupState) : null;
 
-  if (initialSetup) {
+  if (initialSetup?.locked) {
     return {
       initialSetup,
       totals: null,
@@ -254,7 +256,7 @@ export async function loader({
     chartError = "We couldn't load the chart";
   }
 
-  return { initialSetup: null, totals, totalsError, chart, chartError };
+  return { initialSetup, totals, totalsError, chart, chartError };
 }
 
 /** Chart refresh or Finish setup. */
@@ -275,6 +277,18 @@ export async function action({
       };
     }
     return { intent: "finish-setup", ok: true, error: null };
+  }
+
+  if (intent === "dismiss-setup") {
+    const result = await dismissInitialSetup(session.shop);
+    if (!result.ok) {
+      return {
+        intent: "dismiss-setup",
+        ok: false,
+        error: result.error,
+      };
+    }
+    return { intent: "dismiss-setup", ok: true, error: null };
   }
 
   if (intent !== "chart") {

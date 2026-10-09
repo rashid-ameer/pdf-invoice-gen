@@ -62,15 +62,6 @@ function InitialSetupPage({ setup }: { setup: HomeInitialSetup }) {
   const finishing =
     finishFetcher.state === "submitting" || finishFetcher.state === "loading";
 
-  const templatesHref = setup.nextTemplateType
-    ? initialSetupTemplateHref(setup.nextTemplateType)
-    : "/app/settings/templates?setup=1";
-
-  const [expanded, setExpanded] = useState({
-    company: !setup.companyComplete,
-    templates: setup.companyComplete && !setup.templatesComplete,
-  });
-
   useEffect(() => {
     if (finishFetcher.state !== "idle" || !finishFetcher.data) return;
     if (finishFetcher.data.intent !== "finish-setup") return;
@@ -96,71 +87,178 @@ function InitialSetupPage({ setup }: { setup: HomeInitialSetup }) {
   return (
     <s-page heading="Home">
       <s-section>
-        <s-stack gap="base">
-          <s-stack gap="small-200">
-            <s-heading>Setup</s-heading>
-            <s-paragraph>
-              Get your store ready for sending invoices. This takes 3–4
-              minutes. You can stop at any point and pick up from where you
-              left.
-            </s-paragraph>
-          </s-stack>
-
-          {finishFetcher.data?.intent === "finish-setup" &&
-          !finishFetcher.data.ok &&
-          finishFetcher.data.error ? (
-            <s-banner tone="critical" heading="Couldn't finish setup">
-              {finishFetcher.data.error}
-            </s-banner>
-          ) : null}
-
-          <s-box border="base" borderRadius="base" background="base">
-            <SetupAccordionItem
-              complete={setup.companyComplete}
-              title="Company Setup"
-              description="Add your legal name, tax IDs, address, and invoice defaults."
-              actionLabel="Setup company"
-              actionHref="/app/settings/company"
-              expanded={expanded.company}
-              onToggle={() =>
-                setExpanded((prev) => ({
-                  ...prev,
-                  company: !prev.company,
-                }))
-              }
-            />
-            <s-divider />
-            <SetupAccordionItem
-              complete={setup.templatesComplete}
-              title="Default Templates"
-              description="Choose a default template for invoices, packing slips, credit notes, and refund documents."
-              actionLabel="Choose templates"
-              actionHref={templatesHref}
-              expanded={expanded.templates}
-              onToggle={() =>
-                setExpanded((prev) => ({
-                  ...prev,
-                  templates: !prev.templates,
-                }))
-              }
-            />
-          </s-box>
-
-          <s-stack direction="inline" gap="base" justifyContent="end">
-            <s-button
-              variant="primary"
-              onClick={finishSetup}
-              {...(setup.stagesComplete && !finishing
-                ? {}
-                : { disabled: true })}
-              {...(finishing ? { loading: true } : {})}
-            >
-              Finish setup
-            </s-button>
-          </s-stack>
-        </s-stack>
+        <HomeSetupPanel
+          setup={setup}
+          finishError={
+            finishFetcher.data?.intent === "finish-setup" &&
+            !finishFetcher.data.ok
+              ? finishFetcher.data.error
+              : null
+          }
+          onFinish={finishSetup}
+          finishing={finishing}
+        />
       </s-section>
     </s-page>
+  );
+}
+
+/** Post-Finish Setup on the unlocked dashboard — dismissible, no Finish button. */
+function DismissibleHomeSetup({ setup }: { setup: HomeInitialSetup }) {
+  const shopify = useAppBridge();
+  const dismissFetcher = useFetcher<HomeActionData>();
+  const dismissing =
+    dismissFetcher.state === "submitting" || dismissFetcher.state === "loading";
+
+  useEffect(() => {
+    if (dismissFetcher.state !== "idle" || !dismissFetcher.data) return;
+    if (dismissFetcher.data.intent !== "dismiss-setup") return;
+    if (dismissFetcher.data.ok) {
+      shopify.toast.show("Setup dismissed");
+      return;
+    }
+    shopify.toast.show(
+      dismissFetcher.data.error || "Couldn't dismiss setup",
+      { isError: true },
+    );
+  }, [dismissFetcher.state, dismissFetcher.data, shopify]);
+
+  const dismissSetup = () => {
+    if (dismissing) return;
+    const body = new FormData();
+    body.set("intent", "dismiss-setup");
+    dismissFetcher.submit(body, { method: "post" });
+  };
+
+  return (
+    <HomeSetupPanel
+      setup={setup}
+      dismissible
+      onDismiss={dismissSetup}
+      dismissing={dismissing}
+      dismissError={
+        dismissFetcher.data?.intent === "dismiss-setup" &&
+        !dismissFetcher.data.ok
+          ? dismissFetcher.data.error
+          : null
+      }
+    />
+  );
+}
+
+function HomeSetupPanel({
+  setup,
+  dismissible = false,
+  onDismiss,
+  dismissing = false,
+  dismissError = null,
+  onFinish,
+  finishing = false,
+  finishError = null,
+}: {
+  setup: HomeInitialSetup;
+  dismissible?: boolean;
+  onDismiss?: () => void;
+  dismissing?: boolean;
+  dismissError?: string | null;
+  onFinish?: () => void;
+  finishing?: boolean;
+  finishError?: string | null;
+}) {
+  const templatesHref = setup.nextTemplateType
+    ? initialSetupTemplateHref(setup.nextTemplateType)
+    : "/app/settings/templates?setup=1";
+
+  const [expanded, setExpanded] = useState({
+    company: !setup.companyComplete,
+    templates: setup.companyComplete && !setup.templatesComplete,
+  });
+
+  return (
+    <s-stack gap="base">
+      <s-stack
+        direction="inline"
+        gap="base"
+        justifyContent="space-between"
+        alignItems="start"
+      >
+        <s-stack gap="small-200">
+          <s-heading>Setup</s-heading>
+          <s-paragraph>
+            {dismissible
+              ? "Your store is ready. You can review setup steps below or dismiss this section."
+              : "Get your store ready for sending invoices. This takes 3–4 minutes. You can stop at any point and pick up from where you left."}
+          </s-paragraph>
+        </s-stack>
+        {dismissible ? (
+          <s-button
+            variant="tertiary"
+            tone="neutral"
+            icon="x"
+            accessibilityLabel="Dismiss setup"
+            onClick={onDismiss}
+            {...(dismissing ? { loading: true, disabled: true } : {})}
+          />
+        ) : null}
+      </s-stack>
+
+      {finishError ? (
+        <s-banner tone="critical" heading="Couldn't finish setup">
+          {finishError}
+        </s-banner>
+      ) : null}
+
+      {dismissError ? (
+        <s-banner tone="critical" heading="Couldn't dismiss setup">
+          {dismissError}
+        </s-banner>
+      ) : null}
+
+      <s-box border="base" borderRadius="base" background="base">
+        <SetupAccordionItem
+          complete={setup.companyComplete}
+          title="Company Setup"
+          description="Add your legal name, tax IDs, address, and invoice defaults."
+          actionLabel="Setup company"
+          actionHref="/app/settings/company"
+          expanded={expanded.company}
+          onToggle={() =>
+            setExpanded((prev) => ({
+              ...prev,
+              company: !prev.company,
+            }))
+          }
+        />
+        <s-divider />
+        <SetupAccordionItem
+          complete={setup.templatesComplete}
+          title="Default Templates"
+          description="Choose a default template for invoices, packing slips, credit notes, and refund documents."
+          actionLabel="Choose templates"
+          actionHref={templatesHref}
+          expanded={expanded.templates}
+          onToggle={() =>
+            setExpanded((prev) => ({
+              ...prev,
+              templates: !prev.templates,
+            }))
+          }
+        />
+      </s-box>
+
+      {onFinish ? (
+        <s-stack direction="inline" gap="base" justifyContent="end">
+          <s-button
+            variant="primary"
+            onClick={onFinish}
+            {...(setup.stagesComplete && !finishing ? {} : { disabled: true })}
+            {...(finishing ? { loading: true } : {})}
+          >
+            Finish setup
+          </s-button>
+        </s-stack>
+      ) : null}
+    </s-stack>
   );
 }
 
@@ -323,6 +421,12 @@ function HomeDashboard({ loaderData }: { loaderData: HomeLoaderData }) {
   return (
     <s-page heading="Home">
       <s-stack gap="base">
+        {loaderData.initialSetup && !loaderData.initialSetup.locked ? (
+          <s-section>
+            <DismissibleHomeSetup setup={loaderData.initialSetup} />
+          </s-section>
+        ) : null}
+
         {loaderData.totalsError ? (
           <s-banner tone="critical" heading="We couldn't load the metrics">
             <s-button onClick={retryTotals}>Try again</s-button>

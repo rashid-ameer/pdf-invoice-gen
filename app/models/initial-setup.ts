@@ -6,6 +6,8 @@ import { templatesChangeHref } from "../utils/template-type-slug";
 
 export const INITIAL_SETUP_REQUIRED_KEY = "initial_setup_required";
 export const INITIAL_SETUP_COMPLETED_KEY = "initial_setup_completed";
+/** After Finish: Setup stays on Home until the merchant dismisses it. */
+export const INITIAL_SETUP_DISMISSED_KEY = "initial_setup_dismissed";
 
 /** Onboarding template selection order (Invoice → Packing slip → Credit note → Refund). */
 export const INITIAL_SETUP_TEMPLATE_ORDER: DocumentType[] = [

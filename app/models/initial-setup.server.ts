@@ -11,12 +11,14 @@ import prisma from "../db.server";
 import type { DocumentType } from "../types/index";
 import {
   INITIAL_SETUP_COMPLETED_KEY,
+  INITIAL_SETUP_DISMISSED_KEY,
   INITIAL_SETUP_REQUIRED_KEY,
   INITIAL_SETUP_TEMPLATE_ORDER,
 } from "./initial-setup";
 
 export {
   INITIAL_SETUP_COMPLETED_KEY,
+  INITIAL_SETUP_DISMISSED_KEY,
   INITIAL_SETUP_REQUIRED_KEY,
   INITIAL_SETUP_TEMPLATE_ORDER,
   initialSetupTemplateHref,
@@ -29,8 +31,12 @@ export type InitialSetupState = {
   required: boolean;
   /** True after merchant clicks Finish setup. */
   completed: boolean;
+  /** True after merchant dismisses Setup on Home (post-Finish). */
+  dismissed: boolean;
   /** required && !completed — app is locked to onboarding. */
   locked: boolean;
+  /** required && !dismissed — show Setup on Home (locked or post-Finish). */
+  showOnHome: boolean;
   companyComplete: boolean;
   templatesComplete: boolean;
   /** True when both stages are done (Finish may still be pending). */
@@ -133,13 +139,17 @@ export function nextMissingTemplateType(store: {
 async function readStoreSettings(
   storeId: string,
   merchantId: string,
-): Promise<{ required: boolean; completed: boolean }> {
+): Promise<{ required: boolean; completed: boolean; dismissed: boolean }> {
   const rows = await prisma.setting.findMany({
     where: {
       storeId,
       merchantId,
       key: {
-        in: [INITIAL_SETUP_REQUIRED_KEY, INITIAL_SETUP_COMPLETED_KEY],
+        in: [
+          INITIAL_SETUP_REQUIRED_KEY,
+          INITIAL_SETUP_COMPLETED_KEY,
+          INITIAL_SETUP_DISMISSED_KEY,
+        ],
       },
     },
   });
@@ -147,6 +157,7 @@ async function readStoreSettings(
   return {
     required: settingIsTrue(map[INITIAL_SETUP_REQUIRED_KEY]),
     completed: settingIsTrue(map[INITIAL_SETUP_COMPLETED_KEY]),
+    dismissed: settingIsTrue(map[INITIAL_SETUP_DISMISSED_KEY]),
   };
 }
 
@@ -197,6 +208,7 @@ export async function getInitialSetupState(
 
   const flags = await readStoreSettings(store.id, store.merchantId);
   const locked = flags.required && !flags.completed;
+  const showOnHome = flags.required && !flags.dismissed;
 
   const legalEntity = store.defaultLegalEntityId
     ? await prisma.legalEntity.findUnique({
@@ -221,7 +233,9 @@ export async function getInitialSetupState(
   return {
     required: flags.required,
     completed: flags.completed,
+    dismissed: flags.dismissed,
     locked,
+    showOnHome,
     companyComplete,
     templatesComplete,
     stagesComplete,
@@ -255,5 +269,39 @@ export async function finishInitialSetup(
   }
 
   await upsertStoreSetting(store, INITIAL_SETUP_COMPLETED_KEY, true);
+  return { ok: true };
+}
+
+/**
+ * Permanently hide Setup on Home after Finish. Does not change locked/completed.
+ */
+export async function dismissInitialSetup(
+  shopDomain: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const store = await prisma.store.findUnique({
+    where: { shopifyDomain: shopDomain },
+  });
+  if (!store) {
+    return { ok: false, error: "Store not found" };
+  }
+
+  const state = await getInitialSetupState(shopDomain);
+  if (!state) {
+    return { ok: false, error: "Store not found" };
+  }
+  if (!state.required) {
+    return { ok: false, error: "Initial setup is not active for this store." };
+  }
+  if (!state.completed) {
+    return {
+      ok: false,
+      error: "Finish setup before dismissing.",
+    };
+  }
+  if (state.dismissed) {
+    return { ok: false, error: "Setup is already dismissed." };
+  }
+
+  await upsertStoreSetting(store, INITIAL_SETUP_DISMISSED_KEY, true);
   return { ok: true };
 }

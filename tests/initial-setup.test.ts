@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import prisma from "../app/db.server";
 import {
+  dismissInitialSetup,
   finishInitialSetup,
   getInitialSetupState,
   isCompanySetupDataComplete,
@@ -12,6 +13,7 @@ import {
 } from "../app/models/initial-setup.server";
 import {
   INITIAL_SETUP_COMPLETED_KEY,
+  INITIAL_SETUP_DISMISSED_KEY,
   INITIAL_SETUP_REQUIRED_KEY,
   initialSetupTemplateHref,
   isInitialSetupPathAllowed,
@@ -126,6 +128,8 @@ describe("new vs existing merchants", () => {
     assert.ok(state);
     assert.equal(state!.required, false);
     assert.equal(state!.locked, false);
+    assert.equal(state!.showOnHome, false);
+    assert.equal(state!.dismissed, false);
     assert.equal(state!.companyComplete, false);
     assert.equal(state!.templatesComplete, false);
   });
@@ -137,6 +141,8 @@ describe("new vs existing merchants", () => {
     assert.equal(state!.required, true);
     assert.equal(state!.completed, false);
     assert.equal(state!.locked, true);
+    assert.equal(state!.showOnHome, true);
+    assert.equal(state!.dismissed, false);
   });
 
   it("markInitialSetupRequired writes store-scoped Setting", async () => {
@@ -342,6 +348,8 @@ describe("finish setup", () => {
     const state = await getInitialSetupState(shop);
     assert.equal(state!.locked, false);
     assert.equal(state!.completed, true);
+    assert.equal(state!.showOnHome, true);
+    assert.equal(state!.dismissed, false);
     assert.equal(isInitialSetupPathAllowed("/app/invoices"), false);
     // Path allowlist is independent of lock; unlock is via locked=false in app loader.
     assert.equal(state!.required, true);
@@ -353,6 +361,79 @@ describe("finish setup", () => {
     assert.equal(result.ok, false);
     const state = await getInitialSetupState(shop);
     assert.equal(state!.locked, false);
+  });
+});
+
+describe("dismiss setup", () => {
+  async function finishReadyStore(shop: string, storeId: string) {
+    await saveCompanySetup(shop, validCompanyBody());
+    await prisma.store.update({
+      where: { id: storeId },
+      data: {
+        defaultTemplateId: "tpl-invoice",
+        defaultPackingSlipTemplateId: "tpl-packing",
+        defaultCreditNoteTemplateId: "tpl-cn",
+        defaultRefundDocumentTemplateId: "tpl-refund",
+      },
+    });
+    const result = await finishInitialSetup(shop);
+    assert.equal(result.ok, true);
+  }
+
+  it("rejects dismiss until setup is finished", async () => {
+    const { shop } = await seedStore({ requireSetup: true });
+    const result = await dismissInitialSetup(shop);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.match(result.error, /Finish setup/i);
+    }
+  });
+
+  it("after finish, showOnHome stays true until dismiss", async () => {
+    const { shop, store } = await seedStore({ requireSetup: true });
+    await finishReadyStore(shop, store.id);
+
+    let state = await getInitialSetupState(shop);
+    assert.equal(state!.locked, false);
+    assert.equal(state!.showOnHome, true);
+    assert.equal(state!.dismissed, false);
+
+    const result = await dismissInitialSetup(shop);
+    assert.equal(result.ok, true);
+
+    const dismissed = await prisma.setting.findUnique({
+      where: {
+        merchantId_storeId_key: {
+          merchantId: store.merchantId,
+          storeId: store.id,
+          key: INITIAL_SETUP_DISMISSED_KEY,
+        },
+      },
+    });
+    assert.equal(dismissed?.value, true);
+
+    state = await getInitialSetupState(shop);
+    assert.equal(state!.locked, false);
+    assert.equal(state!.completed, true);
+    assert.equal(state!.dismissed, true);
+    assert.equal(state!.showOnHome, false);
+  });
+
+  it("rejects dismiss when already dismissed", async () => {
+    const { shop, store } = await seedStore({ requireSetup: true });
+    await finishReadyStore(shop, store.id);
+    assert.equal((await dismissInitialSetup(shop)).ok, true);
+    const again = await dismissInitialSetup(shop);
+    assert.equal(again.ok, false);
+    if (!again.ok) {
+      assert.match(again.error, /already dismissed/i);
+    }
+  });
+
+  it("rejects dismiss for grandfathered stores", async () => {
+    const { shop } = await seedStore();
+    const result = await dismissInitialSetup(shop);
+    assert.equal(result.ok, false);
   });
 });
 

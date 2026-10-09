@@ -64,7 +64,16 @@ export type HomeFinishSetupActionData = {
   error: string | null;
 };
 
-export type HomeActionData = HomeChartActionData | HomeFinishSetupActionData;
+export type HomeDismissSetupActionData = {
+  intent: "dismiss-setup";
+  ok: boolean;
+  error: string | null;
+};
+
+export type HomeActionData =
+  | HomeChartActionData
+  | HomeFinishSetupActionData
+  | HomeDismissSetupActionData;
 
 export function parseHomeDateRange(value: string | null | undefined): HomeDateRange {
   return value === "7" ? "7" : "30";
