@@ -109,9 +109,11 @@ export default function SpeedOptimizerPage() {
             label="Enable Speed Optimizer"
             details="Activate prefetching for all visitors on your storefront."
             checked={settings.enabled}
-            onChange={(e: Event) =>
-              setSettings((s) => ({...s, enabled: checkedValue(e)}))
-            }
+            onChange={(e: Event) => {
+              // Read before setState — currentTarget is null inside updater.
+              const enabled = checkedValue(e);
+              setSettings((s) => ({...s, enabled}));
+            }}
           />
 
           <s-divider />
@@ -121,12 +123,10 @@ export default function SpeedOptimizerPage() {
             details="Comma-separated paths that should NOT be prefetched (e.g. /cart,/checkout,/account)."
             value={settings.excludedPages}
             autocomplete="off"
-            onInput={(e: Event) =>
-              setSettings((s) => ({
-                ...s,
-                excludedPages: fieldValue(e),
-              }))
-            }
+            onInput={(e: Event) => {
+              const excludedPages = fieldValue(e);
+              setSettings((s) => ({...s, excludedPages}));
+            }}
           />
 
           <s-number-field
@@ -138,12 +138,10 @@ export default function SpeedOptimizerPage() {
             step={1}
             inputMode="numeric"
             autocomplete="off"
-            onInput={(e: Event) =>
-              setSettings((s) => ({
-                ...s,
-                prefetchLimit: Number(numberValue(e)) || 10,
-              }))
-            }
+            onInput={(e: Event) => {
+              const prefetchLimit = Number(numberValue(e)) || 10;
+              setSettings((s) => ({...s, prefetchLimit}));
+            }}
           />
         </s-stack>
       </s-section>

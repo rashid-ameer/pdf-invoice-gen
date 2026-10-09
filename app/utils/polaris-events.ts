@@ -33,7 +33,8 @@ export function moneyValue(event: Event) {
 }
 
 export function checkedValue(event: Event) {
-  return (event.currentTarget as HTMLInputElement).checked;
+  const el = (event.currentTarget ?? event.target) as HTMLInputElement | null;
+  return Boolean(el?.checked);
 }
 
 export function choiceValues(event: Event) {
