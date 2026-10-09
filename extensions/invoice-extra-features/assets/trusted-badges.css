@@ -1,0 +1,55 @@
+.invoice-trusted-badges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin: 12px 0 0;
+  width: 100%;
+}
+
+.invoice-tb-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  box-sizing: border-box;
+}
+
+.invoice-tb-icon-svg {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.invoice-tb-icon-svg svg {
+  display: block;
+}
+
+.invoice-tb-icon-img {
+  width: 1em;
+  height: 1em;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.invoice-tb-label {
+  white-space: nowrap;
+}
+
+@media (max-width: 480px) {
+  .invoice-trusted-badges {
+    gap: 6px;
+  }
+
+  .invoice-tb-badge {
+    padding: 5px 10px;
+  }
+
+  .invoice-tb-label {
+    white-space: normal;
+  }
+}

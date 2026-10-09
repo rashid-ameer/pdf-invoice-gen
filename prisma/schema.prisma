@@ -356,3 +356,38 @@ model InvoiceTemplate {
   @@index([isSystem, isActive])
   @@index([documentType, isSystem, isActive])
 }
+
+// --- Store extra features (ported from Genie Appointment Booking) ---
+
+model ShopExtraFeature {
+  id                       String   @id @default(cuid())
+  shop                     String   @unique
+  trustedBadgesEnabled     Boolean  @default(false)
+  wishlistEnabled          Boolean  @default(false)
+  speedOptimizerEnabled    Boolean  @default(false)
+  metadataOptimizerEnabled Boolean  @default(false)
+  upsellEnabled            Boolean  @default(false)
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([shop])
+}
+
+model TrustedBadge {
+  id           String   @id @default(cuid())
+  shop         String
+  iconType     String   @default("preset")
+  iconValue    String   @default("shield")
+  labelText    String
+  badgeColor   String   @default("#000000")
+  textColor    String   @default("#000000")
+  fontSize     Int      @default(14)
+  borderRadius Int      @default(4)
+  position     Int      @default(0)
+  published    Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([shop, position])
+  @@index([shop, published])
+}

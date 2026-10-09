@@ -14,6 +14,7 @@ import { APP_NAME } from "../constants/app";
 import prisma from "../db.server";
 import { deleteSessionsByShop } from "./install.server";
 import { getResendConfig } from "./resend.server";
+import { deleteShopExtraFeatureData } from "./shop-extra-features-cleanup.server";
 
 type DataRequestPayload = {
   shop_id?: number;
@@ -405,6 +406,7 @@ export async function handleShopRedact(shopDomain: string) {
   await prisma.invoiceTemplate.deleteMany({ where: { storeId } });
   // Old WebhookEvent.deleteMany({ storeId }) — skipped (no model).
   await prisma.setting.deleteMany({ where: { storeId } });
+  await deleteShopExtraFeatureData(shopDomain);
 
   const remainingStores = await prisma.store.count({
     where: {

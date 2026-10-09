@@ -4,6 +4,7 @@ import { DEFAULT_CURRENCY } from "../constants/app";
 import prisma from "../db.server";
 import { encryptSecret } from "../utils/token-crypto";
 import { markInitialSetupRequired } from "./initial-setup.server";
+import { deleteShopExtraFeatureData } from "./shop-extra-features-cleanup.server";
 import { fetchShopInstallInfo } from "./shop-install.server";
 
 /** Old StoreBranding schema defaults used on first install. */
@@ -148,6 +149,7 @@ export async function handleAppUninstall(shopDomain: string) {
     where: { shopifyDomain: shopDomain },
     data: { status: "uninstalled" },
   });
+  await deleteShopExtraFeatureData(shopDomain);
   await deleteSessionsByShop(shopDomain);
   console.log(`[shopify] app uninstalled: ${shopDomain}`);
 }

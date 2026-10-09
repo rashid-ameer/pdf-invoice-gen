@@ -45,10 +45,15 @@ api_version = "2026-10"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,read_products,read_customers,write_products,write_metaobjects,write_metaobject_definitions"
+scopes = "read_orders,read_products,read_customers,write_products,write_files,write_metaobjects,write_metaobject_definitions"
 
 [auth]
 redirect_urls = [ "https://d5.genieapps.xyz/api/auth/callback" ]
+
+[app_proxy]
+url = "https://d5.genieapps.xyz/api/storefront"
+subpath = "pdf-invoice"
+prefix = "apps"
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"

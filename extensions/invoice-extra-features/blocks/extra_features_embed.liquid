@@ -1,0 +1,243 @@
+{%- comment -%}
+  Gesture-gated loader for Trusted Badges (and later Wishlist, Speed Optimizer, Upsell).
+{%- endcomment -%}
+{%- liquid
+  assign _invoice_app_base = app.url | strip
+  if _invoice_app_base == blank
+    assign _invoice_app_base = block.settings.app_base_url | strip
+  endif
+-%}
+<span
+  data-store-domain="{{ shop.permanent_domain }}"
+  data-app-url="{{ _invoice_app_base }}"
+  id="invoice-extras-domain">
+</span>
+
+<div
+  id="invoice-feature-embed"
+  data-app-url="{{ _invoice_app_base }}"
+  data-proxy-base="/apps/pdf-invoice"
+  data-page-type="{{ request.page_type }}"
+  data-trusted-badges-css="{{ 'trusted-badges.css' | asset_url }}"
+  data-trusted-badges-js="{{ 'trusted-badges.js' | asset_url }}"
+>
+  <input
+    type="hidden"
+    id="invoice-shopify-domain"
+    name="shopify_domain"
+    value="{{ shop.permanent_domain }}"
+    autocomplete="off"
+  />
+</div>
+
+<script>
+  (function () {
+    if (window.__invoiceExtraFeaturesEmbedBootstrapped) return;
+    window.__invoiceExtraFeaturesEmbedBootstrapped = true;
+
+    var root = document.getElementById('invoice-feature-embed');
+    if (!root) return;
+
+    var PROXY_BASE = (root.getAttribute('data-proxy-base') || '/apps/pdf-invoice').replace(/\/$/, '');
+
+    function addCss(href) {
+      if (!href || document.querySelector('link[data-invoice-href="' + href + '"]')) return;
+      var link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = href;
+      link.setAttribute('data-invoice-href', href);
+      document.head.appendChild(link);
+    }
+
+    function addScript(src, opts) {
+      opts = opts || {};
+      if (!src || document.querySelector('script[data-invoice-src="' + src + '"]')) {
+        if (opts.onload) opts.onload();
+        return;
+      }
+      var s = document.createElement('script');
+      s.src = src;
+      s.async = !opts.defer;
+      if (opts.defer) s.defer = true;
+      s.setAttribute('data-invoice-src', src);
+      if (opts.onload) s.onload = opts.onload;
+      document.head.appendChild(s);
+    }
+
+    (function () {
+      var input = document.getElementById('invoice-shopify-domain');
+      if (!input || !input.value || !String(input.value).trim()) return;
+      var domain = String(input.value).trim().toLowerCase();
+
+      var FLAGS_CACHE_KEY = 'invoice_feature_flags_v1:' + domain;
+      var FLAGS_CACHE_TTL = 10 * 60 * 1000;
+
+      function readCachedFlags() {
+        try {
+          var mem = window.__invoiceFeatureFlagsCache;
+          if (
+            mem &&
+            mem.domain === domain &&
+            typeof mem.t === 'number' &&
+            Date.now() - mem.t <= FLAGS_CACHE_TTL &&
+            mem.flags
+          ) {
+            return mem.flags;
+          }
+        } catch (e) {}
+
+        var stores = [];
+        try {
+          stores.push(window.sessionStorage);
+        } catch (e) {}
+        try {
+          stores.push(window.localStorage);
+        } catch (e) {}
+
+        for (var i = 0; i < stores.length; i++) {
+          try {
+            var raw = stores[i].getItem(FLAGS_CACHE_KEY);
+            if (!raw) continue;
+            var parsed = JSON.parse(raw);
+            if (
+              !parsed ||
+              typeof parsed.t !== 'number' ||
+              Date.now() - parsed.t > FLAGS_CACHE_TTL
+            ) {
+              continue;
+            }
+            if (parsed.flags) {
+              try {
+                window.__invoiceFeatureFlagsCache = {
+                  domain: domain,
+                  t: parsed.t,
+                  flags: parsed.flags,
+                };
+              } catch (e2) {}
+              return parsed.flags;
+            }
+          } catch (e) {}
+        }
+        return null;
+      }
+
+      function writeCachedFlags(flags) {
+        if (!flags) return;
+        var payload = {t: Date.now(), flags: flags};
+        try {
+          window.__invoiceFeatureFlagsCache = {
+            domain: domain,
+            t: payload.t,
+            flags: flags,
+          };
+        } catch (e) {}
+        try {
+          sessionStorage.setItem(FLAGS_CACHE_KEY, JSON.stringify(payload));
+        } catch (e) {}
+        try {
+          localStorage.setItem(FLAGS_CACHE_KEY, JSON.stringify(payload));
+        } catch (e) {}
+      }
+
+      function callInit(name) {
+        var fn = window[name];
+        if (typeof fn === 'function') fn();
+      }
+
+      function applyFlags(flags) {
+        if (!flags) return;
+        if (flags.trusted_badges_enabled) {
+          addCss(root.getAttribute('data-trusted-badges-css'));
+          addScript(root.getAttribute('data-trusted-badges-js'), {
+            onload: function () { callInit('InvoiceTrustedBadgesInit'); },
+          });
+        }
+        // Wishlist / Speed / Upsell assets wired when those features are ported.
+      }
+
+      var cachedUpfront = readCachedFlags();
+      if (cachedUpfront) {
+        applyFlags(cachedUpfront);
+        return;
+      }
+
+      var flagsRequested = false;
+      function fetchAndApplyFlags() {
+        if (flagsRequested) return;
+        flagsRequested = true;
+        var cached = readCachedFlags();
+        if (cached) {
+          applyFlags(cached);
+          return;
+        }
+
+        var appBase = (root.getAttribute('data-app-url') || '').replace(/\/$/, '');
+        var proxyUrl = PROXY_BASE + '/extra-feature-flags';
+        var absoluteUrl =
+          appBase && domain
+            ? appBase +
+              '/api/storefront/extra-feature-flags?shopify_domain=' +
+              encodeURIComponent(domain)
+            : '';
+
+        function applyResponse(flags) {
+          writeCachedFlags(flags);
+          applyFlags(flags);
+        }
+
+        fetch(proxyUrl, {
+          method: 'GET',
+          credentials: 'same-origin',
+          cache: 'default',
+        })
+          .then(function (r) {
+            if (!r.ok) throw new Error('bad response');
+            return r.json();
+          })
+          .then(applyResponse)
+          .catch(function () {
+            if (!absoluteUrl) return;
+            fetch(absoluteUrl, {
+              method: 'GET',
+              credentials: 'omit',
+              cache: 'default',
+            })
+              .then(function (r) {
+                if (!r.ok) throw new Error('bad response');
+                return r.json();
+              })
+              .then(applyResponse)
+              .catch(function () {});
+          });
+      }
+
+      ['pointerdown', 'keydown', 'touchstart'].forEach(function (ev) {
+        window.addEventListener(ev, fetchAndApplyFlags, {
+          capture: true,
+          passive: true,
+          once: true,
+        });
+      });
+      if (typeof window.requestIdleCallback === 'function') {
+        window.requestIdleCallback(fetchAndApplyFlags, {timeout: 1500});
+      } else {
+        setTimeout(fetchAndApplyFlags, 800);
+      }
+    })();
+  })();
+</script>
+
+{% schema %}
+  {
+    "name": "Invoice Extra Features",
+    "target": "body",
+    "settings": [
+      {
+        "type": "text",
+        "id": "app_base_url",
+        "label": "App server URL (optional)",
+        "info": "Fallback when app.url is empty. Prefer leaving blank so the app proxy is used."
+      }
+    ]
+  }
+{% endschema %}

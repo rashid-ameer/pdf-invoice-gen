@@ -6,6 +6,10 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { SHOW_COMPLIANCE_PAGE } from "../constants/app";
 import { isInitialSetupPathAllowed } from "../models/initial-setup";
 import { getInitialSetupState } from "../models/initial-setup.server";
+import {
+  getExtraFeatureFlags,
+  isExtraFeaturesAdmin,
+} from "../models/shop-extra-features.server";
 import { authenticate } from "../shopify.server";
 import { isNetworkFetchError } from "../utils/network-error";
 
@@ -19,15 +23,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     throw redirect("/app");
   }
 
+  const [extraFlags, extraFeaturesAdmin] = await Promise.all([
+    getExtraFeatureFlags(session.shop),
+    Promise.resolve(isExtraFeaturesAdmin(session.shop)),
+  ]);
+
   // eslint-disable-next-line no-undef
   return {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     initialSetupLocked: locked,
+    extraFlags,
+    extraFeaturesAdmin,
   };
 };
 
 export default function App() {
-  const { apiKey, initialSetupLocked } = useLoaderData<typeof loader>();
+  const { apiKey, initialSetupLocked, extraFlags, extraFeaturesAdmin } =
+    useLoaderData<typeof loader>();
 
   return (
     <AppProvider apiKey={apiKey}>
@@ -44,7 +56,25 @@ export default function App() {
             <s-link href="/app/compliance">Compliance</s-link>
           ) : null}
           <s-link href="/app/settings">Settings</s-link>
+          {extraFlags.trustedBadgesEnabled ? (
+            <s-link href="/app/trusted-badges">Trusted Badges</s-link>
+          ) : null}
+          {extraFlags.wishlistEnabled ? (
+            <s-link href="/app/wishlist">Wishlist</s-link>
+          ) : null}
+          {extraFlags.speedOptimizerEnabled ? (
+            <s-link href="/app/speed-optimizer">Speed Optimizer</s-link>
+          ) : null}
+          {extraFlags.upsellEnabled ? (
+            <s-link href="/app/upsell">Upsell</s-link>
+          ) : null}
+          {extraFlags.metadataOptimizerEnabled ? (
+            <s-link href="/app/metadata-optimizer">Metadata Optimizer</s-link>
+          ) : null}
           <s-link href="/app/help">Help &amp; Support</s-link>
+          {extraFeaturesAdmin ? (
+            <s-link href="/app/shop-extra-features">Store extra features</s-link>
+          ) : null}
         </s-app-nav>
       )}
       <Outlet />

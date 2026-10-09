@@ -1,0 +1,9 @@
+{
+  "name": "Invoice Extra Features",
+  "settings": {
+    "app_base_url": {
+      "label": "App server URL (optional)",
+      "info": "Fallback when app.url is empty. Prefer leaving blank so the app proxy is used."
+    }
+  }
+}
