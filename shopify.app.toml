@@ -45,7 +45,7 @@ api_version = "2026-10"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,read_products,read_customers,write_products,write_files,write_metaobjects,write_metaobject_definitions"
+scopes = "read_orders,read_products,read_customers,write_products,write_files,read_content,write_content,write_metaobjects,write_metaobject_definitions"
 
 [auth]
 redirect_urls = [ "https://d5.genieapps.xyz/api/auth/callback" ]

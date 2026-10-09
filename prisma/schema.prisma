@@ -443,3 +443,33 @@ model UpsellTimer {
   @@index([shop, status])
   @@index([shop, productHandle])
 }
+
+model SeoScanResult {
+  id                       String    @id @default(cuid())
+  shop                     String
+  shopifyGid               String
+  resourceType             String
+  resourceHandle           String?
+  resourceName             String?
+  resourceUrl              String?
+  currentSeoTitle          String?
+  currentSeoDescription    String?
+  resourceBodySummary      String?
+  issues                   Json      @default("[]")
+  status                   String    @default("needs_fix")
+  optimizedSeoTitle        String?
+  optimizedSeoDescription  String?
+  imageGid                 String?
+  currentImageAlt          String?
+  optimizedImageAlt        String?
+  currentHandle            String?
+  optimizedHandle          String?
+  lastScannedAt            DateTime?
+  lastOptimizedAt          DateTime?
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+
+  @@unique([shop, shopifyGid])
+  @@index([shop, status])
+  @@index([shop, resourceType])
+}

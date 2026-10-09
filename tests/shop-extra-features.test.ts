@@ -46,6 +46,11 @@ import {
   updateTimerStatus,
 } from "../app/models/upsell-timers.server";
 import { authorizeCronRequest } from "../app/models/cron-auth.server";
+import {
+  listScanResults,
+  structuralIssues,
+} from "../app/models/seo-scan.server";
+import type { SeoScanItem } from "../app/models/groq-seo.server";
 
 const cleanupShops: string[] = [];
 
@@ -329,5 +334,52 @@ describe("upsell config + timers", () => {
       if (prev === undefined) delete process.env.CRON_SECRET;
       else process.env.CRON_SECRET = prev;
     }
+  });
+});
+
+describe("metadata optimizer seo scan", () => {
+  it("structuralIssues thresholds and cleanup", async () => {
+    const shop = shopDomain();
+    await createShopExtraFeature(shop, {
+      ...DEFAULT_EXTRA_FEATURE_FLAGS,
+      metadataOptimizerEnabled: true,
+    });
+
+    const short: SeoScanItem = {
+      id: "gid://shopify/Product/1",
+      title: "P",
+      handle: "p",
+      body_html: "",
+      type: "product",
+      seo: { title: "Too short", description: "Also too short" },
+    };
+    const shortIssues = structuralIssues(short);
+    assert.ok(shortIssues.some((i) => /title too short/i.test(i)));
+    assert.ok(shortIssues.some((i) => /description too short/i.test(i)));
+
+    const okTitle = "A".repeat(40);
+    const okDesc = "B".repeat(140);
+    const ok: SeoScanItem = {
+      ...short,
+      seo: { title: okTitle, description: okDesc },
+    };
+    assert.deepEqual(structuralIssues(ok), []);
+
+    await requireExtraFeatureFlag(shop, "metadataOptimizerEnabled");
+
+    await prisma.seoScanResult.create({
+      data: {
+        shop,
+        shopifyGid: "gid://shopify/Product/99",
+        resourceType: "product",
+        resourceName: "Test",
+        issues: ["Missing SEO title"],
+        status: "needs_fix",
+      },
+    });
+    assert.equal((await listScanResults(shop)).summary.total, 1);
+
+    await deleteShopExtraFeatureData(shop);
+    assert.equal((await listScanResults(shop)).summary.total, 0);
   });
 });
