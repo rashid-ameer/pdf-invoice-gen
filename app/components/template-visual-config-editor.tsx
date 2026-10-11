@@ -1,9 +1,9 @@
 /**
- * Group 14 Phase B — visual template configuration editor (Style / Layout / Content / Fields).
+ * Group 14 — visual template configuration editor (Style / Layout / Content / Fields).
  * Field set mirrors old `server/views/template-editor.ts` + `template-editor.js` collectConfig.
- * No Liquid editor (Phase C). No thumbnails (Phase D).
+ * Content rich-text uses contenteditable + B/I/U like the old RTE (not Quill).
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   emptyInvoiceLogo,
@@ -429,6 +429,7 @@ export function TemplateVisualConfigEditor({
                     label="Document title"
                     value={config.content.documentTitle.html}
                     disabled={disabled}
+                    toolbar
                     onChange={(html) =>
                       patch((d) => {
                         d.content.documentTitle = { html };
@@ -441,6 +442,7 @@ export function TemplateVisualConfigEditor({
                     label="Subtitle"
                     value={config.content.subtitle.html}
                     disabled={disabled}
+                    toolbar
                     onChange={(html) =>
                       patch((d) => {
                         d.content.subtitle = { html };
@@ -474,6 +476,7 @@ export function TemplateVisualConfigEditor({
                   label="Footer"
                   value={config.content.footer.html}
                   disabled={disabled}
+                  toolbar
                   onChange={(html) =>
                     patch((d) => {
                       d.content.footer = { html };
@@ -530,6 +533,7 @@ export function TemplateVisualConfigEditor({
                     value={config.translations?.documentTitle?.html ?? ""}
                     disabled={disabled}
                     dir="rtl"
+                    toolbar
                     onChange={(html) =>
                       patch((d) => {
                         ensureTranslations(d);
@@ -1005,12 +1009,66 @@ export function TemplateVisualConfigEditor({
   );
 }
 
+type RteCmd = "bold" | "italic" | "underline";
+
+/** Old `rte-toolbar` / `rte-btn` / `rte-editor` from template-editor.ts */
+const RTE_CSS = `
+.tpl-rte-toolbar {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+  user-select: none;
+}
+.tpl-rte-btn {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #d2d5d8;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.72rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #444;
+  transition: all 0.12s ease;
+  user-select: none;
+}
+.tpl-rte-btn:hover { background: #f1f2f3; border-color: #8c9196; }
+.tpl-rte-btn.active { background: #303030; color: #fff; border-color: #303030; }
+.tpl-rte-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.tpl-rte-editor {
+  min-height: 56px;
+  padding: 10px;
+  border: 1px solid #c9cccf;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  background: #fff;
+  font-weight: 400;
+  line-height: 1.4;
+  outline: none;
+  overflow: auto;
+}
+.tpl-rte-editor:focus { outline: 2px solid #005bd3; outline-offset: 1px; }
+.tpl-rte-editor p { margin: 0; }
+.tpl-rte-editor strong, .tpl-rte-editor b { font-weight: 700 !important; }
+.tpl-rte-editor em, .tpl-rte-editor i { font-style: italic !important; }
+.tpl-rte-editor u { text-decoration: underline !important; }
+.tpl-rte-editor.rtl {
+  text-align: right;
+  font-family: "Segoe UI", Tahoma, sans-serif;
+}
+`;
+
 function HtmlArea({
   label,
   value,
   details,
   disabled,
   dir,
+  toolbar = false,
   onChange,
 }: {
   label: string;
@@ -1018,24 +1076,241 @@ function HtmlArea({
   details?: string;
   disabled?: boolean;
   dir?: "rtl" | "ltr";
+  /** Old app: title/subtitle/footer (EN) + AR title had B/I/U; note/terms did not. */
+  toolbar?: boolean;
   onChange: (html: string) => void;
 }) {
-  return (
-    <s-text-area
-      label={label}
-      value={value}
-      rows={3}
-      maxLength={5000}
-      details={
-        details
-          ? `${details} HTML allowed (bold/italic/underline).`
-          : "HTML allowed (bold/italic/underline)."
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const savedRange = useRef<Range | null>(null);
+  const styleWithCssReady = useRef(false);
+  const lastEmitted = useRef(value);
+  const [active, setActive] = useState<Record<RteCmd, boolean>>({
+    bold: false,
+    italic: false,
+    underline: false,
+  });
+
+  useEffect(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    if (document.activeElement === el) return;
+    if (value === lastEmitted.current) return;
+    el.innerHTML = value || "";
+    lastEmitted.current = value;
+  }, [value]);
+
+  const emit = () => {
+    const el = editorRef.current;
+    if (!el || disabled) return;
+    const html = el.innerHTML;
+    if (html === lastEmitted.current) return;
+    lastEmitted.current = html;
+    onChange(html);
+  };
+
+  const editorContains = (editor: HTMLElement, node: Node | null) => {
+    if (!node) return false;
+    if (node === editor) return true;
+    return typeof editor.contains === "function"
+      ? editor.contains(node)
+      : false;
+  };
+
+  const saveSelection = () => {
+    const editor = editorRef.current;
+    const sel = window.getSelection();
+    if (!editor || !sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (editorContains(editor, range.commonAncestorContainer)) {
+      savedRange.current = range.cloneRange();
+    }
+  };
+
+  const selectAll = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    savedRange.current = range.cloneRange();
+  };
+
+  const restoreSelection = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.focus();
+    if (!styleWithCssReady.current) {
+      try {
+        document.execCommand("styleWithCSS", false, "false");
+      } catch {
+        /* ignore */
       }
-      {...(dir ? { dir } : {})}
-      {...(disabled ? { disabled: true } : {})}
-      onInput={(event: Event) => onChange(fieldValue(event))}
-      onChange={(event: Event) => onChange(fieldValue(event))}
-    />
+      styleWithCssReady.current = true;
+    }
+    const sel = window.getSelection();
+    if (!sel) return;
+    if (savedRange.current) {
+      try {
+        sel.removeAllRanges();
+        sel.addRange(savedRange.current);
+      } catch {
+        selectAll();
+        return;
+      }
+    }
+    if (sel.rangeCount === 0 || sel.getRangeAt(0).collapsed) {
+      selectAll();
+    }
+  };
+
+  const wrapSelection = (cmd: RteCmd) => {
+    const tag = cmd === "bold" ? "strong" : cmd === "italic" ? "em" : "u";
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0) return;
+    const range = sel.getRangeAt(0);
+    if (range.collapsed) return;
+    const node = document.createElement(tag);
+    try {
+      range.surroundContents(node);
+    } catch {
+      node.appendChild(range.extractContents());
+      range.insertNode(node);
+    }
+    sel.removeAllRanges();
+    const next = document.createRange();
+    next.selectNodeContents(node);
+    sel.addRange(next);
+    savedRange.current = next.cloneRange();
+  };
+
+  const applyFormat = (cmd: RteCmd) => {
+    if (disabled) return;
+    restoreSelection();
+    let before = false;
+    try {
+      before = document.queryCommandState(cmd);
+    } catch {
+      before = false;
+    }
+    let ok = false;
+    try {
+      ok = document.execCommand(cmd, false);
+    } catch {
+      ok = false;
+    }
+    let after = before;
+    try {
+      after = document.queryCommandState(cmd);
+    } catch {
+      /* ignore */
+    }
+    if (!ok || after === before) {
+      wrapSelection(cmd);
+    }
+    saveSelection();
+    updateActive();
+    emit();
+  };
+
+  const updateActive = () => {
+    if (!toolbar) return;
+    const next = { bold: false, italic: false, underline: false };
+    for (const cmd of ["bold", "italic", "underline"] as const) {
+      try {
+        next[cmd] = document.queryCommandState(cmd);
+      } catch {
+        next[cmd] = false;
+      }
+    }
+    setActive(next);
+  };
+
+  const hint =
+    details ??
+    (toolbar
+      ? "Use the buttons for bold, italic, and underline."
+      : "HTML allowed (bold/italic/underline).");
+
+  return (
+    <s-stack gap="small-200">
+      <s-text type="strong">{label}</s-text>
+      {toolbar ? (
+        <div
+          className="tpl-rte-toolbar"
+          role="toolbar"
+          aria-label={`${label} formatting`}
+        >
+          {(
+            [
+              ["bold", "B", "Bold"],
+              ["italic", "I", "Italic"],
+              ["underline", "U", "Underline"],
+            ] as const
+          ).map(([cmd, letter, title]) => (
+            <button
+              key={cmd}
+              type="button"
+              className={`tpl-rte-btn${active[cmd] ? " active" : ""}`}
+              title={title}
+              aria-label={title}
+              aria-pressed={active[cmd]}
+              disabled={disabled}
+              onMouseDown={(event) => {
+                event.preventDefault();
+              }}
+              onClick={() => applyFormat(cmd)}
+            >
+              {cmd === "italic" ? (
+                <i>{letter}</i>
+              ) : cmd === "underline" ? (
+                <u>{letter}</u>
+              ) : (
+                <b>{letter}</b>
+              )}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      <div
+        ref={(node) => {
+          editorRef.current = node;
+          if (
+            node &&
+            node.innerHTML !== (value || "") &&
+            !node.contains(document.activeElement)
+          ) {
+            node.innerHTML = value || "";
+            lastEmitted.current = value;
+          }
+        }}
+        className={`tpl-rte-editor${dir === "rtl" ? " rtl" : ""}`}
+        contentEditable={disabled ? false : true}
+        suppressContentEditableWarning
+        role="textbox"
+        aria-label={label}
+        aria-multiline="true"
+        dir={dir}
+        onInput={emit}
+        onBlur={emit}
+        onKeyUp={() => {
+          saveSelection();
+          updateActive();
+        }}
+        onMouseUp={() => {
+          saveSelection();
+          updateActive();
+        }}
+        onFocus={() => {
+          saveSelection();
+          updateActive();
+        }}
+        style={disabled ? { opacity: 0.6, cursor: "not-allowed" } : undefined}
+      />
+      {hint ? <s-text color="subdued">{hint}</s-text> : null}
+      <style>{RTE_CSS}</style>
+    </s-stack>
   );
 }
 
@@ -1082,6 +1357,18 @@ function LogoEditor({
   );
 }
 
+function normalizeHexColor(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (HEX_COLOR.test(trimmed)) return trimmed.toLowerCase();
+  // s-color-field may emit #rgb
+  const short = trimmed.match(/^#([0-9A-Fa-f]{3})$/);
+  if (short) {
+    const [r, g, b] = short[1].split("");
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  return null;
+}
+
 function ColorField({
   label,
   fallback,
@@ -1097,16 +1384,11 @@ function ColorField({
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
-  const pickerValue = HEX_COLOR.test(value) ? value : fallback;
+  const pickerValue = normalizeHexColor(value) ?? fallback;
   const applyPicker = (event: Event) => {
-    const next = fieldValue(event);
-    if (!HEX_COLOR.test(next)) return;
-    if (
-      !HEX_COLOR.test(value) &&
-      next.toLowerCase() === fallback.toLowerCase()
-    ) {
-      return;
-    }
+    const next = normalizeHexColor(fieldValue(event));
+    if (!next) return;
+    if (next === normalizeHexColor(value)) return;
     onChange(next);
   };
 

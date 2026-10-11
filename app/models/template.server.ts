@@ -1249,7 +1249,7 @@ export async function renderTemplatePreviewHtmlById(
     typeof result.template.customHtml === "string"
       ? result.template.customHtml
       : null;
-  const customHtml =
+  let customHtml =
     kind === "code"
       ? typeof draft.liquidHtml === "string"
         ? draft.liquidHtml
@@ -1257,6 +1257,21 @@ export async function renderTemplatePreviewHtmlById(
       : kind === "imported"
         ? savedHtml
         : null;
+  // Code preview: patch Liquid from draft config so Style/Layout/Fields (colors,
+  // columns, etc.) match the sidebar even when the client liquid is still stale
+  // from the async from-config sync race (old editor synced before preview).
+  if (
+    kind === "code" &&
+    typeof customHtml === "string" &&
+    draft.config !== undefined &&
+    draft.config !== null
+  ) {
+    customHtml = applyConfigToExistingLiquid(
+      customHtml,
+      config,
+      result.documentType,
+    );
+  }
   const customCss =
     draft.customCss ??
     (typeof result.template.customCss === "string"

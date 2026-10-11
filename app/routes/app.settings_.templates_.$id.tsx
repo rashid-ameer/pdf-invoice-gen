@@ -16,6 +16,10 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { SettingsTemplatesBreadcrumbs } from "../components/settings-templates-breadcrumbs";
+import {
+  TemplateLiquidCodeEditor,
+  type TemplateLiquidCodeEditorHandle,
+} from "../components/template-liquid-code-editor";
 import { TemplateVisualConfigEditor } from "../components/template-visual-config-editor";
 import type { DocumentType } from "../types/index";
 import {
@@ -40,6 +44,7 @@ import {
   syncConfigToLiquidForShop,
   validateTemplateLiquidForShop,
 } from "../models/template.server";
+import { LIQUID_VARIABLE_HELP } from "../models/template-liquid.defaults";
 import { extractVisualConfigFromLiquid } from "../models/template-liquid-extract";
 import { templateSourceKind } from "../models/template-liquid.server";
 import { scheduleTemplateThumbnailRefresh } from "../models/template-thumbnail.server";
@@ -51,6 +56,90 @@ const SAVE_MODAL_ID = "template-editor-save-modal";
 const EDITOR_LAYOUT_COLS =
   "@container (inline-size > 600px) 2fr 3fr, 1fr";
 const TEMPLATE_NAME_MAX = 60;
+
+/** Old token chips / code-check / syntax banner (preview header uses Polaris selectables). */
+const PREVIEW_HEADER_CSS = `
+.tpl-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.tpl-token-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.tpl-token-chip {
+  border: 1px solid #d0d4d8;
+  background: #f6f6f7;
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-family: ui-monospace, monospace;
+  cursor: pointer;
+  color: #202223;
+}
+.tpl-token-chip:hover {
+  background: #f1f1f1;
+  border-color: #303030;
+}
+.tpl-code-check {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  border: 1px solid #d0d4d8;
+  background: #f6f6f7;
+}
+.tpl-code-check.is-error {
+  border-color: #f5b5b5;
+  background: #fde8e8;
+  color: #8a1f1f;
+}
+.tpl-code-check.is-warn {
+  border-color: #f1d48a;
+  background: #fff8e6;
+  color: #6b4f00;
+}
+.tpl-code-check.is-ok {
+  border-color: #b7d8b0;
+  background: #e3f1df;
+  color: #0a5c36;
+}
+.tpl-code-check ul { margin: 6px 0 0; padding-left: 18px; }
+.tpl-code-check .check-line { margin: 0 0 4px; }
+.tpl-syntax-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fdf4f4;
+  border: 1px solid #f3d0d0;
+  color: #8a1f1f;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+.tpl-syntax-banner .syntax-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #d72c0d;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.tpl-syntax-banner .syntax-line { color: #2c6ecb; }
+`;
 
 type EditorSourceType = "layout" | "code" | "imported";
 type EditorView = "preview" | "code";
@@ -253,6 +342,11 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       typeof formData.get("customCss") === "string"
         ? String(formData.get("customCss"))
         : undefined;
+    const previewEpochRaw = formData.get("previewEpoch");
+    const previewEpoch =
+      typeof previewEpochRaw === "string" && previewEpochRaw.trim()
+        ? previewEpochRaw.trim()
+        : null;
     try {
       const html = await previewTemplateVisualConfig(session.shop, templateId, {
         config: draftConfig,
@@ -265,12 +359,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
           ok: false as const,
           intent: "preview" as const,
           error: "Template not found",
+          previewEpoch,
         };
       }
       return {
         ok: true as const,
         intent: "preview" as const,
         html,
+        previewEpoch,
       };
     } catch (error) {
       console.error("[templates] visual preview error:", error);
@@ -278,6 +374,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         ok: false as const,
         intent: "preview" as const,
         error: "Failed to render preview",
+        previewEpoch,
       };
     }
   }
@@ -655,10 +752,13 @@ export default function TemplateDetailsPage() {
   const [syncedConfig, setSyncedConfig] = useState<TemplateConfig | null>(
     result ? structuredClone(result.config) : null,
   );
-  const [editorView] = useState<EditorView>("preview");
+  const [editorView, setEditorView] = useState<EditorView>("preview");
   const [liquidValidation, setLiquidValidation] = useState<LiquidCheck | null>(
     null,
   );
+  const liquidEditorRef = useRef<TemplateLiquidCodeEditorHandle | null>(null);
+  const previewEpochRef = useRef(0);
+  const validateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [logoResetToken, setLogoResetToken] = useState(0);
   const [saveModalName, setSaveModalName] = useState("");
   const [saveModalNameError, setSaveModalNameError] = useState<string | null>(
@@ -756,6 +856,23 @@ export default function TemplateDetailsPage() {
       shopify.saveBar.hide(SAVE_BAR_ID);
     };
   }, [dirty, result, shopify]);
+
+  useEffect(() => {
+    if (fetcher.state !== "idle" || !fetcher.data) return;
+    if (fetcher.data.intent === "validate") {
+      if (fetcher.data.ok && "validation" in fetcher.data) {
+        setLiquidValidation(fetcher.data.validation as LiquidCheck);
+      } else if (!fetcher.data.ok && "error" in fetcher.data) {
+        setLiquidValidation({
+          errors: [fetcher.data.error],
+          warnings: [],
+          checks: [],
+          syntaxLine: null,
+        });
+      }
+      return;
+    }
+  }, [fetcher.state, fetcher.data]);
 
   useEffect(() => {
     if (!awaiting.current || fetcher.state !== "idle") return;
@@ -926,11 +1043,15 @@ export default function TemplateDetailsPage() {
     }
   }, [fetcher.state, fetcher.data]);
 
-  // Live preview (debounced) — Group 7 layout or Liquid path.
+  // Live preview (debounced) — layout engine or Liquid path.
+  // Server preview also patches code Liquid from draft config so color/field
+  // changes are accurate even when from-config sync is still in flight.
   useEffect(() => {
     if (!result || !config) return;
+    if (editorView !== "preview") return;
     if (previewTimer.current) clearTimeout(previewTimer.current);
     previewTimer.current = setTimeout(() => {
+      const epoch = ++previewEpochRef.current;
       const body = new FormData();
       body.set("intent", "preview");
       body.set("templateId", result.id);
@@ -945,17 +1066,28 @@ export default function TemplateDetailsPage() {
       );
       body.set("liquidHtml", liquidHtml);
       body.set("customCss", customCss);
+      body.set("previewEpoch", String(epoch));
       previewFetcher.submit(body, { method: "post" });
     }, 400);
     return () => {
       if (previewTimer.current) clearTimeout(previewTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- previewFetcher identity changes each render
-  }, [result?.id, config, liquidHtml, customCss, sourceType]);
+  }, [result?.id, config, liquidHtml, customCss, sourceType, editorView]);
 
   useEffect(() => {
     if (previewFetcher.state !== "idle" || !previewFetcher.data) return;
     if (previewFetcher.data.intent !== "preview") return;
+    const epoch =
+      "previewEpoch" in previewFetcher.data
+        ? previewFetcher.data.previewEpoch
+        : null;
+    if (
+      epoch != null &&
+      String(epoch) !== String(previewEpochRef.current)
+    ) {
+      return;
+    }
     if (previewFetcher.data.ok && "html" in previewFetcher.data) {
       setPreviewHtml(previewFetcher.data.html);
     }
@@ -964,30 +1096,44 @@ export default function TemplateDetailsPage() {
   useEffect(() => {
     const iframe = iframeRef.current;
     if (!iframe || !previewHtml) return;
-    const onLoad = () => {
+    // Reset before measure so a previous tall code-panel layout cannot stick.
+    iframe.style.height = "480px";
+    iframe.style.border = "none";
+    iframe.style.display = "block";
+    iframe.style.width = "100%";
+    iframe.style.overflow = "hidden";
+    iframe.style.maxWidth = "100%";
+
+    const measure = () => {
       const doc = iframe.contentDocument;
-      if (doc?.documentElement) {
+      if (!doc) return;
+      if (doc.documentElement) {
         doc.documentElement.style.overflow = "hidden";
       }
-      if (doc?.body) {
+      if (doc.body) {
         doc.body.style.overflow = "hidden";
         doc.body.style.margin = "0";
       }
       const h = Math.max(
-        doc?.body?.scrollHeight ?? 0,
-        doc?.documentElement?.scrollHeight ?? 0,
+        doc.body?.scrollHeight ?? 0,
+        doc.documentElement?.scrollHeight ?? 0,
         480,
       );
-      // Size iframe to content so the page (not the iframe) scrolls.
       iframe.style.height = `${h}px`;
-      iframe.style.border = "none";
-      iframe.style.display = "block";
-      iframe.style.overflow = "hidden";
+    };
+
+    const onLoad = () => {
+      measure();
+      // Second pass after fonts/images settle inside the A4 embed.
+      requestAnimationFrame(() => {
+        measure();
+        window.setTimeout(measure, 50);
+      });
     };
     iframe.addEventListener("load", onLoad);
     onLoad();
     return () => iframe.removeEventListener("load", onLoad);
-  }, [previewHtml]);
+  }, [previewHtml, editorView]);
 
   const onConfigChange = (next: TemplateConfig) => {
     if (applyingCode.current) {
@@ -1010,6 +1156,16 @@ export default function TemplateDetailsPage() {
       setSyncedConfig(structuredClone(extracted));
       applyingCode.current = false;
     }, 450);
+    // Old editor: debounced Liquid validate while editing code.
+    if (validateTimer.current) clearTimeout(validateTimer.current);
+    validateTimer.current = setTimeout(() => {
+      if (!result) return;
+      const body = new FormData();
+      body.set("intent", "validate");
+      body.set("templateId", result.id);
+      body.set("liquidHtml", next);
+      fetcher.submit(body, { method: "post" });
+    }, 280);
   };
 
   if (!result || !config) {
@@ -1124,6 +1280,8 @@ export default function TemplateDetailsPage() {
 
   const refreshPreview = () => {
     if (!result || !config) return;
+    setEditorView("preview");
+    const epoch = ++previewEpochRef.current;
     const body = new FormData();
     body.set("intent", "preview");
     body.set("templateId", result.id);
@@ -1138,7 +1296,22 @@ export default function TemplateDetailsPage() {
     );
     body.set("liquidHtml", liquidHtml);
     body.set("customCss", customCss);
+    body.set("previewEpoch", String(epoch));
     previewFetcher.submit(body, { method: "post" });
+  };
+
+  const loadStarterLiquid = () => {
+    if (!result || busy) return;
+    const body = new FormData();
+    body.set("intent", "load-starter");
+    body.set("templateId", result.id);
+    fetcher.submit(body, { method: "post" });
+    setLiquidValidation(null);
+  };
+
+  const insertLiquidToken = (token: string) => {
+    if (!codeEditorAllowed) return;
+    liquidEditorRef.current?.insertToken(token);
   };
 
   const discardChanges = () => {
@@ -1240,33 +1413,205 @@ export default function TemplateDetailsPage() {
           </div>
 
           <div style={{ position: "sticky", top: "1rem", alignSelf: "start" }}>
-            <s-section heading="Preview">
-              {previewFailed ? (
-                <s-banner tone="critical" heading="Preview failed">
-                  <s-stack gap="base">
-                    <s-text>{previewErrorMessage}</s-text>
-                    <s-button
-                      variant="secondary"
-                      onClick={refreshPreview}
-                      {...(previewing ? { loading: true, disabled: true } : {})}
+            <s-section accessibilityLabel="Template preview and code">
+              <style>{PREVIEW_HEADER_CSS}</style>
+              <div className="tpl-preview-header">
+                <s-grid
+                  gridTemplateColumns={
+                    codeEditorAllowed ? "repeat(2, auto)" : "auto"
+                  }
+                  gap="small-200"
+                  alignItems="center"
+                  justifyContent="start"
+                  accessibilityLabel="Editor view"
+                >
+                  {codeEditorAllowed ? (
+                    <s-clickable
+                      paddingBlock="small-200"
+                      paddingInline="large"
+                      border="none"
+                      borderRadius="base"
+                      background={
+                        editorView === "code" ? "subdued" : "transparent"
+                      }
+                      accessibilityLabel={`Edit code${editorView === "code" ? ", selected" : ""}`}
+                      onClick={() => setEditorView("code")}
                     >
-                      Try again
-                    </s-button>
-                  </s-stack>
-                </s-banner>
+                      <s-text type="strong" fontWeight="semibold">
+                        Edit code
+                      </s-text>
+                    </s-clickable>
+                  ) : null}
+                  <s-clickable
+                    paddingBlock="small-200"
+                    paddingInline="large"
+                    border="none"
+                    borderRadius="base"
+                    background={
+                      editorView === "preview" ? "subdued" : "transparent"
+                    }
+                    accessibilityLabel={`Preview${editorView === "preview" ? ", selected" : ""}`}
+                    onClick={() => setEditorView("preview")}
+                  >
+                    <s-text type="strong" fontWeight="semibold">
+                      Preview
+                    </s-text>
+                  </s-clickable>
+                </s-grid>
+                {codeEditorAllowed ? (
+                  <s-button
+                    variant="secondary"
+                    onClick={loadStarterLiquid}
+                    {...(busy ? { disabled: true, loading: true } : {})}
+                    interestFor="load-starter-tip"
+                  >
+                    Load starter
+                  </s-button>
+                ) : null}
+              </div>
+              {codeEditorAllowed ? (
+                <s-tooltip id="load-starter-tip">
+                  Replace the current HTML / Liquid with the default starter for
+                  this document type. Style, Layout, Content, and Fields options
+                  are kept; custom code is overwritten.
+                </s-tooltip>
               ) : null}
-              {previewing && !previewHtml ? (
-                <s-spinner accessibilityLabel="Updating preview" />
+
+              {editorView === "code" && codeEditorAllowed ? (
+                <s-stack gap="base">
+                  {liquidValidation ? (
+                    <div
+                      className={`tpl-code-check${
+                        liquidValidation.errors.length > 0
+                          ? " is-error"
+                          : liquidValidation.warnings.length > 0
+                            ? " is-warn"
+                            : " is-ok"
+                      }`}
+                    >
+                      <strong>
+                        {liquidValidation.errors.length > 0
+                          ? "Cannot save until these are fixed"
+                          : liquidValidation.warnings.length > 0
+                            ? "Template parses. Recommended fields missing:"
+                            : "Template is valid. Required fields are present."}
+                      </strong>
+                      {liquidValidation.checks.map((check) => (
+                        <div key={check.id} className="check-line">
+                          {check.ok
+                            ? "✓"
+                            : check.level === "error"
+                              ? "✗"
+                              : "!"}{" "}
+                          {check.label}
+                          {check.ok
+                            ? ""
+                            : check.level === "error"
+                              ? " (required)"
+                              : " (recommended)"}
+                        </div>
+                      ))}
+                      {liquidValidation.errors.length > 0 ||
+                      liquidValidation.warnings.length > 0 ? (
+                        <ul>
+                          {[
+                            ...liquidValidation.errors,
+                            ...liquidValidation.warnings,
+                          ].map((msg) => (
+                            <li key={msg}>{msg}</li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {liquidValidation?.syntaxLine ? (
+                    <div className="tpl-syntax-banner">
+                      <span className="syntax-icon" aria-hidden="true">
+                        !
+                      </span>
+                      <span>
+                        Syntax not valid{" "}
+                        <span className="syntax-line">
+                          on line {liquidValidation.syntaxLine}
+                        </span>
+                      </span>
+                    </div>
+                  ) : null}
+
+                  <div className="tpl-token-row">
+                    {LIQUID_VARIABLE_HELP.map((item) => (
+                      <button
+                        key={item.token}
+                        type="button"
+                        className="tpl-token-chip"
+                        title={item.hint}
+                        onClick={() => insertLiquidToken(item.token)}
+                      >
+                        {item.token}
+                      </button>
+                    ))}
+                  </div>
+
+                  <TemplateLiquidCodeEditor
+                    ref={liquidEditorRef}
+                    value={liquidHtml}
+                    onChange={onLiquidChange}
+                    syntaxLine={liquidValidation?.syntaxLine ?? null}
+                  />
+
+                  <s-text-area
+                    label="Extra CSS (optional)"
+                    value={customCss}
+                    rows={4}
+                    onInput={(event: Event) => {
+                      setCustomCss(
+                        (event.currentTarget as HTMLTextAreaElement).value,
+                      );
+                      if (sourceType === "layout") setSourceType("code");
+                    }}
+                    onChange={(event: Event) => {
+                      setCustomCss(
+                        (event.currentTarget as HTMLTextAreaElement).value,
+                      );
+                      if (sourceType === "layout") setSourceType("code");
+                    }}
+                  />
+                </s-stack>
               ) : null}
-              {!previewFailed && previewHtml ? (
-                <iframe
-                  ref={iframeRef}
-                  title="Template preview"
-                  srcDoc={previewHtml}
-                  sandbox="allow-same-origin allow-modals"
-                  width="100%"
-                  scrolling="no"
-                />
+
+              {editorView === "preview" ? (
+                <>
+                  {previewFailed ? (
+                    <s-banner tone="critical" heading="Preview failed">
+                      <s-stack gap="base">
+                        <s-text>{previewErrorMessage}</s-text>
+                        <s-button
+                          variant="secondary"
+                          onClick={refreshPreview}
+                          {...(previewing
+                            ? { loading: true, disabled: true }
+                            : {})}
+                        >
+                          Try again
+                        </s-button>
+                      </s-stack>
+                    </s-banner>
+                  ) : null}
+                  {previewing && !previewHtml ? (
+                    <s-spinner accessibilityLabel="Updating preview" />
+                  ) : null}
+                  {!previewFailed && previewHtml ? (
+                    <iframe
+                      ref={iframeRef}
+                      title="Template preview"
+                      srcDoc={previewHtml}
+                      sandbox="allow-same-origin allow-modals"
+                      width="100%"
+                      scrolling="no"
+                    />
+                  ) : null}
+                </>
               ) : null}
             </s-section>
           </div>

@@ -381,6 +381,36 @@ describe("Group 14 Phase C — rendering + preview", () => {
     );
     assert.equal(after!.template.customHtml, before!.template.customHtml);
   });
+
+  it("code preview applies draft color even when Liquid is stale", async () => {
+    const { store } = await seedStore("prevcolor");
+    const config = getDefaultConfigForLayout("modern", "tax_invoice");
+    config.branding.primaryColor = "#008060";
+    const liquid = buildLiquidFromConfig(config, "tax_invoice");
+    const created = await createCustomTemplate(store.shopifyDomain, {
+      name: "Preview color",
+      baseLayoutCode: "modern",
+      documentType: "tax_invoice",
+      sourceType: "code",
+      liquidHtml: liquid,
+      config,
+    });
+    assert.ok(created);
+    const draft = structuredClone(config);
+    draft.branding.primaryColor = "#AABBCC";
+    const html = await previewTemplateVisualConfig(
+      store.shopifyDomain,
+      created!.id,
+      {
+        sourceType: "code",
+        // Stale liquid still has #008060 — preview must patch from draft config.
+        liquidHtml: liquid,
+        config: draft,
+      },
+    );
+    assert.ok(html);
+    assert.match(html!, /#AABBCC/i);
+  });
 });
 
 describe("Group 14 Phase C — document types + Save As + Group 5", () => {
