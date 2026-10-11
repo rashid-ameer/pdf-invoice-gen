@@ -44,6 +44,12 @@ type InvoiceLogoFieldProps = {
   /** Bump on discard / server sync to reset panels and the remove banner. */
   resetToken: number;
   disabled?: boolean;
+  /**
+   * Section heading. Default "Invoice logo" (Branding page).
+   * Pass `null` when a parent already shows "Logo" (template Style tab).
+   */
+  heading?: string | null;
+  subheading?: string | null;
 };
 
 export function emptyInvoiceLogo(): InvoiceLogoValue {
@@ -170,6 +176,8 @@ export function InvoiceLogoField({
   onChange,
   resetToken,
   disabled = false,
+  heading = "Invoice logo",
+  subheading = "Shown at the top of your invoices.",
 }: InvoiceLogoFieldProps) {
   const replaceMenuId = useId().replace(/:/g, "");
   const [panel, setPanel] = useState<"default" | "url" | "upload">("default");
@@ -426,7 +434,7 @@ export function InvoiceLogoField({
         <s-stack gap="base">
           <s-drop-zone
             key={dropZoneKey}
-            label="Invoice logo"
+            label={heading ?? "Logo"}
             labelAccessibilityVisibility="exclusive"
             accept={INVOICE_LOGO_ACCEPT}
             accessibilityLabel="Add your company logo. PNG, JPG, JPEG, WebP, or GIF up to 500 KB."
@@ -546,73 +554,78 @@ export function InvoiceLogoField({
     </s-stack>
   );
 
+  const body = (
+    <s-stack gap="base">
+      {showCompose ? (
+        uploadControls
+      ) : showPreview ? (
+        <s-stack direction="inline" gap="base" alignItems="end">
+          <s-box
+            inlineSize="112px"
+            blockSize="112px"
+            borderRadius="base"
+            background="subdued"
+          >
+            {uploading || !value.src ? (
+              <s-stack
+                alignItems="center"
+                justifyContent="center"
+                blockSize="100%"
+              >
+                <s-spinner accessibilityLabel="Uploading logo" />
+              </s-stack>
+            ) : (
+              <s-image
+                src={value.src}
+                alt={value.fileName || "Logo"}
+                aspectRatio="1/1"
+                objectFit="contain"
+                inlineSize="fill"
+                borderRadius="base"
+              />
+            )}
+          </s-box>
+
+          <s-stack direction="inline" gap="small-100">
+            <s-button
+              variant="secondary"
+              commandFor={replaceMenuId}
+              {...(busy ? { disabled: true } : {})}
+            >
+              Replace
+            </s-button>
+            <s-menu id={replaceMenuId} accessibilityLabel="Replace logo">
+              <s-button icon="upload" onClick={openUploadPanel}>
+                Upload from computer
+              </s-button>
+              <s-button icon="link" onClick={openUrlPanel}>
+                Use image URL
+              </s-button>
+            </s-menu>
+            <s-button
+              variant="secondary"
+              tone="critical"
+              onClick={removeLogo}
+              {...(busy ? { disabled: true } : {})}
+            >
+              Remove
+            </s-button>
+          </s-stack>
+        </s-stack>
+      ) : null}
+    </s-stack>
+  );
+
+  if (heading == null) {
+    return body;
+  }
+
   return (
     <s-section
-      heading="Invoice logo"
-      subheading="Shown at the top of your invoices."
+      heading={heading}
+      {...(subheading ? { subheading } : {})}
     >
-      <s-stack gap="base">
-        {showCompose ? (
-          uploadControls
-        ) : showPreview ? (
-          <s-stack direction="inline" gap="base" alignItems="end">
-            <s-box
-              inlineSize="112px"
-              blockSize="112px"
-              borderRadius="base"
-              background="subdued"
-            >
-              {uploading || !value.src ? (
-                <s-stack
-                  alignItems="center"
-                  justifyContent="center"
-                  blockSize="100%"
-                >
-                  <s-spinner accessibilityLabel="Uploading logo" />
-                </s-stack>
-              ) : (
-                <s-image
-                  src={value.src}
-                  alt={value.fileName || "Invoice logo"}
-                  aspectRatio="1/1"
-                  objectFit="contain"
-                  inlineSize="fill"
-                  borderRadius="base"
-                />
-              )}
-            </s-box>
-
-            <s-stack direction="inline" gap="small-100">
-              <s-button
-                variant="secondary"
-                commandFor={replaceMenuId}
-                {...(busy ? { disabled: true } : {})}
-              >
-                Replace
-              </s-button>
-              <s-menu
-                id={replaceMenuId}
-                accessibilityLabel="Replace invoice logo"
-              >
-                <s-button icon="upload" onClick={openUploadPanel}>
-                  Upload from computer
-                </s-button>
-                <s-button icon="link" onClick={openUrlPanel}>
-                  Use image URL
-                </s-button>
-              </s-menu>
-              <s-button
-                variant="secondary"
-                tone="critical"
-                onClick={removeLogo}
-                {...(busy ? { disabled: true } : {})}
-              >
-                Remove
-              </s-button>
-            </s-stack>
-          </s-stack>
-        ) : null}
-      </s-stack>
+      {body}
     </s-section>
   );
 }

@@ -1349,6 +1349,7 @@ function LogoEditor({
     <InvoiceLogoField
       value={logo.src ? logo : emptyInvoiceLogo()}
       resetToken={resetToken}
+      heading={null}
       onChange={(next) => {
         setLogo(next);
         onChange(next.src);
