@@ -707,16 +707,6 @@ export default function CreditNotesPage() {
       >
         Sync refunds
       </s-button>
-      <s-button
-        slot="secondary-actions"
-        variant="secondary"
-        onClick={() => {
-          void downloadCsvExport();
-        }}
-        {...(csvBusy ? { loading: true, disabled: true } : {})}
-      >
-        Export CSV
-      </s-button>
 
       <s-section padding="none" accessibilityLabel="Credit notes">
         {showFirstTimeEmpty ? (
@@ -790,7 +780,7 @@ export default function CreditNotesPage() {
                 {documentTypeSwitcher}
                 <s-grid
                   gap="small-200"
-                  gridTemplateColumns="1fr auto"
+                  gridTemplateColumns="1fr auto auto"
                   alignItems="center"
                 >
                   <s-text-field
@@ -815,6 +805,16 @@ export default function CreditNotesPage() {
                     interestFor={CREDIT_NOTES_FILTERS_TOOLTIP_ID}
                     commandFor={CREDIT_NOTES_FILTERS_POPOVER_ID}
                   />
+                  <s-button
+                    variant="secondary"
+                    onClick={() => {
+                      void downloadCsvExport();
+                    }}
+                    {...(csvBusy ? { loading: true, disabled: true } : {})}
+                  >
+                    Export CSV
+                  </s-button>
+                  
                 </s-grid>
                 <s-tooltip id={CREDIT_NOTES_FILTERS_TOOLTIP_ID}>
                   <s-text>Filters</s-text>

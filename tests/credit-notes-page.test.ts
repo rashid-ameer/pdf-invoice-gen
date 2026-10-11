@@ -270,7 +270,12 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /enqueueSyncRefunds/);
     assert.match(page, /Sync refunds/);
     assert.match(page, /Export CSV/);
+    assert.match(page, /gridTemplateColumns="1fr auto auto"/);
     assert.match(page, /\/app\/credit-notes\/export\/csv/);
+    assert.doesNotMatch(
+      page,
+      /slot="secondary-actions"[\s\S]*Export CSV|Export CSV[\s\S]*slot="secondary-actions"/,
+    );
     assert.match(page, /s-empty-state/);
     assert.match(page, /s-table/);
     assert.match(page, /Print selected/);
