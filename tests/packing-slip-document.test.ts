@@ -329,8 +329,9 @@ describe("packing slip routes wiring", () => {
       "utf8",
     );
     assert.match(src, /\/app\/packing-slips\/\$\{/);
-    assert.match(src, /fetchAndPrintPackingSlipDocument/);
-    assert.match(src, /fetchAndPrintPackingSlipDocuments/);
+    assert.match(src, /fetchPackingSlipDocumentsHtml/);
+    assert.match(src, /DocumentPrintPreviewModal/);
+    assert.doesNotMatch(src, /fetchAndPrintPackingSlipDocument/);
     assert.match(src, /downloadPackingSlipPdf/);
     assert.match(src, />\s*View\s*</);
     assert.match(src, />\s*Print\s*</);

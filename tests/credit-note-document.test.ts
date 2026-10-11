@@ -488,21 +488,25 @@ describe("Credit note document routes / UI wiring", () => {
     assert.match(source, /s-menu/);
     assert.match(source, /menu-horizontal/);
     assert.match(source, /downloadCreditNotePdf/);
-    assert.match(source, /fetchAndPrintCreditNoteDocument/);
+    assert.match(source, /fetchCreditNoteDocumentsHtml/);
+    assert.match(source, /DocumentPrintPreviewModal/);
+    assert.match(source, /openPrintPreview/);
+    assert.doesNotMatch(source, /fetchAndPrintCreditNoteDocument/);
     assert.match(source, /const sendEmail = /);
     assert.match(source, /sendCreditNoteEmail/);
     assert.match(source, /Send email/);
-    assert.doesNotMatch(source, /DocumentEmailModal|s-modal|s-email-field/);
+    assert.doesNotMatch(source, /DocumentEmailModal|s-email-field/);
     assert.match(source, /sendRefundDocumentEmail/);
     assert.match(source, /trigger: "manual"/);
-    assert.match(source, /fetchAndPrintCreditNoteDocuments/);
+    assert.doesNotMatch(source, /fetchAndPrintCreditNoteDocuments/);
     assert.match(source, />\s*View\s*</);
     assert.match(source, /\/app\/credit-notes\/\$\{/);
     assert.match(source, /hasSelection/);
     assert.doesNotMatch(source, /DOCUMENT_PAGE_SIZE_OPTIONS|Per page/);
     assert.doesNotMatch(source, /buyerEmail/);
     assert.match(source, /listRefundDocumentTemplatesForShop/);
-    assert.match(source, /fetchAndPrintRefundDocument/);
+    assert.match(source, /fetchRefundDocumentsHtml/);
+    assert.doesNotMatch(source, /fetchAndPrintRefundDocument/);
   });
 
   it("view route does not record download; download and bulk do", () => {

@@ -38,12 +38,12 @@ import {
   invoiceDateRangePickerValue,
   parseInvoiceDateRangePickerValue,
 } from "../utils/invoice-date-range";
+import { DocumentPrintPreviewModal } from "../components/document-print-preview-modal";
 import { downloadPackingSlipPdf } from "../utils/download-packing-slip-pdf";
-import {
-  fetchAndPrintPackingSlipDocument,
-  fetchAndPrintPackingSlipDocuments,
-} from "../utils/print-invoice-document";
+import { fetchPackingSlipDocumentsHtml } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
+
+const PACKING_SLIP_PRINT_PREVIEW_MODAL_ID = "packing-slip-print-preview-modal";
 
 /**
  * Group 10 — Packing Slips list page.
@@ -173,6 +173,15 @@ export default function PackingSlipsPage() {
     invoiceDateRangePickerValue(data.query.from, data.query.to),
   );
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
+  const [printModalHeading, setPrintModalHeading] = useState(
+    "Print packing slip",
+  );
+  const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
+  const [printPreviewLoading, setPrintPreviewLoading] = useState(false);
+  const [printPreviewError, setPrintPreviewError] = useState<string | null>(
+    null,
+  );
+  const printFetchGeneration = useRef(0);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -345,8 +354,43 @@ export default function PackingSlipsPage() {
     navigate(`/app/packing-slips/${encodeURIComponent(id)}`);
   };
 
-  const openPrint = (id: string) => {
-    void fetchAndPrintPackingSlipDocument(id);
+  const resetPrintPreviewModal = () => {
+    printFetchGeneration.current += 1;
+    setPrintPreviewHtml(null);
+    setPrintPreviewLoading(false);
+    setPrintPreviewError(null);
+    setPrintSelectedBusy(false);
+  };
+
+  const openPrintPreview = (ids: string[], heading: string) => {
+    const uniqueIds = [
+      ...new Set(ids.map((id) => String(id ?? "").trim()).filter(Boolean)),
+    ];
+    if (uniqueIds.length === 0) return;
+
+    const generation = printFetchGeneration.current + 1;
+    printFetchGeneration.current = generation;
+    setPrintModalHeading(heading);
+    setPrintPreviewHtml(null);
+    setPrintPreviewError(null);
+    setPrintPreviewLoading(true);
+    setPrintSelectedBusy(true);
+    void shopify.modal.show(PACKING_SLIP_PRINT_PREVIEW_MODAL_ID);
+
+    void fetchPackingSlipDocumentsHtml(uniqueIds).then((result) => {
+      if (printFetchGeneration.current !== generation) return;
+      setPrintPreviewLoading(false);
+      setPrintSelectedBusy(false);
+      if (!result.ok) {
+        setPrintPreviewError(result.error);
+        return;
+      }
+      setPrintPreviewHtml(result.html);
+    });
+  };
+
+  const openPrint = (id: string, invoiceNumber: string) => {
+    openPrintPreview([id], `Print ${invoiceNumber}`);
   };
 
   /**
@@ -377,10 +421,11 @@ export default function PackingSlipsPage() {
   const printSelected = () => {
     const ids = [...selectedIds];
     if (ids.length === 0 || printSelectedBusy) return;
-    setPrintSelectedBusy(true);
-    void fetchAndPrintPackingSlipDocuments(ids).finally(() => {
-      setPrintSelectedBusy(false);
-    });
+    const heading =
+      ids.length === 1
+        ? "Print packing slip"
+        : `Print ${ids.length} packing slips`;
+    openPrintPreview(ids, heading);
   };
 
   return (
@@ -693,7 +738,9 @@ export default function PackingSlipsPage() {
                           </s-button>
                           <s-button
                             icon="print"
-                            onClick={() => openPrint(invoice.id)}
+                            onClick={() =>
+                              openPrint(invoice.id, invoice.invoiceNumber)
+                            }
                           >
                             Print
                           </s-button>
@@ -724,6 +771,16 @@ export default function PackingSlipsPage() {
           </s-table>
         </s-section>
       )}
+
+      <DocumentPrintPreviewModal
+        id={PACKING_SLIP_PRINT_PREVIEW_MODAL_ID}
+        heading={printModalHeading}
+        html={printPreviewHtml}
+        loading={printPreviewLoading}
+        error={printPreviewError}
+        loadingLabel="Loading packing slip preview"
+        onHide={resetPrintPreviewModal}
+      />
     </s-page>
   );
 }

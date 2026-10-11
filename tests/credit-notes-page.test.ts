@@ -275,7 +275,10 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /s-table/);
     assert.match(page, /Print selected/);
     assert.match(page, /downloadCreditNotePdf/);
-    assert.match(page, /fetchAndPrintCreditNoteDocuments/);
+    assert.match(page, /fetchCreditNoteDocumentsHtml/);
+    assert.match(page, /DocumentPrintPreviewModal/);
+    assert.match(page, /openPrintPreview/);
+    assert.doesNotMatch(page, /fetchAndPrintCreditNoteDocuments/);
     assert.match(page, /s-menu/);
     assert.match(page, /menu-horizontal/);
     assert.match(page, /formatIssueDate/);
@@ -285,8 +288,8 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /Credit notes/);
     assert.match(page, /switchTab/);
     assert.match(page, /refund-documents/);
-    assert.match(page, /background=\{activeTab === "credit-notes" \? "base"/);
-    assert.match(page, /background=\{isRefundTab \? "base"/);
+    assert.match(page, /background=\{activeTab === "credit-notes" \? "strong"/);
+    assert.match(page, /background=\{isRefundTab \? "strong"/);
     assert.doesNotMatch(page, /s-button-group/);
     assert.doesNotMatch(page, /icon=\{.*\? "check"/);
     assert.match(page, /s-date-picker/);
@@ -300,7 +303,8 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /No document refunds yet/);
     assert.match(page, /No credit notes yet/);
     assert.match(page, /listRefundDocumentTemplatesForShop/);
-    assert.match(page, /fetchAndPrintRefundDocument/);
+    assert.match(page, /fetchRefundDocumentsHtml/);
+    assert.doesNotMatch(page, /fetchAndPrintRefundDocument/);
     assert.match(page, /downloadRefundDocumentPdf/);
     assert.match(page, /Print selected/);
     assert.match(page, /isCreditNotesListPath/);

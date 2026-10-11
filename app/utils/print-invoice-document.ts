@@ -3,9 +3,9 @@
  * Same document source as Invoice Details preview (`wrapA4EmbedHtml` / view?embed=1).
  *
  * Details page: print the existing preview iframe when ready.
- * Invoices list: load HTML into a preview modal iframe, then print from that
- * iframe (same-page; no dedicated tab). Other list pages still use a dedicated
- * print tab until they adopt the modal pattern.
+ * List pages (invoices, packing slips, credit notes, refunds): load HTML into
+ * a preview modal iframe, then print from that iframe (same-page; no dedicated
+ * tab). Dedicated-tab helpers remain as legacy fallbacks.
  */
 
 export type PrintInvoiceHtmlOptions = {
@@ -259,10 +259,72 @@ export async function fetchAndPrintInvoiceDocuments(
   }
 }
 
+export type FetchDocumentHtmlResult = FetchInvoiceHtmlResult;
+
 /**
- * Fetch packing-slip embed HTML and print via a dedicated tab.
+ * Fetch packing-slip embed HTML for the list print-preview modal.
  * Single: view?embed=1. Bulk: /app/packing-slips/bulk?mode=preview&embed=1.
- * Does not record packing_slip_downloaded.
+ * Does not record packing_slip_downloaded. Does not open a tab or print.
+ */
+export async function fetchPackingSlipDocumentsHtml(
+  invoiceIds: string[],
+): Promise<FetchDocumentHtmlResult> {
+  const ids = [
+    ...new Set(invoiceIds.map((id) => String(id ?? "").trim()).filter(Boolean)),
+  ];
+  if (ids.length === 0) {
+    return { ok: false, error: "No packing slips selected." };
+  }
+
+  try {
+    const url =
+      ids.length === 1
+        ? `/app/invoices/${encodeURIComponent(ids[0])}/packing-slip/view?embed=1`
+        : `/app/packing-slips/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=preview&embed=1`;
+
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          response.status === 400
+            ? "You can print up to 50 packing slips at once."
+            : `Could not prepare packing slips (HTTP ${response.status}).`,
+      };
+    }
+
+    const contentType = response.headers.get("Content-Type") ?? "";
+    if (!contentType.includes("text/html")) {
+      return {
+        ok: false,
+        error: "Server returned a non-HTML document. Try again.",
+      };
+    }
+
+    const html = await response.text();
+    if (!html.trim() || !/<body[\s>]/i.test(html)) {
+      return {
+        ok: false,
+        error: "Packing slip HTML was empty or incomplete.",
+      };
+    }
+
+    return { ok: true, html };
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Could not prepare packing slips. Check your connection and try again.",
+    };
+  }
+}
+
+/**
+ * Fetch packing-slip embed HTML and print via a dedicated tab (legacy path).
+ * Prefer the list preview modal (`fetchPackingSlipDocumentsHtml`).
  */
 export async function fetchAndPrintPackingSlipDocument(
   invoiceId: string,
@@ -273,8 +335,8 @@ export async function fetchAndPrintPackingSlipDocument(
 }
 
 /**
- * Bulk packing-slip print. Dedicated print tab only — never injects HTML into
- * the Packing Slips page. Always pass mode=preview&embed=1 for HTML.
+ * Bulk packing-slip print via dedicated tab (legacy path).
+ * Always pass mode=preview&embed=1 for HTML.
  */
 export async function fetchAndPrintPackingSlipDocuments(
   invoiceIds: string[],
@@ -294,45 +356,13 @@ export async function fetchAndPrintPackingSlipDocuments(
       "Preparing packing slips for print…",
     );
 
-    const url =
-      ids.length === 1
-        ? `/app/invoices/${encodeURIComponent(ids[0])}/packing-slip/view?embed=1`
-        : `/app/packing-slips/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=preview&embed=1`;
-
-    const response = await fetch(url, {
-      credentials: "same-origin",
-      headers: { Accept: "text/html" },
-    });
-    if (!response.ok) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        `Could not prepare packing slips (HTTP ${response.status}).`,
-      );
+    const result = await fetchPackingSlipDocumentsHtml(ids);
+    if (!result.ok) {
+      writeTabMessage(tab, "Print failed", result.error);
       return;
     }
 
-    const contentType = response.headers.get("Content-Type") ?? "";
-    if (!contentType.includes("text/html")) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        "Server returned a non-HTML document. Close this tab and try again.",
-      );
-      return;
-    }
-
-    const html = await response.text();
-    if (!html.trim() || !/<body[\s>]/i.test(html)) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        "Packing slip HTML was empty or incomplete.",
-      );
-      return;
-    }
-
-    printHtmlInDedicatedTab(html, tab);
+    printHtmlInDedicatedTab(result.html, tab);
   } catch {
     writeTabMessage(
       tab,
@@ -343,9 +373,75 @@ export async function fetchAndPrintPackingSlipDocuments(
 }
 
 /**
- * Fetch credit-note embed HTML and print via a dedicated tab.
+ * Fetch credit-note embed HTML for the list print-preview modal.
  * Single: /view?embed=1&templateId=…. Bulk: /bulk?mode=print&embed=1.
  * Bulk print records download status (old credit-notes bulk route).
+ */
+export async function fetchCreditNoteDocumentsHtml(
+  creditNoteIds: string[],
+  templateId?: string,
+): Promise<FetchDocumentHtmlResult> {
+  const ids = [
+    ...new Set(
+      creditNoteIds.map((id) => String(id ?? "").trim()).filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) {
+    return { ok: false, error: "No credit notes selected." };
+  }
+
+  try {
+    const templateQs = templateId
+      ? `&templateId=${encodeURIComponent(templateId)}`
+      : "";
+    const url =
+      ids.length === 1
+        ? `/app/credit-notes/${encodeURIComponent(ids[0])}/view?embed=1${templateQs}`
+        : `/app/credit-notes/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=print&embed=1${templateQs}`;
+
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          response.status === 400
+            ? "You can print up to 50 credit notes at once."
+            : `Could not prepare credit notes (HTTP ${response.status}).`,
+      };
+    }
+
+    const contentType = response.headers.get("Content-Type") ?? "";
+    if (!contentType.includes("text/html")) {
+      return {
+        ok: false,
+        error: "Server returned a non-HTML document. Try again.",
+      };
+    }
+
+    const html = await response.text();
+    if (!html.trim() || !/<body[\s>]/i.test(html)) {
+      return {
+        ok: false,
+        error: "Credit note HTML was empty or incomplete.",
+      };
+    }
+
+    return { ok: true, html };
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Could not prepare credit notes. Check your connection and try again.",
+    };
+  }
+}
+
+/**
+ * Fetch credit-note embed HTML and print via a dedicated tab (legacy path).
+ * Prefer the list preview modal (`fetchCreditNoteDocumentsHtml`).
  */
 export async function fetchAndPrintCreditNoteDocument(
   creditNoteId: string,
@@ -357,7 +453,7 @@ export async function fetchAndPrintCreditNoteDocument(
 }
 
 /**
- * Bulk credit-note print. Dedicated print tab only.
+ * Bulk credit-note print via dedicated tab (legacy path).
  * Always pass mode=print&embed=1 for HTML (bulk default is print, not PDF).
  */
 export async function fetchAndPrintCreditNoteDocuments(
@@ -381,50 +477,13 @@ export async function fetchAndPrintCreditNoteDocuments(
       "Preparing credit notes for print…",
     );
 
-    const templateQs = templateId
-      ? `&templateId=${encodeURIComponent(templateId)}`
-      : "";
-    const url =
-      ids.length === 1
-        ? `/app/credit-notes/${encodeURIComponent(ids[0])}/view?embed=1${templateQs}`
-        : `/app/credit-notes/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=print&embed=1${templateQs}`;
-
-    const response = await fetch(url, {
-      credentials: "same-origin",
-      headers: { Accept: "text/html" },
-    });
-    if (!response.ok) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        response.status === 400
-          ? "You can print up to 50 credit notes at once."
-          : `Could not prepare credit notes (HTTP ${response.status}).`,
-      );
+    const result = await fetchCreditNoteDocumentsHtml(ids, templateId);
+    if (!result.ok) {
+      writeTabMessage(tab, "Print failed", result.error);
       return;
     }
 
-    const contentType = response.headers.get("Content-Type") ?? "";
-    if (!contentType.includes("text/html")) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        "Server returned a non-HTML document. Close this tab and try again.",
-      );
-      return;
-    }
-
-    const html = await response.text();
-    if (!html.trim() || !/<body[\s>]/i.test(html)) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        "Credit note HTML was empty or incomplete.",
-      );
-      return;
-    }
-
-    printHtmlInDedicatedTab(html, tab);
+    printHtmlInDedicatedTab(result.html, tab);
   } catch {
     writeTabMessage(
       tab,
@@ -435,9 +494,75 @@ export async function fetchAndPrintCreditNoteDocuments(
 }
 
 /**
- * Fetch refund-document embed HTML and print via a dedicated tab.
+ * Fetch refund-document embed HTML for the list print-preview modal.
  * Single: /refund-document/view?embed=1 (does not record).
  * Bulk: /refund-documents/bulk?mode=print&embed=1 (records download — old route).
+ */
+export async function fetchRefundDocumentsHtml(
+  creditNoteIds: string[],
+  templateId?: string,
+): Promise<FetchDocumentHtmlResult> {
+  const ids = [
+    ...new Set(
+      creditNoteIds.map((id) => String(id ?? "").trim()).filter(Boolean),
+    ),
+  ];
+  if (ids.length === 0) {
+    return { ok: false, error: "No refund documents selected." };
+  }
+
+  try {
+    const templateQs = templateId
+      ? `&templateId=${encodeURIComponent(templateId)}`
+      : "";
+    const url =
+      ids.length === 1
+        ? `/app/credit-notes/${encodeURIComponent(ids[0])}/refund-document/view?embed=1${templateQs}`
+        : `/app/refund-documents/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=print&embed=1${templateQs}`;
+
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          response.status === 400
+            ? "You can print up to 50 refund documents at once."
+            : `Could not prepare refund documents (HTTP ${response.status}).`,
+      };
+    }
+
+    const contentType = response.headers.get("Content-Type") ?? "";
+    if (!contentType.includes("text/html")) {
+      return {
+        ok: false,
+        error: "Server returned a non-HTML document. Try again.",
+      };
+    }
+
+    const html = await response.text();
+    if (!html.trim() || !/<body[\s>]/i.test(html)) {
+      return {
+        ok: false,
+        error: "Refund document HTML was empty or incomplete.",
+      };
+    }
+
+    return { ok: true, html };
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Could not prepare refund documents. Check your connection and try again.",
+    };
+  }
+}
+
+/**
+ * Fetch refund-document embed HTML and print via a dedicated tab (legacy path).
+ * Prefer the list preview modal (`fetchRefundDocumentsHtml`).
  */
 export async function fetchAndPrintRefundDocument(
   creditNoteId: string,
@@ -469,50 +594,13 @@ export async function fetchAndPrintRefundDocuments(
       "Preparing refund documents for print…",
     );
 
-    const templateQs = templateId
-      ? `&templateId=${encodeURIComponent(templateId)}`
-      : "";
-    const url =
-      ids.length === 1
-        ? `/app/credit-notes/${encodeURIComponent(ids[0])}/refund-document/view?embed=1${templateQs}`
-        : `/app/refund-documents/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=print&embed=1${templateQs}`;
-
-    const response = await fetch(url, {
-      credentials: "same-origin",
-      headers: { Accept: "text/html" },
-    });
-    if (!response.ok) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        response.status === 400
-          ? "You can print up to 50 refund documents at once."
-          : `Could not prepare refund documents (HTTP ${response.status}).`,
-      );
+    const result = await fetchRefundDocumentsHtml(ids, templateId);
+    if (!result.ok) {
+      writeTabMessage(tab, "Print failed", result.error);
       return;
     }
 
-    const contentType = response.headers.get("Content-Type") ?? "";
-    if (!contentType.includes("text/html")) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        "Server returned a non-HTML document. Close this tab and try again.",
-      );
-      return;
-    }
-
-    const html = await response.text();
-    if (!html.trim() || !/<body[\s>]/i.test(html)) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        "Refund document HTML was empty or incomplete.",
-      );
-      return;
-    }
-
-    printHtmlInDedicatedTab(html, tab);
+    printHtmlInDedicatedTab(result.html, tab);
   } catch {
     writeTabMessage(
       tab,

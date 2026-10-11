@@ -169,8 +169,10 @@ describe("packing slips Phase 1 — list + CSV", () => {
     // Phase 2/3: View opens details; Print / Download on list
     assert.match(packingSrc, /\/app\/packing-slips\/\$\{/);
     assert.match(packingSrc, /downloadPackingSlipPdf/);
-    assert.match(packingSrc, /fetchAndPrintPackingSlipDocument/);
-    assert.match(packingSrc, /fetchAndPrintPackingSlipDocuments/);
+    assert.match(packingSrc, /fetchPackingSlipDocumentsHtml/);
+    assert.match(packingSrc, /DocumentPrintPreviewModal/);
+    assert.match(packingSrc, /openPrintPreview/);
+    assert.doesNotMatch(packingSrc, /fetchAndPrintPackingSlipDocument/);
     assert.match(packingSrc, /Print selected/);
     assert.match(packingSrc, /isPackingSlipsListPath/);
     assert.match(packingSrc, /navigation\.location/);

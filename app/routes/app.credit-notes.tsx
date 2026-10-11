@@ -33,6 +33,7 @@ import {
   CUSTOMER_LINK_MODAL_ID,
   CustomerLinkCopyModal,
 } from "../components/customer-link-copy-modal";
+import { DocumentPrintPreviewModal } from "../components/document-print-preview-modal";
 import { formatPaymentStatus } from "../utils/csv";
 import { downloadCreditNotePdf } from "../utils/download-credit-note-pdf";
 import { downloadRefundDocumentPdf } from "../utils/download-refund-document-pdf";
@@ -51,12 +52,12 @@ import {
   parseInvoiceDateRangePickerValue,
 } from "../utils/invoice-date-range";
 import {
-  fetchAndPrintCreditNoteDocument,
-  fetchAndPrintCreditNoteDocuments,
-  fetchAndPrintRefundDocument,
-  fetchAndPrintRefundDocuments,
+  fetchCreditNoteDocumentsHtml,
+  fetchRefundDocumentsHtml,
 } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
+
+const CREDIT_NOTE_PRINT_PREVIEW_MODAL_ID = "credit-note-print-preview-modal";
 
 /**
  * Credit Notes index — Polaris table sibling of Invoices.
@@ -266,6 +267,13 @@ export default function CreditNotesPage() {
     invoiceDateRangePickerValue(data.query.from, data.query.to),
   );
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
+  const [printModalHeading, setPrintModalHeading] = useState("Print credit note");
+  const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
+  const [printPreviewLoading, setPrintPreviewLoading] = useState(false);
+  const [printPreviewError, setPrintPreviewError] = useState<string | null>(
+    null,
+  );
+  const printFetchGeneration = useRef(0);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
   const [linkDocumentId, setLinkDocumentId] = useState<string | null>(null);
@@ -511,12 +519,52 @@ export default function CreditNotesPage() {
     navigate(`/app/credit-notes/${encodeURIComponent(id)}`);
   };
 
-  const openPrint = (id: string, _creditNoteNumber: string) => {
-    if (isRefundTab) {
-      void fetchAndPrintRefundDocument(id, defaultRefundTemplateId);
-      return;
-    }
-    void fetchAndPrintCreditNoteDocument(id);
+  const resetPrintPreviewModal = () => {
+    printFetchGeneration.current += 1;
+    setPrintPreviewHtml(null);
+    setPrintPreviewLoading(false);
+    setPrintPreviewError(null);
+    setPrintSelectedBusy(false);
+  };
+
+  const openPrintPreview = (ids: string[], heading: string) => {
+    const uniqueIds = [
+      ...new Set(ids.map((id) => String(id ?? "").trim()).filter(Boolean)),
+    ];
+    if (uniqueIds.length === 0) return;
+
+    const generation = printFetchGeneration.current + 1;
+    printFetchGeneration.current = generation;
+    setPrintModalHeading(heading);
+    setPrintPreviewHtml(null);
+    setPrintPreviewError(null);
+    setPrintPreviewLoading(true);
+    setPrintSelectedBusy(true);
+    void shopify.modal.show(CREDIT_NOTE_PRINT_PREVIEW_MODAL_ID);
+
+    const fetchHtml = isRefundTab
+      ? () => fetchRefundDocumentsHtml(uniqueIds, defaultRefundTemplateId)
+      : () => fetchCreditNoteDocumentsHtml(uniqueIds);
+
+    void fetchHtml().then((result) => {
+      if (printFetchGeneration.current !== generation) return;
+      setPrintPreviewLoading(false);
+      setPrintSelectedBusy(false);
+      if (!result.ok) {
+        setPrintPreviewError(result.error);
+        return;
+      }
+      setPrintPreviewHtml(result.html);
+    });
+  };
+
+  const openPrint = (id: string, creditNoteNumber: string) => {
+    openPrintPreview(
+      [id],
+      isRefundTab
+        ? `Print refund ${creditNoteNumber}`
+        : `Print ${creditNoteNumber}`,
+    );
   };
 
   const openDownload = async (id: string, creditNoteNumber: string) => {
@@ -600,15 +648,14 @@ export default function CreditNotesPage() {
       });
       return;
     }
-    setPrintSelectedBusy(true);
-    const done = () => setPrintSelectedBusy(false);
-    if (isRefundTab) {
-      void fetchAndPrintRefundDocuments(ids, defaultRefundTemplateId).finally(
-        done,
-      );
-      return;
-    }
-    void fetchAndPrintCreditNoteDocuments(ids).finally(done);
+    const heading = isRefundTab
+      ? ids.length === 1
+        ? "Print refund document"
+        : `Print ${ids.length} refund documents`
+      : ids.length === 1
+        ? "Print credit note"
+        : `Print ${ids.length} credit notes`;
+    openPrintPreview(ids, heading);
   };
 
   const documentTypeSwitcher = (
@@ -1052,6 +1099,20 @@ export default function CreditNotesPage() {
         error={customerLinkError}
         onGenerate={generateCustomerLink}
         onHide={resetCustomerLinkModal}
+      />
+
+      <DocumentPrintPreviewModal
+        id={CREDIT_NOTE_PRINT_PREVIEW_MODAL_ID}
+        heading={printModalHeading}
+        html={printPreviewHtml}
+        loading={printPreviewLoading}
+        error={printPreviewError}
+        loadingLabel={
+          isRefundTab
+            ? "Loading refund document preview"
+            : "Loading credit note preview"
+        }
+        onHide={resetPrintPreviewModal}
       />
     </s-page>
   );
