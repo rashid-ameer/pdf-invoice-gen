@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
+import { usePolarisModalHide } from "../hooks/use-polaris-modal-hide";
 import { printInvoiceHtml } from "../utils/print-invoice-document";
 
 export const DOCUMENT_PRINT_PREVIEW_MODAL_ID = "document-print-preview-modal";
@@ -35,6 +36,7 @@ export function DocumentPrintPreviewModal({
   const shopify = useAppBridge();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [previewLoaded, setPreviewLoaded] = useState(false);
+  usePolarisModalHide(id, onHide);
 
   useEffect(() => {
     if (!html) {
@@ -106,8 +108,8 @@ export function DocumentPrintPreviewModal({
   }, [html]);
 
   const closeModal = () => {
+    // State reset runs once via afterhide (usePolarisModalHide).
     void shopify.modal.hide(id);
-    onHide?.();
   };
 
   const printDocument = () => {
@@ -127,9 +129,6 @@ export function DocumentPrintPreviewModal({
       heading={heading}
       size="large"
       accessibilityLabel={heading}
-      onHide={() => {
-        onHide?.();
-      }}
     >
       <s-stack gap="base">
         {error ? (

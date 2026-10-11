@@ -1,5 +1,7 @@
 import {useEffect, useRef} from 'react';
 
+import {usePolarisModalHide} from '../hooks/use-polaris-modal-hide';
+
 type ModalElement = HTMLElement & {
   showOverlay: () => void;
   hideOverlay: () => void;
@@ -25,6 +27,7 @@ export function ConfirmModal({
   loading?: boolean;
 }) {
   const wasOpen = useRef(false);
+  usePolarisModalHide(id, onCancel);
 
   useEffect(() => {
     const modal = document.getElementById(id) as ModalElement | null;
@@ -46,7 +49,6 @@ export function ConfirmModal({
       heading={heading}
       size="small"
       accessibilityLabel={heading}
-      onHide={onCancel}
     >
       <s-paragraph>{message}</s-paragraph>
       <s-button

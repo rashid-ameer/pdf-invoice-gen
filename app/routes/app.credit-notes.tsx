@@ -282,11 +282,17 @@ export default function CreditNotesPage() {
     null,
   );
   const [csvBusy, setCsvBusy] = useState(false);
+  // s-table event props serialize as null on SSR — attach after mount to avoid hydration warnings.
+  const [tableHandlersReady, setTableHandlersReady] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailAwaiting = useRef(false);
   const emailDataAtSubmit = useRef(emailFetcher.data);
   const linkAwaiting = useRef(false);
   const linkDataAtSubmit = useRef(linkFetcher.data);
+
+  useEffect(() => {
+    setTableHandlersReady(true);
+  }, []);
 
   useEffect(() => {
     setSearchDraft(data.query.q);
@@ -741,12 +747,16 @@ export default function CreditNotesPage() {
                   paginate: true,
                   hasPreviousPage: data.page > 1,
                   hasNextPage: data.page < data.pages,
-                  onPreviousPage: () =>
-                    updateQuery({
-                      page: String(Math.max(1, data.page - 1)),
-                    }),
-                  onNextPage: () =>
-                    updateQuery({ page: String(data.page + 1) }),
+                  ...(tableHandlersReady
+                    ? {
+                        onPreviousPage: () =>
+                          updateQuery({
+                            page: String(Math.max(1, data.page - 1)),
+                          }),
+                        onNextPage: () =>
+                          updateQuery({ page: String(data.page + 1) }),
+                      }
+                    : {}),
                 }
               : {})}
             {...(loading ? { loading: true } : {})}

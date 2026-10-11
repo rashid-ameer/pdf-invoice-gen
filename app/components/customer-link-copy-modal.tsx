@@ -1,5 +1,6 @@
 import { useAppBridge } from "@shopify/app-bridge-react";
 
+import { usePolarisModalHide } from "../hooks/use-polaris-modal-hide";
 import { copyTextToClipboard } from "../utils/clipboard";
 
 export const CUSTOMER_LINK_MODAL_ID = "customer-link-copy-modal";
@@ -28,6 +29,7 @@ export function CustomerLinkCopyModal({
 }: CustomerLinkCopyModalProps) {
   const shopify = useAppBridge();
   const ready = Boolean(url) && !generating;
+  usePolarisModalHide(id, onHide);
 
   const copyFromModal = async () => {
     if (!url) return;
@@ -40,18 +42,12 @@ export function CustomerLinkCopyModal({
   };
 
   const closeModal = () => {
+    // State reset runs once via afterhide (usePolarisModalHide).
     void shopify.modal.hide(id);
-    onHide?.();
   };
 
   return (
-    <s-modal
-      id={id}
-      heading="Customer link"
-      onHide={() => {
-        onHide?.();
-      }}
-    >
+    <s-modal id={id} heading="Customer link">
       <s-stack gap="base">
         {error ? (
           <s-banner tone="critical" heading="Couldn't create link">

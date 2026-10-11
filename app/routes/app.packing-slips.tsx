@@ -182,8 +182,14 @@ export default function PackingSlipsPage() {
     null,
   );
   const printFetchGeneration = useRef(0);
+  // s-table event props serialize as null on SSR — attach after mount to avoid hydration warnings.
+  const [tableHandlersReady, setTableHandlersReady] = useState(false);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setTableHandlersReady(true);
+  }, []);
 
   useEffect(() => {
     setSearchDraft(data.query.q);
@@ -474,12 +480,16 @@ export default function PackingSlipsPage() {
                   paginate: true,
                   hasPreviousPage: data.page > 1,
                   hasNextPage: data.page < data.pages,
-                  onPreviousPage: () =>
-                    updateFilters({
-                      page: String(Math.max(1, data.page - 1)),
-                    }),
-                  onNextPage: () =>
-                    updateFilters({ page: String(data.page + 1) }),
+                  ...(tableHandlersReady
+                    ? {
+                        onPreviousPage: () =>
+                          updateFilters({
+                            page: String(Math.max(1, data.page - 1)),
+                          }),
+                        onNextPage: () =>
+                          updateFilters({ page: String(data.page + 1) }),
+                      }
+                    : {}),
                 }
               : {})}
             {...(loading ? { loading: true } : {})}
