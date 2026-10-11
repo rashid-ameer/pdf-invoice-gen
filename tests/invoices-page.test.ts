@@ -164,6 +164,11 @@ describe("Invoices page wiring", () => {
     assert.match(source, />Actions</);
     assert.match(source, /<s-menu/);
     assert.match(source, /Print selected/);
+    assert.match(source, /InvoicePrintPreviewModal/);
+    assert.match(source, /INVOICE_PRINT_PREVIEW_MODAL_ID/);
+    assert.match(source, /fetchInvoiceDocumentsHtml/);
+    assert.match(source, /openPrintPreview/);
+    assert.doesNotMatch(source, /fetchAndPrintInvoiceDocument/);
     assert.match(source, /Send email/);
     assert.match(source, /const sendEmail = /);
     assert.match(source, /sendInvoiceEmail/);

@@ -313,6 +313,9 @@ describe("Group 14 Phase D — system + isolation + wiring", () => {
     );
     assert.match(card, /thumbnailDataUrl/);
     assert.match(card, /TemplatePreview/);
+    assert.match(card, /templatePreviewModalId/);
+    assert.match(card, /commandFor=\{previewModalId\}/);
+    assert.match(card, /size="large"/);
 
     const details = readFileSync(
       join(process.cwd(), "app/routes/app.settings_.templates_.$id.tsx"),

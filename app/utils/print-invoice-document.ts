@@ -3,15 +3,20 @@
  * Same document source as Invoice Details preview (`wrapA4EmbedHtml` / view?embed=1).
  *
  * Details page: print the existing preview iframe when ready.
- * Invoices table: open a dedicated print tab with only the rendered invoice
- * (Chromium cannot reliably print from a non-visible same-page iframe without
- * either a blank preview or flashing the document into the UI).
+ * Invoices list: load HTML into a preview modal iframe, then print from that
+ * iframe (same-page; no dedicated tab). Other list pages still use a dedicated
+ * print tab until they adopt the modal pattern.
  */
 
 export type PrintInvoiceHtmlOptions = {
-  /** When set and ready, prefer printing this iframe (Details page). */
+  /** When set and ready, prefer printing this iframe (Details / list modal). */
   iframe?: HTMLIFrameElement | null;
   iframeReady?: boolean;
+  /**
+   * When false, do not fall back to a dedicated print tab if iframe print is
+   * unavailable. Used by the invoices list preview modal.
+   */
+  allowDedicatedTab?: boolean;
 };
 
 const PRINT_BOOTSTRAP = `
@@ -103,8 +108,8 @@ function writeTabMessage(tab: Window, title: string, message: string): void {
 
 /**
  * Open the browser print dialog for already-rendered invoice HTML.
- * Details: prints the on-page preview iframe when ready.
- * Otherwise: dedicated print tab (reliable; no visible flash on the list page).
+ * Prefer a ready preview iframe; otherwise open a dedicated print tab
+ * (unless `allowDedicatedTab` is false).
  */
 export function printInvoiceHtml(
   html: string,
@@ -115,6 +120,7 @@ export function printInvoiceHtml(
   const iframe = options.iframe ?? null;
   const iframeWin = iframe?.contentWindow;
   const iframeDoc = iframe?.contentDocument;
+  const allowDedicatedTab = options.allowDedicatedTab !== false;
 
   if (options.iframeReady && iframeWin && iframeDoc?.body) {
     const previousTransform = iframeDoc.body.style.transform;
@@ -133,12 +139,79 @@ export function printInvoiceHtml(
     }
   }
 
-  printHtmlInDedicatedTab(html);
+  if (allowDedicatedTab) {
+    printHtmlInDedicatedTab(html);
+  }
+}
+
+export type FetchInvoiceHtmlResult =
+  | { ok: true; html: string }
+  | { ok: false; error: string };
+
+/**
+ * Fetch invoice embed HTML for the list print-preview modal.
+ * Single: view?embed=1. Bulk: /app/invoices/bulk?mode=preview&embed=1.
+ * Does not open a tab or trigger print.
+ */
+export async function fetchInvoiceDocumentsHtml(
+  invoiceIds: string[],
+): Promise<FetchInvoiceHtmlResult> {
+  const ids = [
+    ...new Set(invoiceIds.map((id) => String(id ?? "").trim()).filter(Boolean)),
+  ];
+  if (ids.length === 0) {
+    return { ok: false, error: "No invoices selected." };
+  }
+
+  try {
+    const url =
+      ids.length === 1
+        ? `/app/invoices/${encodeURIComponent(ids[0])}/view?embed=1`
+        : `/app/invoices/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=preview&embed=1`;
+
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      headers: { Accept: "text/html" },
+    });
+    if (!response.ok) {
+      return {
+        ok: false,
+        error:
+          response.status === 400
+            ? "You can print up to 50 invoices at once."
+            : `Could not prepare invoices (HTTP ${response.status}).`,
+      };
+    }
+
+    const contentType = response.headers.get("Content-Type") ?? "";
+    if (!contentType.includes("text/html")) {
+      return {
+        ok: false,
+        error: "Server returned a non-HTML document. Try again.",
+      };
+    }
+
+    const html = await response.text();
+    if (!html.trim() || !/<body[\s>]/i.test(html)) {
+      return {
+        ok: false,
+        error: "Invoice HTML was empty or incomplete.",
+      };
+    }
+
+    return { ok: true, html };
+  } catch {
+    return {
+      ok: false,
+      error: "Could not prepare invoices. Check your connection and try again.",
+    };
+  }
 }
 
 /**
  * Fetch the same embed HTML used by Invoice Details (G5/G7 via view?embed=1),
  * then print via a dedicated tab.
+ * Prefer the list preview modal (`fetchInvoiceDocumentsHtml`) for invoices UI.
  */
 export async function fetchAndPrintInvoiceDocument(
   invoiceId: string,
@@ -149,9 +222,8 @@ export async function fetchAndPrintInvoiceDocument(
 }
 
 /**
- * Bulk print: reuses GET /app/invoices/bulk?mode=preview&embed=1 → renderInvoicesBulk
- * (G5/G7) + applyA4DocumentLayout with .doc-page breaks (one page per invoice).
- * Dedicated print tab only — never injects invoice HTML into the Invoices page.
+ * Bulk print via dedicated tab (legacy path).
+ * Invoices list UI uses the preview modal instead.
  *
  * Important: bulk defaults to PDF download when mode is omitted. Always pass
  * mode=preview (or rely on embed=1 server default) so the response is HTML.
@@ -171,45 +243,13 @@ export async function fetchAndPrintInvoiceDocuments(
   try {
     writeTabMessage(tab, "Preparing invoices…", "Preparing invoices for print…");
 
-    const url =
-      ids.length === 1
-        ? `/app/invoices/${encodeURIComponent(ids[0])}/view?embed=1`
-        : `/app/invoices/bulk?ids=${encodeURIComponent(ids.join(","))}&mode=preview&embed=1`;
-
-    const response = await fetch(url, {
-      credentials: "same-origin",
-      headers: { Accept: "text/html" },
-    });
-    if (!response.ok) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        `Could not prepare invoices (HTTP ${response.status}).`,
-      );
+    const result = await fetchInvoiceDocumentsHtml(ids);
+    if (!result.ok) {
+      writeTabMessage(tab, "Print failed", result.error);
       return;
     }
 
-    const contentType = response.headers.get("Content-Type") ?? "";
-    if (!contentType.includes("text/html")) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        "Server returned a non-HTML document. Close this tab and try again.",
-      );
-      return;
-    }
-
-    const html = await response.text();
-    if (!html.trim() || !/<body[\s>]/i.test(html)) {
-      writeTabMessage(
-        tab,
-        "Print failed",
-        "Invoice HTML was empty or incomplete.",
-      );
-      return;
-    }
-
-    printHtmlInDedicatedTab(html, tab);
+    printHtmlInDedicatedTab(result.html, tab);
   } catch {
     writeTabMessage(
       tab,

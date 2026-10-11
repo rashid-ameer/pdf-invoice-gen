@@ -29,6 +29,10 @@ import {
   CUSTOMER_LINK_MODAL_ID,
   CustomerLinkCopyModal,
 } from "../components/customer-link-copy-modal";
+import {
+  INVOICE_PRINT_PREVIEW_MODAL_ID,
+  InvoicePrintPreviewModal,
+} from "../components/invoice-print-preview-modal";
 import { formatPaymentStatus } from "../utils/csv";
 import {
   INVOICE_DOCUMENT_STATUSES,
@@ -45,10 +49,7 @@ import {
   parseInvoiceDateRangePickerValue,
 } from "../utils/invoice-date-range";
 import { downloadInvoicePdf } from "../utils/download-invoice-pdf";
-import {
-  fetchAndPrintInvoiceDocument,
-  fetchAndPrintInvoiceDocuments,
-} from "../utils/print-invoice-document";
+import { fetchInvoiceDocumentsHtml } from "../utils/print-invoice-document";
 import { authenticate } from "../shopify.server";
 
 /** List route only — not invoice details. */
@@ -234,6 +235,12 @@ export default function InvoicesPage() {
     invoiceDateRangePickerValue(data.query.from, data.query.to),
   );
   const [printSelectedBusy, setPrintSelectedBusy] = useState(false);
+  const [printModalHeading, setPrintModalHeading] = useState("Print invoice");
+  const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
+  const [printPreviewLoading, setPrintPreviewLoading] = useState(false);
+  const [printPreviewError, setPrintPreviewError] = useState<string | null>(
+    null,
+  );
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
   const [linkDocumentId, setLinkDocumentId] = useState<string | null>(null);
@@ -241,6 +248,7 @@ export default function InvoicesPage() {
   const [customerLinkError, setCustomerLinkError] = useState<string | null>(
     null,
   );
+  const printFetchGeneration = useRef(0);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emailAwaiting = useRef(false);
   const emailDataAtSubmit = useRef(emailFetcher.data);
@@ -463,8 +471,43 @@ export default function InvoicesPage() {
     navigate(`/app/invoices/${encodeURIComponent(id)}`);
   };
 
-  const openPrint = (id: string) => {
-    void fetchAndPrintInvoiceDocument(id);
+  const resetPrintPreviewModal = () => {
+    printFetchGeneration.current += 1;
+    setPrintPreviewHtml(null);
+    setPrintPreviewLoading(false);
+    setPrintPreviewError(null);
+    setPrintSelectedBusy(false);
+  };
+
+  const openPrintPreview = (ids: string[], heading: string) => {
+    const uniqueIds = [
+      ...new Set(ids.map((id) => String(id ?? "").trim()).filter(Boolean)),
+    ];
+    if (uniqueIds.length === 0) return;
+
+    const generation = printFetchGeneration.current + 1;
+    printFetchGeneration.current = generation;
+    setPrintModalHeading(heading);
+    setPrintPreviewHtml(null);
+    setPrintPreviewError(null);
+    setPrintPreviewLoading(true);
+    setPrintSelectedBusy(true);
+    void shopify.modal.show(INVOICE_PRINT_PREVIEW_MODAL_ID);
+
+    void fetchInvoiceDocumentsHtml(uniqueIds).then((result) => {
+      if (printFetchGeneration.current !== generation) return;
+      setPrintPreviewLoading(false);
+      setPrintSelectedBusy(false);
+      if (!result.ok) {
+        setPrintPreviewError(result.error);
+        return;
+      }
+      setPrintPreviewHtml(result.html);
+    });
+  };
+
+  const openPrint = (id: string, invoiceNumber: string) => {
+    openPrintPreview([id], `Print ${invoiceNumber}`);
   };
 
   /**
@@ -527,10 +570,11 @@ export default function InvoicesPage() {
   const printSelected = () => {
     const ids = [...selectedIds];
     if (ids.length === 0 || printSelectedBusy) return;
-    setPrintSelectedBusy(true);
-    void fetchAndPrintInvoiceDocuments(ids).finally(() => {
-      setPrintSelectedBusy(false);
-    });
+    const heading =
+      ids.length === 1
+        ? "Print invoice"
+        : `Print ${ids.length} invoices`;
+    openPrintPreview(ids, heading);
   };
 
   return (
@@ -849,7 +893,9 @@ export default function InvoicesPage() {
                           </s-button>
                           <s-button
                             icon="print"
-                            onClick={() => openPrint(invoice.id)}
+                            onClick={() =>
+                              openPrint(invoice.id, invoice.invoiceNumber)
+                            }
                           >
                             Print
                           </s-button>
@@ -897,6 +943,14 @@ export default function InvoicesPage() {
         error={customerLinkError}
         onGenerate={generateCustomerLink}
         onHide={resetCustomerLinkModal}
+      />
+
+      <InvoicePrintPreviewModal
+        heading={printModalHeading}
+        html={printPreviewHtml}
+        loading={printPreviewLoading}
+        error={printPreviewError}
+        onHide={resetPrintPreviewModal}
       />
     </s-page>
   );
