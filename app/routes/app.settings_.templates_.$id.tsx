@@ -842,20 +842,28 @@ export default function TemplateDetailsPage() {
     };
   }, [loadingDetails, shopify]);
 
+  // Only show/hide when visibility actually changes. Cleanup must NOT hide on
+  // every re-run — config→liquid sync / preview updates would blink the bar.
+  const saveBarShown = useRef(false);
   useEffect(() => {
-    if (!result) {
-      shopify.saveBar.hide(SAVE_BAR_ID);
-      return;
-    }
-    if (dirty) {
+    const shouldShow = Boolean(result && dirty);
+    if (shouldShow === saveBarShown.current) return;
+    if (shouldShow) {
       shopify.saveBar.show(SAVE_BAR_ID);
+      saveBarShown.current = true;
     } else {
       shopify.saveBar.hide(SAVE_BAR_ID);
+      saveBarShown.current = false;
     }
+  }, [dirty, result, shopify]);
+  useEffect(() => {
     return () => {
+      saveBarShown.current = false;
       shopify.saveBar.hide(SAVE_BAR_ID);
     };
-  }, [dirty, result, shopify]);
+    // Unmount only — hide once when leaving the editor.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- shopify hide on unmount
+  }, []);
 
   useEffect(() => {
     if (fetcher.state !== "idle" || !fetcher.data) return;
@@ -914,6 +922,7 @@ export default function TemplateDetailsPage() {
       : "/app/settings/templates";
 
     if (fetcher.data.intent === "save-as" || fetcher.data.intent === "save") {
+      saveBarShown.current = false;
       shopify.saveBar.hide(SAVE_BAR_ID);
       void shopify.modal.hide(SAVE_MODAL_ID);
       shopify.toast.show(
@@ -952,6 +961,7 @@ export default function TemplateDetailsPage() {
       "redirectTo" in fetcher.data &&
       fetcher.data.redirectTo
     ) {
+      saveBarShown.current = false;
       shopify.saveBar.hide(SAVE_BAR_ID);
       shopify.toast.show(fetcher.data.message);
       navigate(fetcher.data.redirectTo);
@@ -1331,6 +1341,7 @@ export default function TemplateDetailsPage() {
     setLiquidValidation(null);
     setLogoResetToken((n) => n + 1);
     setSaveError(null);
+    saveBarShown.current = false;
     shopify.saveBar.hide(SAVE_BAR_ID);
   };
 
