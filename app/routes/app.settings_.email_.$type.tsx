@@ -53,6 +53,7 @@ function normalizeEmailLayout(value: string | undefined): EmailLayout {
 }
 
 const SAVE_BAR_ID = "email-template-save-bar";
+const TEST_EMAIL_MODAL_ID = "email-send-test-modal";
 
 const TYPE_META = {
   invoice: {
@@ -453,10 +454,11 @@ function EmailTemplateEditor({
     if (testFetcher.data.ok) {
       setTestError("");
       shopify.toast.show(testFetcher.data.message);
-    } else {
-      setTestError(testFetcher.data.error);
-      shopify.toast.show(testFetcher.data.error, { isError: true });
+      void shopify.modal.hide(TEST_EMAIL_MODAL_ID);
+      return;
     }
+    // Keep errors inside the modal (not toast).
+    setTestError(testFetcher.data.error);
   }, [testFetcher.state, testFetcher.data, shopify]);
 
   useEffect(() => {
@@ -536,11 +538,28 @@ function EmailTemplateEditor({
     saveFetcher.submit(buildFormData("save"), { method: "post" });
   };
 
+  const openTestModal = () => {
+    if (!emailConfigured || testing) return;
+    setTestError("");
+    void shopify.modal.show(TEST_EMAIL_MODAL_ID);
+  };
+
+  const closeTestModal = () => {
+    if (testing) return;
+    setTestError("");
+    void shopify.modal.hide(TEST_EMAIL_MODAL_ID);
+  };
+
   const sendTest = () => {
     if (testing || !emailConfigured) return;
+    const to = testTo.trim();
+    if (!to || !to.includes("@")) {
+      setTestError("Enter a valid email address.");
+      return;
+    }
     setTestError("");
     const body = buildFormData("test");
-    body.set("testTo", testTo.trim());
+    body.set("testTo", to);
     testFetcher.submit(body, { method: "post" });
   };
 
@@ -549,8 +568,6 @@ function EmailTemplateEditor({
     ? saveError
     : "";
   const bannerSaveError = subjectError ? "" : saveError;
-  const templateLabel =
-    form.bodyMode === "custom_html" ? "Custom HTML" : "Designed";
 
   const placeholderChips = (
     <s-stack gap="small-100">
@@ -789,43 +806,97 @@ function EmailTemplateEditor({
             </s-stack>
 
             <s-stack gap="base" minInlineSize="0" overflow="hidden">
-              <s-section heading="Live preview">
+              <s-section accessibilityLabel="Live preview">
                 <s-stack gap="base">
-                  <s-badge>{templateLabel}</s-badge>
+                  <s-stack
+                    direction="inline"
+                    gap="base"
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
+                    <s-heading>Live preview</s-heading>
+                    <s-button
+                      type="button"
+                      variant="secondary"
+                      onClick={openTestModal}
+                      {...(!emailConfigured
+                        ? {
+                            disabled: true,
+                            interestFor: "email-test-disabled-tip",
+                          }
+                        : testing
+                          ? { disabled: true }
+                          : {})}
+                    >
+                      Send a test
+                    </s-button>
+                  </s-stack>
+                  {!emailConfigured ? (
+                    <s-tooltip id="email-test-disabled-tip">
+                      Add a sender address in Sender &amp; recipients before
+                      sending a test.
+                    </s-tooltip>
+                  ) : null}
                   <EmailLivePreviewFrame
                     html={previewHtml}
                     previewing={previewing}
                   />
                 </s-stack>
               </s-section>
-
-              <s-section heading="Send a test">
-                <s-stack gap="base">
-                  <s-email-field
-                    label="Test recipient"
-                    value={testTo}
-                    details="Sends your current edits without a PDF."
-                    error={testError || undefined}
-                    disabled={!emailConfigured || testing || undefined}
-                    autocomplete="off"
-                    onInput={(event: Event) => setTestTo(fieldValue(event))}
-                    onChange={(event: Event) => setTestTo(fieldValue(event))}
-                  />
-                  <s-button
-                    type="button"
-                    variant="secondary"
-                    onClick={sendTest}
-                    {...(testing || !emailConfigured
-                      ? { loading: testing || undefined, disabled: true }
-                      : {})}
-                  >
-                    Send test
-                  </s-button>
-                </s-stack>
-              </s-section>
             </s-stack>
           </s-grid>
         </s-query-container>
+
+      <s-modal
+        id={TEST_EMAIL_MODAL_ID}
+        heading="Send a test email"
+        onHide={() => {
+          if (testing) {
+            void shopify.modal.show(TEST_EMAIL_MODAL_ID);
+            return;
+          }
+          setTestError("");
+        }}
+      >
+        <s-stack gap="base">
+          {testError ? (
+            <s-banner tone="critical" heading="Couldn't send test">
+              {testError}
+            </s-banner>
+          ) : null}
+          <s-email-field
+            label="Test recipient"
+            value={testTo}
+            details="Sends your current edits without a PDF."
+            disabled={testing || undefined}
+            autocomplete="off"
+            onInput={(event: Event) => {
+              setTestTo(fieldValue(event));
+              if (testError) setTestError("");
+            }}
+            onChange={(event: Event) => {
+              setTestTo(fieldValue(event));
+              if (testError) setTestError("");
+            }}
+          />
+        </s-stack>
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          onClick={sendTest}
+          {...(testing ? { loading: true, disabled: true } : {})}
+        >
+          Send test
+        </s-button>
+        <s-button
+          slot="secondary-actions"
+          variant="secondary"
+          onClick={closeTestModal}
+          {...(testing ? { disabled: true } : {})}
+        >
+          Cancel
+        </s-button>
+      </s-modal>
     </s-page>
   );
 }

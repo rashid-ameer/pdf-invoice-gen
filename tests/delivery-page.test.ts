@@ -152,6 +152,9 @@ describe("Email hub UI wiring", () => {
     assert.match(page, /Live preview/);
     assert.match(page, /Send a test/);
     assert.match(page, /Send test/);
+    assert.match(page, /TEST_EMAIL_MODAL_ID|email-send-test-modal/);
+    assert.match(page, /shopify\.modal\.show/);
+    assert.match(page, /Couldn't send test/);
     assert.match(page, /showViewButton/);
     assert.match(page, /emailLayout/);
     assert.match(page, /Minimal/);
