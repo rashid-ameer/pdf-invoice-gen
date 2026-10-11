@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 
 import { usePolarisModalHide } from "../hooks/use-polaris-modal-hide";
+import { PreviewLoadingState } from "./preview-loading-state";
 import { printInvoiceHtml } from "../utils/print-invoice-document";
 
 export const DOCUMENT_PRINT_PREVIEW_MODAL_ID = "document-print-preview-modal";
@@ -30,7 +31,7 @@ export function DocumentPrintPreviewModal({
   html,
   loading,
   error = null,
-  loadingLabel = "Loading document preview",
+  loadingLabel = "Loading preview…",
   onHide,
 }: DocumentPrintPreviewModalProps) {
   const shopify = useAppBridge();
@@ -137,12 +138,7 @@ export function DocumentPrintPreviewModal({
           </s-banner>
         ) : null}
 
-        {loading ? (
-          <s-stack gap="small" alignItems="center" padding="large">
-            <s-spinner accessibilityLabel={loadingLabel} />
-            <s-text color="subdued">Loading preview…</s-text>
-          </s-stack>
-        ) : null}
+        {loading ? <PreviewLoadingState label={loadingLabel} /> : null}
 
         {!loading && html && !error ? (
           <s-box

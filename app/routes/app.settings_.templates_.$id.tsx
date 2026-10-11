@@ -15,6 +15,7 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { PreviewLoadingState } from "../components/preview-loading-state";
 import { SettingsTemplatesBreadcrumbs } from "../components/settings-templates-breadcrumbs";
 import {
   TemplateLiquidCodeEditor,
@@ -1609,7 +1610,7 @@ export default function TemplateDetailsPage() {
                     </s-banner>
                   ) : null}
                   {previewing && !previewHtml ? (
-                    <s-spinner accessibilityLabel="Updating preview" />
+                    <PreviewLoadingState />
                   ) : null}
                   {!previewFailed && previewHtml ? (
                     <iframe

@@ -17,6 +17,7 @@ import {
   CUSTOMER_LINK_MODAL_ID,
   CustomerLinkCopyModal,
 } from "../components/customer-link-copy-modal";
+import { PreviewLoadingState } from "../components/preview-loading-state";
 import { APP_LOCALE } from "../constants/app";
 import { sendRefundDocumentEmail } from "../models/document-email.server";
 import { wrapA4EmbedHtml } from "../models/document-preview.server";
@@ -503,10 +504,7 @@ export default function RefundDocumentDetailsPage() {
           >
             <s-stack gap="small">
               {previewLoading && !previewMissing ? (
-                <s-stack gap="small" alignItems="center">
-                  <s-spinner accessibilityLabel="Loading refund document" />
-                  <s-text color="subdued">Loading refund document…</s-text>
-                </s-stack>
+                <PreviewLoadingState label="Loading refund document…" />
               ) : null}
               {previewMissing ? (
                 <s-banner tone="critical" heading="Preview unavailable">

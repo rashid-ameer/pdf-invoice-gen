@@ -16,6 +16,7 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { PreviewLoadingState } from "../components/preview-loading-state";
 import { TemplatePreview } from "../components/template-list-card";
 import { APP_LOCALE } from "../constants/app";
 import {
@@ -428,12 +429,7 @@ function OverviewTemplatePreview({
   }, [template.thumbnailDataUrl, template.thumbnailUrl, shopify]);
 
   if (loading) {
-    return (
-      <s-stack alignItems="center" gap="base" padding="large">
-        <s-spinner accessibilityLabel="Loading preview" size="large" />
-        <s-text color="subdued">Loading preview...</s-text>
-      </s-stack>
-    );
+    return <PreviewLoadingState size="large" />;
   }
 
   const src = template.thumbnailDataUrl || objectUrl || undefined;

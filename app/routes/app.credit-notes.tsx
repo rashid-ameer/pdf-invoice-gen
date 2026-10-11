@@ -1119,8 +1119,8 @@ export default function CreditNotesPage() {
         error={printPreviewError}
         loadingLabel={
           isRefundTab
-            ? "Loading refund document preview"
-            : "Loading credit note preview"
+            ? "Loading refund document preview…"
+            : "Loading credit note preview…"
         }
         onHide={resetPrintPreviewModal}
       />

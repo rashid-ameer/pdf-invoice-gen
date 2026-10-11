@@ -11,6 +11,7 @@ import {
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
+import { PreviewLoadingState } from "../components/preview-loading-state";
 import { APP_LOCALE } from "../constants/app";
 import { wrapA4EmbedHtml } from "../models/document-preview.server";
 import {
@@ -269,10 +270,7 @@ export default function PackingSlipDetailsPage() {
           >
             <s-stack gap="small">
               {previewLoading && !previewMissing ? (
-                <s-stack gap="small" alignItems="center">
-                  <s-spinner accessibilityLabel="Loading packing slip document" />
-                  <s-text color="subdued">Loading packing slip document…</s-text>
-                </s-stack>
+                <PreviewLoadingState label="Loading packing slip document…" />
               ) : null}
               {previewMissing ? (
                 <s-banner tone="critical" heading="Preview unavailable">

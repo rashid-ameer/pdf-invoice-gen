@@ -788,7 +788,7 @@ export default function PackingSlipsPage() {
         html={printPreviewHtml}
         loading={printPreviewLoading}
         error={printPreviewError}
-        loadingLabel="Loading packing slip preview"
+        loadingLabel="Loading packing slip preview…"
         onHide={resetPrintPreviewModal}
       />
     </s-page>

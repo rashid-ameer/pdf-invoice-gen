@@ -23,6 +23,7 @@ import {
   EmailBodyRichTextEditor,
   type EmailBodyRichTextEditorHandle,
 } from "../components/email-body-rich-text-editor";
+import { PreviewLoadingState } from "../components/preview-loading-state";
 import { SettingsEmailBreadcrumbs } from "../components/settings-email-breadcrumbs";
 import {
   getDeliverySettings,
@@ -805,45 +806,54 @@ function EmailTemplateEditor({
               )}
             </s-stack>
 
-            <s-stack gap="base" minInlineSize="0" overflow="hidden">
-              <s-section accessibilityLabel="Live preview">
-                <s-stack gap="base">
-                  <s-stack
-                    direction="inline"
-                    gap="base"
-                    alignItems="center"
-                    justifyContent="space-between"
-                  >
-                    <s-heading>Live preview</s-heading>
-                    <s-button
-                      type="button"
-                      variant="secondary"
-                      onClick={openTestModal}
-                      {...(!emailConfigured
-                        ? {
-                            disabled: true,
-                            interestFor: "email-test-disabled-tip",
-                          }
-                        : testing
-                          ? { disabled: true }
-                          : {})}
+            <div
+              style={{
+                position: "sticky",
+                top: "1rem",
+                alignSelf: "start",
+                minWidth: 0,
+              }}
+            >
+              <s-stack gap="base" minInlineSize="0" overflow="hidden">
+                <s-section accessibilityLabel="Live preview">
+                  <s-stack gap="base">
+                    <s-stack
+                      direction="inline"
+                      gap="base"
+                      alignItems="center"
+                      justifyContent="space-between"
                     >
-                      Send a test
-                    </s-button>
+                      <s-heading>Live preview</s-heading>
+                      <s-button
+                        type="button"
+                        variant="secondary"
+                        onClick={openTestModal}
+                        {...(!emailConfigured
+                          ? {
+                              disabled: true,
+                              interestFor: "email-test-disabled-tip",
+                            }
+                          : testing
+                            ? { disabled: true }
+                            : {})}
+                      >
+                        Send a test
+                      </s-button>
+                    </s-stack>
+                    {!emailConfigured ? (
+                      <s-tooltip id="email-test-disabled-tip">
+                        Add a sender address in Sender &amp; recipients before
+                        sending a test.
+                      </s-tooltip>
+                    ) : null}
+                    <EmailLivePreviewFrame
+                      html={previewHtml}
+                      previewing={previewing}
+                    />
                   </s-stack>
-                  {!emailConfigured ? (
-                    <s-tooltip id="email-test-disabled-tip">
-                      Add a sender address in Sender &amp; recipients before
-                      sending a test.
-                    </s-tooltip>
-                  ) : null}
-                  <EmailLivePreviewFrame
-                    html={previewHtml}
-                    previewing={previewing}
-                  />
-                </s-stack>
-              </s-section>
-            </s-stack>
+                </s-section>
+              </s-stack>
+            </div>
           </s-grid>
         </s-query-container>
 
@@ -964,11 +974,11 @@ function EmailLivePreviewFrame({
             style={{ width: "100%", border: 0, display: "block", minHeight: 240 }}
           />
         </div>
+      ) : previewing ? (
+        <PreviewLoadingState />
       ) : (
         <s-box padding="base">
-          <s-text>
-            {previewing ? "Loading preview…" : "Preview unavailable"}
-          </s-text>
+          <s-text color="subdued">Preview unavailable</s-text>
         </s-box>
       )}
     </s-box>
