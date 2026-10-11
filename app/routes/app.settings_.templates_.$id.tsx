@@ -1595,18 +1595,17 @@ export default function TemplateDetailsPage() {
                 <>
                   {previewFailed ? (
                     <s-banner tone="critical" heading="Preview failed">
-                      <s-stack gap="base">
-                        <s-text>{previewErrorMessage}</s-text>
-                        <s-button
-                          variant="secondary"
-                          onClick={refreshPreview}
-                          {...(previewing
-                            ? { loading: true, disabled: true }
-                            : {})}
-                        >
-                          Try again
-                        </s-button>
-                      </s-stack>
+                      {previewErrorMessage}
+                      <s-button
+                        slot="secondary-actions"
+                        variant="secondary"
+                        onClick={refreshPreview}
+                        {...(previewing
+                          ? { loading: true, disabled: true }
+                          : {})}
+                      >
+                        Try again
+                      </s-button>
                     </s-banner>
                   ) : null}
                   {previewing && !previewHtml ? (

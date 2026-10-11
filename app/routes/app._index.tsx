@@ -449,7 +449,9 @@ function HomeDashboard({ loaderData }: { loaderData: HomeLoaderData }) {
       <s-stack gap="base">
         {loaderData.totalsError ? (
           <s-banner tone="critical" heading="We couldn't load the metrics">
-            <s-button onClick={retryTotals}>Try again</s-button>
+            <s-button slot="secondary-actions" onClick={retryTotals}>
+              Try again
+            </s-button>
           </s-banner>
         ) : null}
 
@@ -601,7 +603,9 @@ function HomeDashboard({ loaderData }: { loaderData: HomeLoaderData }) {
 
             {chartError ? (
               <s-banner tone="critical" heading="We couldn't load the chart">
-                <s-button onClick={retryChart}>Try again</s-button>
+                <s-button slot="secondary-actions" onClick={retryChart}>
+                  Try again
+                </s-button>
               </s-banner>
             ) : chartLoading || !mounted || !activeChart ? (
               <s-stack alignItems="center" padding="large" gap="base">

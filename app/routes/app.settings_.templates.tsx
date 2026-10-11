@@ -243,18 +243,17 @@ export default function TemplatesOverviewPage() {
 
                 {previewError ? (
                   <s-banner tone="critical" heading="Preview unavailable">
-                    <s-stack gap="base">
-                      <s-text>{previewError}</s-text>
-                      <s-button
-                        variant="secondary"
-                        onClick={() => {
-                          setPreviewError(null);
-                          setPreviewRetry((n) => n + 1);
-                        }}
-                      >
-                        Try again
-                      </s-button>
-                    </s-stack>
+                    {previewError}
+                    <s-button
+                      slot="secondary-actions"
+                      variant="secondary"
+                      onClick={() => {
+                        setPreviewError(null);
+                        setPreviewRetry((n) => n + 1);
+                      }}
+                    >
+                      Try again
+                    </s-button>
                   </s-banner>
                 ) : null}
 

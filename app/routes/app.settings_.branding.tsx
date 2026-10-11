@@ -525,10 +525,14 @@ export function ErrorBoundary() {
         </s-link>
         <s-banner tone="critical" heading="Couldn't save">
           Check your connection and try again.
+          <s-button
+            slot="secondary-actions"
+            variant="secondary"
+            href="/app/settings/branding"
+          >
+            Try again
+          </s-button>
         </s-banner>
-        <s-button href="/app/settings/branding" variant="primary">
-          Try again
-        </s-button>
       </s-page>
     );
   }

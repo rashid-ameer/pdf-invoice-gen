@@ -91,15 +91,16 @@ export function ErrorBoundary() {
       <s-page heading="Connection problem">
         <s-banner tone="critical" heading="Couldn't connect">
           Check your connection and try again.
+          <s-button
+            slot="secondary-actions"
+            variant="secondary"
+            onClick={() => {
+              window.location.reload();
+            }}
+          >
+            Try again
+          </s-button>
         </s-banner>
-        <s-button
-          variant="primary"
-          onClick={() => {
-            window.location.reload();
-          }}
-        >
-          Try again
-        </s-button>
       </s-page>
     );
   }
