@@ -12,7 +12,7 @@ import {
   documentsSummaryPath,
   invoiceCustomerLinkPath,
   invoiceEmailPath,
-  invoicePreviewPath,
+  invoicePreviewImagePath,
   numericOrderId,
   parseDocumentsSummary,
 } from "../extensions/order-documents-block/src/block-extension-logic.js";
@@ -49,8 +49,10 @@ describe("Phase B API paths", () => {
       invoiceCustomerLinkPath("99"),
       "/app/api/orders/99/invoice/customer-link",
     );
-    const preview = invoicePreviewPath("99", "tok.en");
-    assert.ok(preview.startsWith("/app/api/orders/99/invoice/preview?"));
+    const preview = invoicePreviewImagePath("99", "tok.en");
+    assert.ok(
+      preview.startsWith("/app/api/orders/99/invoice/preview-image?"),
+    );
     const url = new URL(preview, "https://app.example");
     assert.equal(url.searchParams.get("token"), "tok.en");
   });
@@ -101,7 +103,9 @@ describe("extension source contracts", () => {
     assert.match(extensionSrc, /documentsSummaryPath/);
     assert.match(extensionSrc, /invoiceEmailPath/);
     assert.match(extensionSrc, /invoiceCustomerLinkPath/);
-    assert.match(extensionSrc, /invoicePreviewPath/);
+    assert.match(extensionSrc, /invoicePreviewImagePath/);
+    assert.match(extensionSrc, /s-image/);
+    assert.match(extensionSrc, /previewSrc/);
     assert.match(extensionSrc, /shopify\.auth\?\.idToken/);
     assert.match(extensionSrc, /data\?\.selected/);
     assert.match(extensionSrc, /Authorization/);

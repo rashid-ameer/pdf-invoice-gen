@@ -8,7 +8,7 @@ import {
   documentsSummaryPath,
   invoiceCustomerLinkPath,
   invoiceEmailPath,
-  invoicePreviewPath,
+  invoicePreviewImagePath,
   numericOrderId,
   parseDocumentsSummary,
 } from "./block-extension-logic.js";
@@ -23,9 +23,39 @@ async function fetchWithTimeout(url, options = {}, ms = 12000) {
   }
 }
 
+async function loadPreviewDataUrl(orderId, headers) {
+  const params = new URLSearchParams();
+  try {
+    if (shopify.auth?.idToken) {
+      const token = await shopify.auth.idToken();
+      if (token) params.set("token", token);
+    }
+  } catch (err) {
+    console.error("preview token failed", err);
+  }
+
+  const path = invoicePreviewImagePath(orderId);
+  const qs = params.toString();
+  const url = qs ? `${path}?${qs}` : path;
+
+  const res = await fetchWithTimeout(url, { headers }, 45000);
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    throw new Error(json.error || `Preview failed (${res.status})`);
+  }
+
+  const blob = await res.blob();
+  return await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Failed to read preview image"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /**
  * Order details → Documents block
- * Thin UI over Group 15 Phase B APIs (no render/email/link logic in the extension).
+ * Inline invoice preview (old app parity) + email / customer link.
  */
 export default async () => {
   render(<Extension />, document.body);
@@ -36,16 +66,18 @@ function Extension() {
   const orderId = numericOrderId(data?.selected?.[0]?.id);
 
   const [loading, setLoading] = useState(Boolean(orderId));
+  const [previewLoading, setPreviewLoading] = useState(Boolean(orderId));
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(
     orderId ? "" : i18n.translate("noOrder"),
   );
+  const [previewError, setPreviewError] = useState("");
   const [success, setSuccess] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceStatus, setInvoiceStatus] = useState("");
   const [creditLabel, setCreditLabel] = useState("");
   const [customerLink, setCustomerLink] = useState("");
-  const [previewHref, setPreviewHref] = useState("");
+  const [previewSrc, setPreviewSrc] = useState("");
   const [hasInvoice, setHasInvoice] = useState(false);
 
   async function authHeaders(extra = {}) {
@@ -60,17 +92,6 @@ function Extension() {
       console.error("idToken failed", err);
     }
     return headers;
-  }
-
-  async function sessionToken() {
-    try {
-      if (shopify.auth?.idToken) {
-        return (await shopify.auth.idToken()) || "";
-      }
-    } catch (err) {
-      console.error("idToken failed", err);
-    }
-    return "";
   }
 
   async function createCustomerLink(headers) {
@@ -96,6 +117,7 @@ function Extension() {
   useEffect(() => {
     if (!orderId) {
       setLoading(false);
+      setPreviewLoading(false);
       setHasInvoice(false);
       setError(i18n.translate("noOrder"));
       return;
@@ -105,10 +127,12 @@ function Extension() {
 
     (async () => {
       setLoading(true);
+      setPreviewLoading(true);
       setError("");
+      setPreviewError("");
       setSuccess("");
       setCustomerLink("");
-      setPreviewHref("");
+      setPreviewSrc("");
       setCreditLabel("");
 
       try {
@@ -117,6 +141,7 @@ function Extension() {
           if (!cancelled) {
             setError(blockSafeErrorMessage(401));
             setHasInvoice(false);
+            setPreviewLoading(false);
           }
           return;
         }
@@ -151,11 +176,6 @@ function Extension() {
         setInvoiceStatus(parsed.invoiceStatus);
         setCreditLabel(creditNotesLabel(parsed.creditNotesCount));
 
-        const token = await sessionToken();
-        if (!cancelled && token) {
-          setPreviewHref(invoicePreviewPath(orderId, token));
-        }
-
         try {
           const url = await createCustomerLink({
             ...headers,
@@ -164,6 +184,22 @@ function Extension() {
           if (!cancelled) setCustomerLink(url);
         } catch (linkErr) {
           console.error("prefetch customer link failed", linkErr);
+        }
+
+        try {
+          const dataUrl = await loadPreviewDataUrl(orderId, headers);
+          if (!cancelled) {
+            setPreviewSrc(dataUrl);
+            setPreviewError("");
+          }
+        } catch (previewErr) {
+          if (!cancelled) {
+            setPreviewSrc("");
+            setPreviewError(
+              previewErr?.message || i18n.translate("previewFailed"),
+            );
+          }
+          console.error(previewErr);
         }
 
         setError("");
@@ -175,10 +211,14 @@ function Extension() {
               : i18n.translate("loadFailed"),
           );
           setHasInvoice(false);
+          setPreviewError(i18n.translate("previewFailed"));
         }
         console.error(err);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setPreviewLoading(false);
+        }
       }
     })();
 
@@ -236,10 +276,12 @@ function Extension() {
     <s-admin-block heading={i18n.translate("heading")}>
       <s-stack direction="block" gap="base">
         {loading ? (
-          <s-stack direction="inline" gap="base">
-            <s-spinner></s-spinner>
-            <s-text>{i18n.translate("loading")}</s-text>
-          </s-stack>
+          <s-box padding="base" background="subdued" border="base" borderRadius="base">
+            <s-stack direction="inline" gap="base">
+              <s-spinner></s-spinner>
+              <s-text>{i18n.translate("loading")}</s-text>
+            </s-stack>
+          </s-box>
         ) : null}
 
         {error ? <s-banner tone="critical">{error}</s-banner> : null}
@@ -251,44 +293,71 @@ function Extension() {
 
         {hasInvoice ? (
           <s-stack direction="block" gap="base">
-            <s-stack direction="inline" gap="base">
-              <s-text type="strong">{invoiceNumber}</s-text>
-              {invoiceStatus ? <s-badge>{invoiceStatus}</s-badge> : null}
-            </s-stack>
-
-            {creditLabel ? <s-text>{creditLabel}</s-text> : null}
-
-            <s-stack direction="inline" gap="base">
-              <s-button
-                variant="primary"
-                onClick={onEmail}
-                disabled={sending || loading}
-              >
-                {sending
-                  ? i18n.translate("sending")
-                  : i18n.translate("email")}
-              </s-button>
-              {previewHref ? (
-                <s-link href={previewHref} target="_blank">
-                  {i18n.translate("preview")}
-                </s-link>
-              ) : null}
-              <s-link href="app://app/invoices">
-                {i18n.translate("openApp")}
-              </s-link>
-            </s-stack>
-
-            {customerLink ? (
+            <s-box padding="base" border="base" borderRadius="base" background="subdued">
               <s-stack direction="block" gap="small">
-                <s-text-field
-                  label={i18n.translate("customerLinkLabel")}
-                  value={customerLink}
-                  readonly
-                ></s-text-field>
-                <s-link href={customerLink} target="_blank">
-                  {i18n.translate("openCustomerLink")}
-                </s-link>
+                <s-stack direction="inline" gap="base">
+                  <s-button
+                    variant="primary"
+                    onClick={onEmail}
+                    disabled={sending || loading}
+                  >
+                    {sending
+                      ? i18n.translate("sending")
+                      : i18n.translate("email")}
+                  </s-button>
+                  <s-link href="app://app/invoices">
+                    {i18n.translate("openApp")}
+                  </s-link>
+                </s-stack>
+
+                <s-stack direction="inline" gap="base">
+                  <s-text type="strong">{invoiceNumber}</s-text>
+                  {invoiceStatus ? <s-badge>{invoiceStatus}</s-badge> : null}
+                </s-stack>
+
+                {creditLabel ? <s-text>{creditLabel}</s-text> : null}
+
+                {customerLink ? (
+                  <s-stack direction="block" gap="small">
+                    <s-text-field
+                      label={i18n.translate("customerLinkLabel")}
+                      value={customerLink}
+                      readonly
+                    ></s-text-field>
+                    <s-link href={customerLink} target="_blank">
+                      {i18n.translate("openCustomerLink")}
+                    </s-link>
+                  </s-stack>
+                ) : null}
               </s-stack>
+            </s-box>
+
+            {previewLoading ? (
+              <s-box padding="base" background="subdued" border="base" borderRadius="base">
+                <s-stack direction="inline" gap="base">
+                  <s-spinner></s-spinner>
+                  <s-text>{i18n.translate("previewLoading")}</s-text>
+                </s-stack>
+              </s-box>
+            ) : null}
+
+            {previewSrc ? (
+              <s-box padding="base" background="subdued" border="base" borderRadius="base">
+                <s-image
+                  src={previewSrc}
+                  alt={`Invoice ${invoiceNumber}`}
+                  aspectRatio="210/297"
+                  inlineSize="fill"
+                  objectFit="contain"
+                  loading="eager"
+                  border="base"
+                  borderRadius="base"
+                ></s-image>
+              </s-box>
+            ) : null}
+
+            {previewError ? (
+              <s-banner tone="warning">{previewError}</s-banner>
             ) : null}
 
             <s-text>{i18n.translate("printTip")}</s-text>

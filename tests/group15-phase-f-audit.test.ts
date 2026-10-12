@@ -16,6 +16,7 @@ const routeFiles = [
   "app/routes/app_.print.tsx",
   "app/routes/app_.api.orders.$orderId.documents.tsx",
   "app/routes/app_.api.orders.$orderId.invoice.preview.tsx",
+  "app/routes/app_.api.orders.$orderId.invoice.preview-image.tsx",
   "app/routes/app_.api.orders.$orderId.invoice.email.tsx",
   "app/routes/app_.api.orders.$orderId.invoice.customer-link.tsx",
 ];

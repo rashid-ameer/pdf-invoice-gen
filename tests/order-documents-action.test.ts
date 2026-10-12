@@ -14,7 +14,7 @@ import {
   documentsSummaryPath,
   invoiceCustomerLinkPath,
   invoiceEmailPath,
-  invoicePreviewPath,
+  invoicePreviewImagePath,
   numericOrderId,
   parseDocumentsSummary,
 } from "../extensions/order-documents-action/src/action-extension-logic.js";
@@ -51,8 +51,8 @@ describe("API reuse", () => {
       invoiceCustomerLinkPath("7"),
       "/app/api/orders/7/invoice/customer-link",
     );
-    const preview = invoicePreviewPath("7", "abc.def");
-    assert.match(preview, /\/app\/api\/orders\/7\/invoice\/preview\?/);
+    const preview = invoicePreviewImagePath("7", "abc.def");
+    assert.match(preview, /\/app\/api\/orders\/7\/invoice\/preview-image\?/);
     assert.equal(
       new URL(preview, "https://x").searchParams.get("token"),
       "abc.def",
@@ -122,6 +122,9 @@ describe("extension source contracts", () => {
     assert.match(extensionSrc, /data\?\.selected/);
     assert.match(extensionSrc, /invoiceEmailPath/);
     assert.match(extensionSrc, /invoiceCustomerLinkPath/);
+    assert.match(extensionSrc, /invoicePreviewImagePath/);
+    assert.match(extensionSrc, /s-image/);
+    assert.match(extensionSrc, /previewSrc/);
     assert.match(extensionSrc, /buildOrderActionPrintHref/);
     assert.match(extensionSrc, /OPEN_INVOICES_HREF/);
     assert.match(extensionSrc, /types:\s*\["invoice"\]/);

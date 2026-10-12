@@ -57,3 +57,20 @@ export function htmlResponse(html: string, status = 200): Response {
     },
   });
 }
+
+/** Binary image response for Admin extension inline previews. */
+export function binaryResponse(
+  body: Buffer | Uint8Array,
+  contentType: string,
+  status = 200,
+  cacheControl = "private, max-age=300",
+): Response {
+  const bytes = body instanceof Buffer ? new Uint8Array(body) : body;
+  return new Response(bytes, {
+    status,
+    headers: {
+      "Content-Type": contentType,
+      "Cache-Control": cacheControl,
+    },
+  });
+}

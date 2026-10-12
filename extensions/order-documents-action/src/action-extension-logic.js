@@ -31,6 +31,20 @@ export function invoicePreviewPath(orderId, token) {
   }`;
 }
 
+/**
+ * Inline thumbnail for Admin action (old `/preview-image` parity).
+ * @param {string} orderId
+ * @param {string} [token]
+ */
+export function invoicePreviewImagePath(orderId, token) {
+  const params = new URLSearchParams();
+  if (token) params.set("token", token);
+  const qs = params.toString();
+  return `/app/api/orders/${encodeURIComponent(orderId)}/invoice/preview-image${
+    qs ? `?${qs}` : ""
+  }`;
+}
+
 /** @param {string} orderId */
 export function invoiceEmailPath(orderId) {
   return `/app/api/orders/${encodeURIComponent(orderId)}/invoice/email`;

@@ -22,6 +22,8 @@ import {
 } from "./invoice-document.server";
 import { issueInvoicePublicLinkForShop } from "./public-link.server";
 import { fetchOrderById } from "./shopify-admin-graphql.server";
+import { wrapA4ThumbnailHtml } from "./document-preview.server";
+import { htmlToPreviewPng } from "./pdf-generator.server";
 import { mergeDocumentHtml } from "./template-render-engine.server";
 
 export type OrderPrintType =
@@ -397,6 +399,112 @@ export async function buildOrderInvoicePreviewHtml(
     invoiceNumber: doc.invoiceNumber,
     templateName: doc.templateName,
   };
+}
+
+/**
+ * A4 invoice thumbnail for Admin block/action (old `/preview-image` parity).
+ * Prefers Chromium JPEG; falls back to SVG so the extension can still show a doc.
+ */
+export async function buildOrderInvoicePreviewImage(
+  shopDomain: string,
+  shopifyOrderIdRaw: string,
+  deps: OrderDocumentsDeps = {},
+) {
+  const summary = await getOrderDocumentsSummary(
+    shopDomain,
+    shopifyOrderIdRaw,
+    deps,
+  );
+  if (!summary.ok) {
+    return { ok: false as const, error: summary.error };
+  }
+
+  const renderInvoice = deps.renderInvoiceDocument ?? renderInvoiceDocument;
+  const doc = await renderInvoice(shopDomain, summary.invoice.id);
+  if (!doc) {
+    return { ok: false as const, error: "Failed to render invoice preview" };
+  }
+
+  const previewHtml = wrapA4ThumbnailHtml(doc.html);
+
+  try {
+    const jpeg = await Promise.race([
+      htmlToPreviewPng(previewHtml),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("screenshot timeout")), 8000),
+      ),
+    ]);
+    return {
+      ok: true as const,
+      imageBase64: jpeg.toString("base64"),
+      mimeType: "image/jpeg" as const,
+      invoiceNumber: doc.invoiceNumber,
+      templateName: doc.templateName,
+    };
+  } catch (screenshotError) {
+    console.warn(
+      "[order-documents] preview screenshot fallback to SVG:",
+      screenshotError,
+    );
+  }
+
+  const svg = buildPreviewSvgFromHtml(
+    previewHtml,
+    doc.invoiceNumber,
+    summary.invoice.buyerName,
+    summary.invoice.currency,
+    summary.invoice.grandTotal,
+  );
+
+  return {
+    ok: true as const,
+    imageBase64: Buffer.from(svg, "utf8").toString("base64"),
+    mimeType: "image/svg+xml" as const,
+    invoiceNumber: doc.invoiceNumber,
+    templateName: doc.templateName,
+  };
+}
+
+function extractBodyInnerHtml(html: string): string {
+  const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  return match?.[1]?.trim() || html;
+}
+
+function escSvgText(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** SVG preview using invoice HTML (no Puppeteer required). */
+function buildPreviewSvgFromHtml(
+  laidOutHtml: string,
+  invoiceNumber: string,
+  buyerName: string,
+  currency: string,
+  grandTotal: number,
+): string {
+  const body = extractBodyInnerHtml(laidOutHtml);
+  const label = escSvgText(invoiceNumber || "Invoice");
+  const buyer = escSvgText(buyerName || "Customer");
+  const total = escSvgText(
+    `${currency || ""} ${Number(grandTotal || 0).toFixed(2)}`.trim(),
+  );
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="594" viewBox="0 0 420 594">
+  <rect width="420" height="594" fill="#525659"/>
+  <rect x="16" y="16" width="388" height="562" rx="4" fill="#ffffff" stroke="#dfe3e8"/>
+  <text x="32" y="48" font-family="Arial,sans-serif" font-size="13" font-weight="700" fill="#202223">${label}</text>
+  <text x="32" y="68" font-family="Arial,sans-serif" font-size="11" fill="#6d7175">${buyer} · ${total}</text>
+  <foreignObject x="16" y="84" width="388" height="494">
+    <div xmlns="http://www.w3.org/1999/xhtml" style="width:760px;transform:scale(0.48);transform-origin:top left;overflow:hidden;background:#fff;">
+      ${body}
+    </div>
+  </foreignObject>
+</svg>`;
 }
 
 export async function emailOrderInvoice(
