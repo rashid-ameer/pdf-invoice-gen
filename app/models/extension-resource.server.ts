@@ -71,6 +71,9 @@ export function binaryResponse(
     headers: {
       "Content-Type": contentType,
       "Cache-Control": cacheControl,
+      // s-image loads cross-origin; allow embedding from Admin extension hosts.
+      "Access-Control-Allow-Origin": "*",
+      "Cross-Origin-Resource-Policy": "cross-origin",
     },
   });
 }

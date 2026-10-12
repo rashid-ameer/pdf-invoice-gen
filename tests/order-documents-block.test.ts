@@ -104,6 +104,7 @@ describe("extension source contracts", () => {
     assert.match(extensionSrc, /invoiceEmailPath/);
     assert.match(extensionSrc, /invoiceCustomerLinkPath/);
     assert.match(extensionSrc, /invoicePreviewImagePath/);
+    assert.match(extensionSrc, /loadInvoicePreviewDataUrl/);
     assert.match(extensionSrc, /s-image/);
     assert.match(extensionSrc, /previewSrc/);
     assert.match(extensionSrc, /shopify\.auth\?\.idToken/);
@@ -122,7 +123,7 @@ describe("extension source contracts", () => {
   });
 
   it("disables email while sending and clears loading paths", () => {
-    assert.match(extensionSrc, /disabled=\{sending \|\| loading\}/);
+    assert.match(extensionSrc, /disabled=\{sending\}/);
     assert.match(extensionSrc, /if \(!orderId \|\| sending\) return/);
   });
 });

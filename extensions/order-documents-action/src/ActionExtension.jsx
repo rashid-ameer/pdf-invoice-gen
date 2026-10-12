@@ -14,6 +14,7 @@ import {
   numericOrderId,
   parseDocumentsSummary,
 } from "./action-extension-logic.js";
+import { loadInvoicePreviewDataUrl } from "./preview-image.js";
 
 async function fetchWithTimeout(url, options = {}, ms = 12000) {
   const controller = new AbortController();
@@ -25,39 +26,9 @@ async function fetchWithTimeout(url, options = {}, ms = 12000) {
   }
 }
 
-async function loadPreviewDataUrl(orderId, headers) {
-  const params = new URLSearchParams();
-  try {
-    if (shopify.auth?.idToken) {
-      const token = await shopify.auth.idToken();
-      if (token) params.set("token", token);
-    }
-  } catch (err) {
-    console.error("preview token failed", err);
-  }
-
-  const path = invoicePreviewImagePath(orderId);
-  const qs = params.toString();
-  const url = qs ? `${path}?${qs}` : path;
-
-  const res = await fetchWithTimeout(url, { headers }, 45000);
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(json.error || `Preview failed (${res.status})`);
-  }
-
-  const blob = await res.blob();
-  return await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Failed to read preview image"));
-    reader.readAsDataURL(blob);
-  });
-}
-
 /**
  * Order details → More actions → Tax documents
- * Inline invoice preview (old app parity) + email / customer link / print.
+ * Old-app parity: inline document preview via Polaris `s-image`.
  */
 export default async () => {
   render(<Extension />, document.body);
@@ -191,6 +162,7 @@ function Extension() {
         setInvoiceStatus(parsed.invoiceStatus);
         setOrderNumber(parsed.orderNumber);
         setCreditLabel(creditNotesLabel(parsed.creditNotesCount));
+        setLoading(false);
 
         const token = await sessionToken();
         if (!cancelled && token) {
@@ -214,7 +186,12 @@ function Extension() {
         }
 
         try {
-          const dataUrl = await loadPreviewDataUrl(orderId, headers);
+          const dataUrl = await loadInvoicePreviewDataUrl(
+            orderId,
+            fetchWithTimeout,
+            headers,
+            invoicePreviewImagePath,
+          );
           if (!cancelled) {
             setPreviewSrc(dataUrl);
             setPreviewError("");
@@ -329,7 +306,12 @@ function Extension() {
         {hasInvoice ? (
           <s-stack direction="block" gap="base">
             {previewLoading ? (
-              <s-text>{i18n.translate("previewLoading")}</s-text>
+              <s-stack direction="inline" gap="base" alignItems="center">
+                <s-spinner
+                  accessibilityLabel={i18n.translate("previewLoading")}
+                ></s-spinner>
+                <s-text>{i18n.translate("previewLoading")}</s-text>
+              </s-stack>
             ) : null}
 
             {previewSrc ? (
@@ -341,7 +323,7 @@ function Extension() {
                   inlineSize="fill"
                   objectFit="contain"
                   loading="eager"
-                  border={true}
+                  border="base"
                   borderRadius="base"
                 ></s-image>
               </s-box>
@@ -351,7 +333,7 @@ function Extension() {
               <s-banner tone="warning">{previewError}</s-banner>
             ) : null}
 
-            <s-stack direction="inline" gap="base">
+            <s-stack direction="inline" gap="base" alignItems="center">
               <s-text type="strong">{invoiceNumber}</s-text>
               {invoiceStatus ? <s-badge>{invoiceStatus}</s-badge> : null}
             </s-stack>

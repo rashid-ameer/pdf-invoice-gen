@@ -12,6 +12,7 @@ import {
   numericOrderId,
   parseDocumentsSummary,
 } from "./block-extension-logic.js";
+import { loadInvoicePreviewDataUrl } from "./preview-image.js";
 
 async function fetchWithTimeout(url, options = {}, ms = 12000) {
   const controller = new AbortController();
@@ -23,39 +24,9 @@ async function fetchWithTimeout(url, options = {}, ms = 12000) {
   }
 }
 
-async function loadPreviewDataUrl(orderId, headers) {
-  const params = new URLSearchParams();
-  try {
-    if (shopify.auth?.idToken) {
-      const token = await shopify.auth.idToken();
-      if (token) params.set("token", token);
-    }
-  } catch (err) {
-    console.error("preview token failed", err);
-  }
-
-  const path = invoicePreviewImagePath(orderId);
-  const qs = params.toString();
-  const url = qs ? `${path}?${qs}` : path;
-
-  const res = await fetchWithTimeout(url, { headers }, 45000);
-  if (!res.ok) {
-    const json = await res.json().catch(() => ({}));
-    throw new Error(json.error || `Preview failed (${res.status})`);
-  }
-
-  const blob = await res.blob();
-  return await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Failed to read preview image"));
-    reader.readAsDataURL(blob);
-  });
-}
-
 /**
- * Order details → Documents block
- * Inline invoice preview (old app parity) + email / customer link.
+ * Order details → Add block → Tax invoice
+ * Old-app parity: inline document preview via Polaris `s-image`.
  */
 export default async () => {
   render(<Extension />, document.body);
@@ -146,10 +117,9 @@ function Extension() {
           return;
         }
 
-        const docRes = await fetchWithTimeout(
-          documentsSummaryPath(orderId),
-          { headers },
-        );
+        const docRes = await fetchWithTimeout(documentsSummaryPath(orderId), {
+          headers,
+        });
         const json = await docRes.json().catch(() => ({}));
         if (cancelled) return;
 
@@ -175,6 +145,7 @@ function Extension() {
         setInvoiceNumber(parsed.invoiceNumber);
         setInvoiceStatus(parsed.invoiceStatus);
         setCreditLabel(creditNotesLabel(parsed.creditNotesCount));
+        setLoading(false);
 
         try {
           const url = await createCustomerLink({
@@ -187,7 +158,12 @@ function Extension() {
         }
 
         try {
-          const dataUrl = await loadPreviewDataUrl(orderId, headers);
+          const dataUrl = await loadInvoicePreviewDataUrl(
+            orderId,
+            fetchWithTimeout,
+            headers,
+            invoicePreviewImagePath,
+          );
           if (!cancelled) {
             setPreviewSrc(dataUrl);
             setPreviewError("");
@@ -276,9 +252,14 @@ function Extension() {
     <s-admin-block heading={i18n.translate("heading")}>
       <s-stack direction="block" gap="base">
         {loading ? (
-          <s-box padding="base" background="subdued" border="base" borderRadius="base">
-            <s-stack direction="inline" gap="base">
-              <s-spinner></s-spinner>
+          <s-box
+            padding="base"
+            background="subdued"
+            border="base"
+            borderRadius="base"
+          >
+            <s-stack direction="inline" gap="base" alignItems="center">
+              <s-spinner accessibilityLabel={i18n.translate("loading")}></s-spinner>
               <s-text>{i18n.translate("loading")}</s-text>
             </s-stack>
           </s-box>
@@ -293,13 +274,18 @@ function Extension() {
 
         {hasInvoice ? (
           <s-stack direction="block" gap="base">
-            <s-box padding="base" border="base" borderRadius="base" background="subdued">
+            <s-box
+              padding="base"
+              border="base"
+              borderRadius="base"
+              background="subdued"
+            >
               <s-stack direction="block" gap="small">
                 <s-stack direction="inline" gap="base">
                   <s-button
                     variant="primary"
                     onClick={onEmail}
-                    disabled={sending || loading}
+                    disabled={sending}
                   >
                     {sending
                       ? i18n.translate("sending")
@@ -310,7 +296,7 @@ function Extension() {
                   </s-link>
                 </s-stack>
 
-                <s-stack direction="inline" gap="base">
+                <s-stack direction="inline" gap="base" alignItems="center">
                   <s-text type="strong">{invoiceNumber}</s-text>
                   {invoiceStatus ? <s-badge>{invoiceStatus}</s-badge> : null}
                 </s-stack>
@@ -333,16 +319,28 @@ function Extension() {
             </s-box>
 
             {previewLoading ? (
-              <s-box padding="base" background="subdued" border="base" borderRadius="base">
-                <s-stack direction="inline" gap="base">
-                  <s-spinner></s-spinner>
+              <s-box
+                padding="base"
+                background="subdued"
+                border="base"
+                borderRadius="base"
+              >
+                <s-stack direction="inline" gap="base" alignItems="center">
+                  <s-spinner
+                    accessibilityLabel={i18n.translate("previewLoading")}
+                  ></s-spinner>
                   <s-text>{i18n.translate("previewLoading")}</s-text>
                 </s-stack>
               </s-box>
             ) : null}
 
             {previewSrc ? (
-              <s-box padding="base" background="subdued" border="base" borderRadius="base">
+              <s-box
+                padding="base"
+                background="subdued"
+                border="base"
+                borderRadius="base"
+              >
                 <s-image
                   src={previewSrc}
                   alt={`Invoice ${invoiceNumber}`}

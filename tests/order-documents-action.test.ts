@@ -123,6 +123,7 @@ describe("extension source contracts", () => {
     assert.match(extensionSrc, /invoiceEmailPath/);
     assert.match(extensionSrc, /invoiceCustomerLinkPath/);
     assert.match(extensionSrc, /invoicePreviewImagePath/);
+    assert.match(extensionSrc, /loadInvoicePreviewDataUrl/);
     assert.match(extensionSrc, /s-image/);
     assert.match(extensionSrc, /previewSrc/);
     assert.match(extensionSrc, /buildOrderActionPrintHref/);

@@ -465,11 +465,6 @@ export async function buildOrderInvoicePreviewImage(
   };
 }
 
-function extractBodyInnerHtml(html: string): string {
-  const match = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  return match?.[1]?.trim() || html;
-}
-
 function escSvgText(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -478,15 +473,17 @@ function escSvgText(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** SVG preview using invoice HTML (no Puppeteer required). */
+/**
+ * Simple A4-card SVG fallback (no foreignObject).
+ * Admin `s-image` often cannot render HTML-in-SVG; keep this always visible.
+ */
 function buildPreviewSvgFromHtml(
-  laidOutHtml: string,
+  _laidOutHtml: string,
   invoiceNumber: string,
   buyerName: string,
   currency: string,
   grandTotal: number,
 ): string {
-  const body = extractBodyInnerHtml(laidOutHtml);
   const label = escSvgText(invoiceNumber || "Invoice");
   const buyer = escSvgText(buyerName || "Customer");
   const total = escSvgText(
@@ -497,13 +494,17 @@ function buildPreviewSvgFromHtml(
 <svg xmlns="http://www.w3.org/2000/svg" width="420" height="594" viewBox="0 0 420 594">
   <rect width="420" height="594" fill="#525659"/>
   <rect x="16" y="16" width="388" height="562" rx="4" fill="#ffffff" stroke="#dfe3e8"/>
-  <text x="32" y="48" font-family="Arial,sans-serif" font-size="13" font-weight="700" fill="#202223">${label}</text>
-  <text x="32" y="68" font-family="Arial,sans-serif" font-size="11" fill="#6d7175">${buyer} · ${total}</text>
-  <foreignObject x="16" y="84" width="388" height="494">
-    <div xmlns="http://www.w3.org/1999/xhtml" style="width:760px;transform:scale(0.48);transform-origin:top left;overflow:hidden;background:#fff;">
-      ${body}
-    </div>
-  </foreignObject>
+  <text x="36" y="56" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="700" fill="#202223">Tax invoice</text>
+  <text x="36" y="88" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="700" fill="#202223">${label}</text>
+  <text x="36" y="116" font-family="Arial,Helvetica,sans-serif" font-size="12" fill="#6d7175">${buyer}</text>
+  <text x="36" y="140" font-family="Arial,Helvetica,sans-serif" font-size="12" fill="#6d7175">Total ${total}</text>
+  <rect x="36" y="170" width="348" height="8" rx="2" fill="#e4e5e7"/>
+  <rect x="36" y="194" width="280" height="8" rx="2" fill="#e4e5e7"/>
+  <rect x="36" y="218" width="310" height="8" rx="2" fill="#e4e5e7"/>
+  <rect x="36" y="242" width="200" height="8" rx="2" fill="#e4e5e7"/>
+  <rect x="36" y="290" width="348" height="1" fill="#dfe3e8"/>
+  <text x="36" y="320" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#8c9196">Document preview</text>
+  <text x="36" y="342" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#8c9196">Use Print for the full document.</text>
 </svg>`;
 }
 
