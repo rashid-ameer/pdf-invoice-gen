@@ -116,16 +116,18 @@ async function countInvoicesByDay(
   const to = new Date(`${last}T23:59:59.999Z`);
   to.setUTCDate(to.getUTCDate() + 1);
 
+  // Bucket by issueDate (order/invoice date), not createdAt (DB insert time).
+  // After sync/migration createdAt is often "today" while issueDate keeps the real dates.
   const rows = await prisma.invoice.findMany({
     where: {
       storeId,
-      createdAt: { gte: from, lte: to },
+      issueDate: { gte: from, lte: to },
     },
-    select: { createdAt: true },
+    select: { issueDate: true },
   });
 
   for (const row of rows) {
-    const key = dayKeyInTimeZone(row.createdAt, timeZone);
+    const key = dayKeyInTimeZone(row.issueDate, timeZone);
     if (counts.has(key)) {
       counts.set(key, (counts.get(key) ?? 0) + 1);
     }
