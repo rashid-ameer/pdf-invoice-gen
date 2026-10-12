@@ -365,10 +365,16 @@ describe("packing slip details page", () => {
     assert.match(source, /heading="Packing slip"/);
     assert.match(source, /heading="Summary"/);
     assert.match(source, /Customer/);
+    assert.match(source, /Invoice/);
+    assert.match(source, /href=\{`\/app\/invoices\/\$\{encodeURIComponent\(packingSlip\.id\)\}`\}/);
     assert.match(source, /Order/);
+    assert.match(source, /Issue date/);
+    assert.match(source, /Status/);
+    assert.match(source, /formatInvoiceStatusLabel/);
+    assert.match(source, /invoiceStatusBadgeTone/);
     assert.match(source, /Payment status/);
-    assert.match(source, /Invoice date/);
     assert.match(source, /Total/);
+    assert.doesNotMatch(source, /Invoice date/);
     assert.doesNotMatch(source, /heading="Customer"/);
     assert.doesNotMatch(source, /heading="Order"/);
     assert.doesNotMatch(source, /heading="Details"/);

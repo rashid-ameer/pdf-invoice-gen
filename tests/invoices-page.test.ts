@@ -472,10 +472,14 @@ describe("Invoice details page", () => {
     assert.match(source, /heading="Summary"/);
     assert.match(source, /Customer/);
     assert.match(source, /Order/);
-    assert.match(source, /Invoice date/);
+    assert.match(source, /Issue date/);
+    assert.match(source, /Status/);
+    assert.match(source, /formatInvoiceStatusLabel/);
+    assert.match(source, /invoiceStatusBadgeTone/);
     assert.match(source, /Payment status/);
     assert.match(source, /paymentStatusBadgeTone/);
     assert.match(source, /Total/);
+    assert.doesNotMatch(source, /Invoice date/);
     assert.doesNotMatch(source, /heading="Customer"/);
     assert.doesNotMatch(source, /heading="Order"/);
     assert.doesNotMatch(source, /heading="Details"/);
