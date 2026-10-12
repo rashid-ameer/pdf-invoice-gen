@@ -377,7 +377,7 @@ describe("CSV export", () => {
 });
 
 describe("enqueueSyncOrders (Group 8 reuse)", () => {
-  it("returns background mode without awaiting sync", async () => {
+  it("returns background mode after running sync in-process", async () => {
     const { store } = await seedStore();
     const mode = await enqueueSyncOrders(store.shopifyDomain);
     assert.equal(mode, "background");

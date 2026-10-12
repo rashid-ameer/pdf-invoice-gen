@@ -201,8 +201,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return {
         ok: true as const,
         intent: "sync" as const,
-        message:
-          "Refund sync started in background — refresh in a moment to see credit notes",
+        message: "Refunds synced — new credit notes should appear below",
       };
     } catch (error) {
       console.error("[credit-notes] sync action error:", error);

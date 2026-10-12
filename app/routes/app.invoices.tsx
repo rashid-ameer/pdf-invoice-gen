@@ -156,8 +156,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return {
         ok: true as const,
         intent: "sync" as const,
-        message:
-          "Sync started in background — refresh in a moment to see new invoices",
+        message: "Orders synced — new invoices should appear below",
       };
     } catch (error) {
       console.error("[invoices] sync action error:", error);

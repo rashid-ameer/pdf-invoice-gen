@@ -414,7 +414,7 @@ describe("enqueueSyncRefunds", () => {
       "utf8",
     );
     assert.match(queueSource, /runSyncRefundsJob/);
-    assert.match(queueSource, /fire-and-forget/);
+    assert.match(queueSource, /waitUntil/);
     // No runtime queue imports (comments may mention Redis/BullMQ as future notes).
     assert.doesNotMatch(
       queueSource,
