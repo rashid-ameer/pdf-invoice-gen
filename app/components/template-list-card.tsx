@@ -137,8 +137,8 @@ export function TemplateCard({
 
 /**
  * List thumbnail: prefer cached data URL from the loader (no auth needed).
- * Fall back to s-image placeholder, then fetch JPEG with App Bridge Bearer
- * when cache is still empty.
+ * Otherwise fetch JPEG with App Bridge Bearer. Always reserve 3/4 space so
+ * gallery cards do not collapse while the image loads.
  */
 export function TemplatePreview({
   dataUrl,
@@ -154,15 +154,19 @@ export function TemplatePreview({
 }) {
   const shopify = useAppBridge();
   const [objectUrl, setObjectUrl] = useState<string | null>(null);
+  const [fetchFailed, setFetchFailed] = useState(false);
 
   useEffect(() => {
     if (dataUrl) {
       setObjectUrl(null);
+      setFetchFailed(false);
       return;
     }
 
     let cancelled = false;
     let created: string | null = null;
+    setObjectUrl(null);
+    setFetchFailed(false);
 
     (async () => {
       try {
@@ -170,13 +174,16 @@ export function TemplatePreview({
         const res = await fetch(fetchUrl, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          if (!cancelled) setFetchFailed(true);
+          return;
+        }
         const blob = await res.blob();
         if (cancelled) return;
         created = URL.createObjectURL(blob);
         setObjectUrl(created);
       } catch {
-        // Keep s-image placeholder — never force a blank failed state.
+        if (!cancelled) setFetchFailed(true);
       }
     })();
 
@@ -187,17 +194,42 @@ export function TemplatePreview({
   }, [dataUrl, fetchUrl, shopify]);
 
   const src = dataUrl || objectUrl || undefined;
+  const loading = !src && !fetchFailed;
 
   return (
-    <s-image
-      {...(src ? { src } : {})}
-      alt={`${name} preview`}
-      aspectRatio="3/4"
-      objectFit={objectFit}
-      inlineSize="fill"
-      border="base"
-      borderRadius="base"
-      loading="lazy"
-    />
+    <div
+      style={{
+        width: "100%",
+        aspectRatio: "3 / 4",
+        borderRadius: "var(--p-border-radius-200, 8px)",
+        overflow: "hidden",
+        background: "var(--p-color-bg-surface-secondary, #f6f6f7)",
+        border:
+          "var(--p-border-width-0165, 1px) solid var(--p-color-border, #e3e3e3)",
+        display: src ? "block" : "grid",
+        placeItems: src ? undefined : "center",
+        position: "relative",
+      }}
+      aria-busy={loading || undefined}
+    >
+      {src ? (
+        <s-image
+          src={src}
+          alt={`${name} preview`}
+          aspectRatio="3/4"
+          objectFit={objectFit}
+          inlineSize="fill"
+          borderRadius="base"
+          loading="lazy"
+        />
+      ) : loading ? (
+        <s-spinner
+          size="small"
+          accessibilityLabel={`Loading ${name} preview`}
+        />
+      ) : (
+        <s-text color="subdued">No preview</s-text>
+      )}
+    </div>
   );
 }
