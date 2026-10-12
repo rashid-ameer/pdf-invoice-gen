@@ -33,6 +33,7 @@
     "@shopify/app-bridge-react": "^4.2.4",
     "@shopify/shopify-app-react-router": "^3.0.0",
     "@shopify/shopify-app-session-storage-prisma": "^11.0.0",
+    "@sparticuz/chromium": "^153.0.0",
     "bwip-js": "^4.11.4",
     "isbot": "^5.1.31",
     "liquidjs": "^10.30.0",
