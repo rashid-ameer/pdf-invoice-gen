@@ -11,3 +11,9 @@ declare module './src/action-extension-logic.js' {
   const shopify: import('@shopify/ui-extensions/admin.order-details.action.render').Api;
   const globalThis: { shopify: typeof shopify };
 }
+
+//@ts-ignore
+declare module './src/preview-image.js' {
+  const shopify: import('@shopify/ui-extensions/admin.order-details.action.render').Api;
+  const globalThis: { shopify: typeof shopify };
+}
