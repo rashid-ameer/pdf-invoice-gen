@@ -33,6 +33,10 @@ import {
   INVOICE_PRINT_PREVIEW_MODAL_ID,
   InvoicePrintPreviewModal,
 } from "../components/invoice-print-preview-modal";
+import {
+  SEND_DOCUMENT_EMAIL_MODAL_ID,
+  SendDocumentEmailModal,
+} from "../components/send-document-email-modal";
 import { formatPaymentStatus } from "../utils/csv";
 import {
   INVOICE_DOCUMENT_STATUSES,
@@ -242,7 +246,10 @@ export default function InvoicesPage() {
     null,
   );
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
+  const [emailDocumentId, setEmailDocumentId] = useState<string | null>(null);
+  const [emailDocumentLabel, setEmailDocumentLabel] = useState("");
+  const [emailRecipient, setEmailRecipient] = useState("");
+  const [sendEmailError, setSendEmailError] = useState<string | null>(null);
   const [linkDocumentId, setLinkDocumentId] = useState<string | null>(null);
   const [customerLinkModalUrl, setCustomerLinkModalUrl] = useState("");
   const [customerLinkError, setCustomerLinkError] = useState<string | null>(
@@ -300,23 +307,22 @@ export default function InvoicesPage() {
   useEffect(() => {
     if (!emailAwaiting.current || emailFetcher.state !== "idle") return;
     emailAwaiting.current = false;
-    setEmailSendingId(null);
 
     if (!emailFetcher.data || emailFetcher.data === emailDataAtSubmit.current) {
-      shopify.toast.show("Couldn't send", { isError: true });
+      setSendEmailError("Couldn't send");
       return;
     }
 
     if (emailFetcher.data.intent !== "send-email") return;
 
     if (emailFetcher.data.ok) {
+      setSendEmailError(null);
       shopify.toast.show(emailFetcher.data.message);
+      void shopify.modal.hide(SEND_DOCUMENT_EMAIL_MODAL_ID);
       return;
     }
 
-    shopify.toast.show(emailFetcher.data.error || "Failed to send email", {
-      isError: true,
-    });
+    setSendEmailError(emailFetcher.data.error || "Failed to send email");
   }, [emailFetcher.state, emailFetcher.data, shopify]);
 
   useEffect(() => {
@@ -536,16 +542,35 @@ export default function InvoicesPage() {
     }
   };
 
-  /** Direct send with buyer email + default PDF template (no modal). */
-  const sendEmail = (invoice: InvoiceListItem) => {
-    if (emailSending) return;
-    setEmailSendingId(invoice.id);
+  const openSendEmailModal = (invoice: InvoiceListItem) => {
+    setEmailDocumentId(invoice.id);
+    setEmailDocumentLabel(invoice.invoiceNumber);
+    setEmailRecipient(invoice.buyerEmail.trim());
+    setSendEmailError(null);
+    void shopify.modal.show(SEND_DOCUMENT_EMAIL_MODAL_ID);
+  };
+
+  /** Direct send with buyer email + default PDF template (confirm in modal). */
+  const sendEmail = () => {
+    if (!emailDocumentId || emailSending) return;
+    setSendEmailError(null);
     emailDataAtSubmit.current = emailFetcher.data;
     emailAwaiting.current = true;
     const body = new FormData();
     body.set("intent", "send-email");
-    body.set("documentId", invoice.id);
+    body.set("documentId", emailDocumentId);
     emailFetcher.submit(body, { method: "post" });
+  };
+
+  const resetSendEmailModal = () => {
+    if (emailSending) {
+      void shopify.modal.show(SEND_DOCUMENT_EMAIL_MODAL_ID);
+      return;
+    }
+    setEmailDocumentId(null);
+    setEmailDocumentLabel("");
+    setEmailRecipient("");
+    setSendEmailError(null);
   };
 
   const openCustomerLinkModal = (invoiceId: string) => {
@@ -927,12 +952,8 @@ export default function InvoicesPage() {
                           </s-button>
                           <s-button
                             icon="email"
-                            onClick={() => sendEmail(invoice)}
-                            {...(emailSendingId === invoice.id
-                              ? { loading: true, disabled: true }
-                              : emailSending
-                                ? { disabled: true }
-                                : {})}
+                            onClick={() => openSendEmailModal(invoice)}
+                            {...(emailSending ? { disabled: true } : {})}
                           >
                             Send email
                           </s-button>
@@ -953,6 +974,15 @@ export default function InvoicesPage() {
         error={customerLinkError}
         onGenerate={generateCustomerLink}
         onHide={resetCustomerLinkModal}
+      />
+
+      <SendDocumentEmailModal
+        documentLabel={emailDocumentLabel}
+        recipientEmail={emailRecipient}
+        sending={emailSending}
+        error={sendEmailError}
+        onSend={sendEmail}
+        onHide={resetSendEmailModal}
       />
 
       <InvoicePrintPreviewModal

@@ -171,6 +171,8 @@ describe("Invoices page wiring", () => {
     assert.doesNotMatch(source, /fetchAndPrintInvoiceDocument/);
     assert.match(source, /Send email/);
     assert.match(source, /const sendEmail = /);
+    assert.match(source, /openSendEmailModal/);
+    assert.match(source, /SendDocumentEmailModal/);
     assert.match(source, /sendInvoiceEmail/);
     assert.match(source, /trigger: "manual"/);
     assert.match(source, /Generate customer link/);
@@ -180,7 +182,7 @@ describe("Invoices page wiring", () => {
     assert.match(source, /intent === "customer-link"/);
     assert.match(source, /issueInvoicePublicLinkForShop/);
     assert.doesNotMatch(source, /Copy customer link/);
-    assert.doesNotMatch(source, /DocumentEmailModal|s-email-field/);
+    assert.doesNotMatch(source, /\bDocumentEmailModal\b|s-email-field/);
     assert.doesNotMatch(source, /icon="email"\s+disabled/);
     assert.match(source, /isInvoicesListPath/);
     assert.match(source, /navigation\.location/);

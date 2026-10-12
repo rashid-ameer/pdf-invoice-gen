@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 describe("Phase 3 manual email UI wiring", () => {
-  it("wires invoice list and details Email as direct send (no modal)", () => {
+  it("wires invoice list Email through confirm modal, details as direct send", () => {
     const list = readFileSync(
       join(process.cwd(), "app/routes/app.invoices.tsx"),
       "utf8",
@@ -13,17 +13,26 @@ describe("Phase 3 manual email UI wiring", () => {
       join(process.cwd(), "app/routes/app.invoices_.$id.tsx"),
       "utf8",
     );
+    const sendModal = readFileSync(
+      join(process.cwd(), "app/components/send-document-email-modal.tsx"),
+      "utf8",
+    );
 
     assert.match(list, /intent", "send-email"/);
     assert.match(list, /sendInvoiceEmail/);
     assert.match(list, /trigger: "manual"/);
     assert.match(list, /const sendEmail = /);
+    assert.match(list, /openSendEmailModal/);
+    assert.match(list, /SendDocumentEmailModal/);
     assert.match(list, /icon="email"/);
-    assert.doesNotMatch(list, /icon="email"\s+disabled/);
-    assert.doesNotMatch(list, /DocumentEmailModal|s-modal|s-email-field/);
+    assert.doesNotMatch(list, /\bDocumentEmailModal\b|s-email-field/);
     assert.doesNotMatch(list, /formData\.get\("to"\)|formData\.get\("templateId"\)/);
     assert.doesNotMatch(list, /listTaxInvoiceTemplatesForShop|emailTemplates/);
     assert.doesNotMatch(list, /openEmailModal|Choose a template|Email invoice/);
+
+    assert.match(sendModal, /SEND_DOCUMENT_EMAIL_MODAL_ID/);
+    assert.match(sendModal, /loading: true/);
+    assert.doesNotMatch(sendModal, /s-email-field|templateId|Choose a template/);
 
     assert.match(details, /sendInvoiceEmail/);
     assert.match(details, /trigger: "manual"/);
@@ -31,10 +40,13 @@ describe("Phase 3 manual email UI wiring", () => {
     assert.match(details, /icon="email"/);
     assert.match(details, />\s*Send email\s*</);
     assert.doesNotMatch(details, /Send email is not available yet/);
-    assert.doesNotMatch(details, /DocumentEmailModal|s-modal|s-email-field/);
+    assert.doesNotMatch(
+      details,
+      /\bDocumentEmailModal\b|SendDocumentEmailModal|s-email-field/,
+    );
   });
 
-  it("wires credit note and refund Email on list and details", () => {
+  it("wires credit note and refund Email on list (modal) and details", () => {
     const page = readFileSync(
       join(process.cwd(), "app/routes/app.credit-notes.tsx"),
       "utf8",
@@ -43,9 +55,11 @@ describe("Phase 3 manual email UI wiring", () => {
     assert.match(page, /sendRefundDocumentEmail/);
     assert.match(page, /trigger: "manual"/);
     assert.match(page, /const sendEmail = /);
+    assert.match(page, /openSendEmailModal/);
+    assert.match(page, /SendDocumentEmailModal/);
     assert.match(page, /documentType.*refund_document/);
     assert.match(page, /icon="email"/);
-    assert.doesNotMatch(page, /DocumentEmailModal|s-modal|s-email-field/);
+    assert.doesNotMatch(page, /\bDocumentEmailModal\b|s-email-field/);
     assert.doesNotMatch(page, /formData\.get\("to"\)|formData\.get\("templateId"\)/);
     assert.doesNotMatch(page, /listCreditNoteTemplatesForShop|creditNoteTemplates/);
     assert.doesNotMatch(page, /openEmailModal|Choose a template|Email credit note|Email refund document/);
@@ -62,7 +76,10 @@ describe("Phase 3 manual email UI wiring", () => {
     assert.match(cnDetails, /trigger: "manual"/);
     assert.match(cnDetails, /const sendEmail = /);
     assert.match(cnDetails, />\s*Send email\s*</);
-    assert.doesNotMatch(cnDetails, /DocumentEmailModal|s-modal|s-email-field/);
+    assert.doesNotMatch(
+      cnDetails,
+      /\bDocumentEmailModal\b|SendDocumentEmailModal|s-email-field/,
+    );
 
     assert.match(refundDetails, /sendRefundDocumentEmail/);
     assert.match(refundDetails, /trigger: "manual"/);
@@ -70,7 +87,7 @@ describe("Phase 3 manual email UI wiring", () => {
     assert.match(refundDetails, />\s*Send email\s*</);
     assert.doesNotMatch(
       refundDetails,
-      /DocumentEmailModal|s-modal|s-email-field/,
+      /\bDocumentEmailModal\b|SendDocumentEmailModal|s-email-field/,
     );
   });
 

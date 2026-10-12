@@ -354,6 +354,8 @@ describe("Credit notes page UI wiring", () => {
     assert.match(page, /openCustomerLinkModal/);
     assert.match(page, /generateCustomerLink/);
     assert.match(page, /CustomerLinkCopyModal/);
+    assert.match(page, /openSendEmailModal/);
+    assert.match(page, /SendDocumentEmailModal/);
     assert.match(page, /const sendEmail = /);
     assert.match(page, /intent === "customer-link"/);
     assert.match(page, /issueCreditNotePublicLinkForShop/);

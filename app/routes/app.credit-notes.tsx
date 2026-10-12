@@ -34,6 +34,10 @@ import {
   CustomerLinkCopyModal,
 } from "../components/customer-link-copy-modal";
 import { DocumentPrintPreviewModal } from "../components/document-print-preview-modal";
+import {
+  SEND_DOCUMENT_EMAIL_MODAL_ID,
+  SendDocumentEmailModal,
+} from "../components/send-document-email-modal";
 import { formatPaymentStatus } from "../utils/csv";
 import { downloadCreditNotePdf } from "../utils/download-credit-note-pdf";
 import { downloadRefundDocumentPdf } from "../utils/download-refund-document-pdf";
@@ -275,7 +279,10 @@ export default function CreditNotesPage() {
   );
   const printFetchGeneration = useRef(0);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [emailSendingId, setEmailSendingId] = useState<string | null>(null);
+  const [emailDocumentId, setEmailDocumentId] = useState<string | null>(null);
+  const [emailDocumentLabel, setEmailDocumentLabel] = useState("");
+  const [emailRecipient, setEmailRecipient] = useState("");
+  const [sendEmailError, setSendEmailError] = useState<string | null>(null);
   const [linkDocumentId, setLinkDocumentId] = useState<string | null>(null);
   const [customerLinkModalUrl, setCustomerLinkModalUrl] = useState("");
   const [customerLinkError, setCustomerLinkError] = useState<string | null>(
@@ -315,23 +322,22 @@ export default function CreditNotesPage() {
   useEffect(() => {
     if (!emailAwaiting.current || emailFetcher.state !== "idle") return;
     emailAwaiting.current = false;
-    setEmailSendingId(null);
 
     if (!emailFetcher.data || emailFetcher.data === emailDataAtSubmit.current) {
-      shopify.toast.show("Couldn't send", { isError: true });
+      setSendEmailError("Couldn't send");
       return;
     }
 
     if (emailFetcher.data.intent !== "send-email") return;
 
     if (emailFetcher.data.ok) {
+      setSendEmailError(null);
       shopify.toast.show(emailFetcher.data.message);
+      void shopify.modal.hide(SEND_DOCUMENT_EMAIL_MODAL_ID);
       return;
     }
 
-    shopify.toast.show(emailFetcher.data.error || "Failed to send email", {
-      isError: true,
-    });
+    setSendEmailError(emailFetcher.data.error || "Failed to send email");
   }, [emailFetcher.state, emailFetcher.data, shopify]);
 
   useEffect(() => {
@@ -600,20 +606,39 @@ export default function CreditNotesPage() {
     }
   };
 
-  /** Direct send with buyer email + default PDF template (no modal). */
-  const sendEmail = (note: CreditNoteListItem) => {
-    if (emailSending) return;
-    setEmailSendingId(note.id);
+  const openSendEmailModal = (note: CreditNoteListItem) => {
+    setEmailDocumentId(note.id);
+    setEmailDocumentLabel(note.creditNoteNumber);
+    setEmailRecipient(note.buyerEmail.trim());
+    setSendEmailError(null);
+    void shopify.modal.show(SEND_DOCUMENT_EMAIL_MODAL_ID);
+  };
+
+  /** Direct send with buyer email + default PDF template (confirm in modal). */
+  const sendEmail = () => {
+    if (!emailDocumentId || emailSending) return;
+    setSendEmailError(null);
     emailDataAtSubmit.current = emailFetcher.data;
     emailAwaiting.current = true;
     const body = new FormData();
     body.set("intent", "send-email");
-    body.set("documentId", note.id);
+    body.set("documentId", emailDocumentId);
     body.set(
       "documentType",
       isRefundTab ? "refund_document" : "credit_note",
     );
     emailFetcher.submit(body, { method: "post" });
+  };
+
+  const resetSendEmailModal = () => {
+    if (emailSending) {
+      void shopify.modal.show(SEND_DOCUMENT_EMAIL_MODAL_ID);
+      return;
+    }
+    setEmailDocumentId(null);
+    setEmailDocumentLabel("");
+    setEmailRecipient("");
+    setSendEmailError(null);
   };
 
   const openCustomerLinkModal = (noteId: string) => {
@@ -1083,12 +1108,8 @@ export default function CreditNotesPage() {
                             </s-button>
                             <s-button
                               icon="email"
-                              onClick={() => sendEmail(note)}
-                              {...(emailSendingId === note.id
-                                ? { loading: true, disabled: true }
-                                : emailSending
-                                  ? { disabled: true }
-                                  : {})}
+                              onClick={() => openSendEmailModal(note)}
+                              {...(emailSending ? { disabled: true } : {})}
                             >
                               Send email
                             </s-button>
@@ -1109,6 +1130,15 @@ export default function CreditNotesPage() {
         error={customerLinkError}
         onGenerate={generateCustomerLink}
         onHide={resetCustomerLinkModal}
+      />
+
+      <SendDocumentEmailModal
+        documentLabel={emailDocumentLabel}
+        recipientEmail={emailRecipient}
+        sending={emailSending}
+        error={sendEmailError}
+        onSend={sendEmail}
+        onHide={resetSendEmailModal}
       />
 
       <DocumentPrintPreviewModal
