@@ -166,6 +166,11 @@ describe("Invoices page wiring", () => {
     assert.match(source, /Print selected/);
     assert.match(source, /InvoicePrintPreviewModal/);
     assert.match(source, /INVOICE_PRINT_PREVIEW_MODAL_ID/);
+    assert.match(
+      source,
+      /InvoicePrintPreviewModal[\s\S]*id=\{INVOICE_PRINT_PREVIEW_MODAL_ID\}/,
+    );
+    assert.match(source, /modal\.show\(INVOICE_PRINT_PREVIEW_MODAL_ID\)/);
     assert.match(source, /fetchInvoiceDocumentsHtml/);
     assert.match(source, /openPrintPreview/);
     assert.doesNotMatch(source, /fetchAndPrintInvoiceDocument/);

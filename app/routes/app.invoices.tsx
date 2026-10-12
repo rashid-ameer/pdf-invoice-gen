@@ -986,6 +986,7 @@ export default function InvoicesPage() {
       />
 
       <InvoicePrintPreviewModal
+        id={INVOICE_PRINT_PREVIEW_MODAL_ID}
         heading={printModalHeading}
         html={printPreviewHtml}
         loading={printPreviewLoading}
