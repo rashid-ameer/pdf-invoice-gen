@@ -2,7 +2,7 @@
 
 client_id = "30aeb47a869ac5ff3e756173dfd12f17"
 name = "PDF Invoice Gen"
-application_url = "https://d5.genieapps.xyz"
+application_url = "https://pdf-invoice-gen.vercel.app/"
 embedded = true
 
 [build]
@@ -45,36 +45,12 @@ api_version = "2026-10"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
-scopes = "read_orders,read_products,read_customers,write_products,write_files,read_content,write_content,write_metaobjects,write_metaobject_definitions"
+scopes = "read_orders,read_products,read_customers,write_products,write_files,read_content,write_content"
 
 [auth]
-redirect_urls = [ "https://d5.genieapps.xyz/api/auth/callback" ]
+redirect_urls = [ "https://pdf-invoice-gen.vercel.app/api/auth/callback" ]
 
 [app_proxy]
-url = "https://d5.genieapps.xyz/api/storefront"
+url = "https://pdf-invoice-gen.vercel.app/api/storefront"
 subpath = "pdf-invoice"
 prefix = "apps"
-
-[product.metafields.app.demo_info]
-type = "single_line_text_field"
-name = "Demo Source Info"
-description = "Tracks products created by the Shopify app template for development"
-
-  [product.metafields.app.demo_info.access]
-  admin = "merchant_read_write"
-
-[metaobjects.app.example]
-name = "Example"
-description = "An example metaobject definition created by this template"
-
-  [metaobjects.app.example.access]
-  admin = "merchant_read_write"
-
-[metaobjects.app.example.fields.title]
-name = "Title"
-type = "single_line_text_field"
-required = true
-
-[metaobjects.app.example.fields.description]
-name = "Description"
-type = "multi_line_text_field"
