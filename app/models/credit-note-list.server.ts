@@ -82,12 +82,13 @@ export function creditNoteListHasFilters(query: CreditNoteListQuery): boolean {
   );
 }
 
+/** Escape % and _ for LIKE / ILIKE. */
 function escapeLike(value: string): string {
   return value.replace(/([\\%_])/g, "\\$1");
 }
 
 /**
- * Search by document number, linked invoice/order, or buyer.
+ * Search by document number, linked invoice/order, or buyer (Postgres ILIKE).
  * Returns matching ids, or null when search is empty.
  */
 async function findCreditNoteIdsMatchingSearch(
@@ -98,24 +99,18 @@ async function findCreditNoteIdsMatchingSearch(
   if (!trimmed) return null;
 
   const pattern = `%${escapeLike(trimmed)}%`;
-  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT cn.id AS id FROM "CreditNote" cn
-     LEFT JOIN "Invoice" inv ON inv.id = cn."invoiceId"
-     WHERE cn."storeId" = ?
-       AND (
-         cn."creditNoteNumber" LIKE ? ESCAPE '\\' COLLATE NOCASE
-         OR IFNULL(json_extract(cn."buyer", '$.name'), '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-         OR IFNULL(json_extract(cn."buyer", '$.email'), '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-         OR IFNULL(inv."invoiceNumber", '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-         OR IFNULL(inv."shopifyOrderNumber", '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-       )`,
-    storeId,
-    pattern,
-    pattern,
-    pattern,
-    pattern,
-    pattern,
-  );
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT cn.id AS id FROM "CreditNote" cn
+    LEFT JOIN "Invoice" inv ON inv.id = cn."invoiceId"
+    WHERE cn."storeId" = ${storeId}
+      AND (
+        cn."creditNoteNumber" ILIKE ${pattern} ESCAPE '\\'
+        OR COALESCE(cn."buyer"->>'name', '') ILIKE ${pattern} ESCAPE '\\'
+        OR COALESCE(cn."buyer"->>'email', '') ILIKE ${pattern} ESCAPE '\\'
+        OR COALESCE(inv."invoiceNumber", '') ILIKE ${pattern} ESCAPE '\\'
+        OR COALESCE(inv."shopifyOrderNumber", '') ILIKE ${pattern} ESCAPE '\\'
+      )
+  `;
   return rows.map((row) => row.id);
 }
 

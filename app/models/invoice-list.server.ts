@@ -129,14 +129,14 @@ function statusFilter(
   return undefined;
 }
 
-/** Escape % and _ for SQLite LIKE. */
+/** Escape % and _ for LIKE / ILIKE. */
 function escapeLike(value: string): string {
   return value.replace(/([\\%_])/g, "\\$1");
 }
 
 /**
- * SQLite: buyer is JSON. Prisma cannot reliably case-insensitive-search nested
- * JSON paths, so we use json_extract + LIKE COLLATE NOCASE (verified on this DB).
+ * Buyer is JSON/JSONB. Prisma cannot reliably case-insensitive-search nested
+ * JSON paths, so we use Postgres `->>` + ILIKE.
  * Returns matching invoice ids for the store, or null when search is empty.
  */
 async function findInvoiceIdsMatchingSearch(
@@ -147,21 +147,16 @@ async function findInvoiceIdsMatchingSearch(
   if (!trimmed) return null;
 
   const pattern = `%${escapeLike(trimmed)}%`;
-  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
-    `SELECT id FROM "Invoice"
-     WHERE "storeId" = ?
-       AND (
-         "invoiceNumber" LIKE ? ESCAPE '\\' COLLATE NOCASE
-         OR IFNULL("shopifyOrderNumber", '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-         OR IFNULL(json_extract("buyer", '$.name'), '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-         OR IFNULL(json_extract("buyer", '$.email'), '') LIKE ? ESCAPE '\\' COLLATE NOCASE
-       )`,
-    storeId,
-    pattern,
-    pattern,
-    pattern,
-    pattern,
-  );
+  const rows = await prisma.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM "Invoice"
+    WHERE "storeId" = ${storeId}
+      AND (
+        "invoiceNumber" ILIKE ${pattern} ESCAPE '\\'
+        OR COALESCE("shopifyOrderNumber", '') ILIKE ${pattern} ESCAPE '\\'
+        OR COALESCE("buyer"->>'name', '') ILIKE ${pattern} ESCAPE '\\'
+        OR COALESCE("buyer"->>'email', '') ILIKE ${pattern} ESCAPE '\\'
+      )
+  `;
   return rows.map((row) => row.id);
 }
 

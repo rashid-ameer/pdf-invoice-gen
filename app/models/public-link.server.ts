@@ -443,8 +443,8 @@ async function findInvoiceIdByLegacyTokenHash(
 ): Promise<string | null> {
   const rows = await prisma.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM "Invoice"
-    WHERE json_extract("publicAccess", '$.tokenHash') = ${tokenHash}
-      AND json_extract("publicAccess", '$.expiresAt') > ${new Date().toISOString()}
+    WHERE "publicAccess"->>'tokenHash' = ${tokenHash}
+      AND ("publicAccess"->>'expiresAt') > ${new Date().toISOString()}
     LIMIT 1
   `;
   return rows[0]?.id ?? null;
@@ -458,8 +458,8 @@ async function findCreditNoteIdByLegacyTokenHash(
   if (field === "publicAccessRefundDocument") {
     const rows = await prisma.$queryRaw<Array<{ id: string }>>`
       SELECT id FROM "CreditNote"
-      WHERE json_extract("publicAccessRefundDocument", '$.tokenHash') = ${tokenHash}
-        AND json_extract("publicAccessRefundDocument", '$.expiresAt') > ${new Date().toISOString()}
+      WHERE "publicAccessRefundDocument"->>'tokenHash' = ${tokenHash}
+        AND ("publicAccessRefundDocument"->>'expiresAt') > ${new Date().toISOString()}
       LIMIT 1
     `;
     return rows[0]?.id ?? null;
@@ -467,8 +467,8 @@ async function findCreditNoteIdByLegacyTokenHash(
 
   const rows = await prisma.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM "CreditNote"
-    WHERE json_extract("publicAccessCreditNote", '$.tokenHash') = ${tokenHash}
-      AND json_extract("publicAccessCreditNote", '$.expiresAt') > ${new Date().toISOString()}
+    WHERE "publicAccessCreditNote"->>'tokenHash' = ${tokenHash}
+      AND ("publicAccessCreditNote"->>'expiresAt') > ${new Date().toISOString()}
     LIMIT 1
   `;
   return rows[0]?.id ?? null;
