@@ -125,8 +125,13 @@
     );
   }
 
+  /** idle | loading | done — prevents duplicate rows from double init. */
+  var loadState = "idle";
+
   function renderBadges(badges) {
     if (!badges || badges.length === 0) return;
+    // Second overlapping fetch must not insert another row.
+    if (document.getElementById("invoice-trusted-badges")) return;
 
     var container = document.createElement("div");
     container.id = "invoice-trusted-badges";
@@ -201,14 +206,23 @@
   }
 
   function loadTrustedBadges() {
-    if (document.getElementById("invoice-trusted-badges")) return;
+    if (loadState !== "idle") return;
+    if (document.getElementById("invoice-trusted-badges")) {
+      loadState = "done";
+      return;
+    }
     if (!invoiceGetShopDomain()) return;
 
+    loadState = "loading";
     fetchStorefront("/trusted-badges")
       .then(function (badges) {
         renderBadges(badges);
+        loadState = "done";
       })
-      .catch(function () {});
+      .catch(function () {
+        // Allow a later init (e.g. after network flag refresh) to retry.
+        loadState = "idle";
+      });
   }
 
   function invoiceTrustedBadgesInit() {

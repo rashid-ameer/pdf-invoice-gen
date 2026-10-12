@@ -158,29 +158,39 @@
         if (typeof fn === 'function') fn();
       }
 
+      /**
+       * Stale-while-revalidate calls applyFlags twice (cache, then network).
+       * Only load each feature once so onload does not re-init mid-fetch.
+       */
+      var featuresStarted = {};
+
       function applyFlags(flags) {
         if (!flags) return;
-        if (flags.trusted_badges_enabled) {
+        if (flags.trusted_badges_enabled && !featuresStarted.trusted_badges) {
+          featuresStarted.trusted_badges = true;
           addCss(root.getAttribute('data-trusted-badges-css'));
           addScript(root.getAttribute('data-trusted-badges-js'), {
             onload: function () { callInit('InvoiceTrustedBadgesInit'); },
           });
         }
-        if (flags.wishlist_enabled) {
+        if (flags.wishlist_enabled && !featuresStarted.wishlist) {
+          featuresStarted.wishlist = true;
           addCss(root.getAttribute('data-wishlist-css'));
           addScript(root.getAttribute('data-wishlist-js'), {
             defer: true,
             onload: function () { callInit('InvoiceWishlistInit'); },
           });
         }
-        if (flags.speed_optimizer_enabled) {
+        if (flags.speed_optimizer_enabled && !featuresStarted.speed_optimizer) {
+          featuresStarted.speed_optimizer = true;
           addCss(root.getAttribute('data-speed-optimizer-css'));
           addScript(root.getAttribute('data-speed-optimizer-js'), {
             defer: true,
             onload: function () { callInit('InvoiceSpeedOptimizerInit'); },
           });
         }
-        if (flags.upsell_enabled) {
+        if (flags.upsell_enabled && !featuresStarted.upsell) {
+          featuresStarted.upsell = true;
           var cfgEl = document.getElementById('invoice-upsell-config-json');
           try {
             window.InvoiceUpsellConfig = cfgEl
